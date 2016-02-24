@@ -83,7 +83,7 @@ CF_ASSUME_NONNULL_BEGIN
     errAuthorizationSuccess can't include a string as it's also errSecSuccess in libsecurity_keychain/lib/SecBase.h
 */
 
-CF_ENUM(OSStatus) {
+enum {
 	errAuthorizationSuccess                 = 0,
 	errAuthorizationInvalidSet              = -60001, /* The authorization rights are invalid. */
 	errAuthorizationInvalidRef              = -60002, /* The authorization reference is invalid. */

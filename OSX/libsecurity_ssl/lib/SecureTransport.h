@@ -221,7 +221,7 @@ typedef OSStatus
     line that does not start with errZZZ.
 */
 
-CF_ENUM(OSStatus) {
+enum {
 	errSSLProtocol				= -9800,	/* SSL protocol error */
 	errSSLNegotiation			= -9801,	/* Cipher Suite negotiation failure */
 	errSSLFatalAlert			= -9802,	/* Fatal alert */

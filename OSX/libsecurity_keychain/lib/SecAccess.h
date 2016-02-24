@@ -30,6 +30,7 @@
 #ifndef _SECURITY_SECACCESS_H_
 #define _SECURITY_SECACCESS_H_
 
+#include "security-duct.h"
 #include <Security/SecBase.h>
 #include <Security/cssmtype.h>
 #include <CoreFoundation/CFArray.h>

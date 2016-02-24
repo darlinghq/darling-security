@@ -1,0 +1,4 @@
+[submodule "OSX/libsecurity_dotmac_tp"]
+	path = OSX/libsecurity_dotmac_tp
+	url = ../darling-security_dotmac_tp.git
+	branch = darling

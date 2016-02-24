@@ -29,6 +29,7 @@
 #ifndef _SECURITY_SECBASE_H_
 #define _SECURITY_SECBASE_H_
 
+#include "security-duct.h"
 #include <CoreFoundation/CFBase.h>
 #include <AvailabilityMacros.h>
 
@@ -262,7 +263,7 @@ CFStringRef SecCopyErrorMessageString(OSStatus status, void * __nullable reserve
     line that does not start with errZZZ.
 */
 
-CF_ENUM(OSStatus)
+enum
 {
     errSecSuccess                = 0,       /* No error. */
     errSecUnimplemented          = -4,      /* Function or operation not implemented. */

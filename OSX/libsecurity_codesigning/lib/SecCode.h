@@ -97,7 +97,7 @@ OSStatus SecCodeCopySelf(SecCSFlags flags, SecCodeRef * __nonnull CF_RETURNS_RET
 	@result Upon success, errSecSuccess. Upon error, an OSStatus value documented in
 	CSCommon.h or certain other Security framework headers.
 */
-CF_ENUM(uint32_t) {
+enum {
 	kSecCSUseAllArchitectures = 1 << 0,
 };
 
@@ -389,7 +389,7 @@ OSStatus SecCodeCopyDesignatedRequirement(SecStaticCodeRef code, SecCSFlags flag
 		The algorithm used may change from time to time. However, for any existing signature,
  		the value is stable.
  */
-CF_ENUM(uint32_t) {
+enum {
 	kSecCSInternalInformation = 1 << 0,
 	kSecCSSigningInformation = 1 << 1,
 	kSecCSRequirementInformation = 1 << 2,

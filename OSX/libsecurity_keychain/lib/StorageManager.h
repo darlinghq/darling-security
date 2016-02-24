@@ -34,7 +34,7 @@
 #include <security_keychain/DynamicDLDBList.h>
 #include <security_keychain/Keychains.h>
 #include <security_keychain/KeyItem.h>
-#include <Security/Authorization.h>
+#include <security_authorization/Authorization.h>
 
 #define kLegacyKeychainRenamedSuffix    "_renamed"
 #define kKeychainRenamedSuffix          "_renamed_"

@@ -1,0 +1,1 @@
+../../OSX/libsecurity_smime/lib/secitem.h

@@ -42,7 +42,7 @@ CF_ASSUME_NONNULL_BEGIN
 	Code Signing specific OSStatus codes.
 	[Assigned range 0xFFFE_FAxx].
 */
-CF_ENUM(OSStatus) {
+enum {
 	errSecCSUnimplemented =				-67072,	/* unimplemented code signing feature */
 	errSecCSInvalidObjectRef =			-67071,	/* invalid API object reference */
 	errSecCSInvalidFlags =				-67070,	/* invalid or inappropriate API flag(s) specified */
@@ -169,7 +169,7 @@ typedef struct CF_BRIDGED_TYPE(id) __SecRequirement *SecRequirementRef;	/* code 
 */
 typedef u_int32_t SecGuestRef;
 
-CF_ENUM(SecGuestRef) {
+enum {
 	kSecNoGuest = 0,		/* not a valid SecGuestRef */
 };
 

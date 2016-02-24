@@ -65,7 +65,7 @@ namespace Security {
 //
 class RefCount {	
 public:
-	RefCount() : mRefCount(0) { RCDEBUG(CREATE); }
+	RefCount() : mRefCount(0) { /* RCDEBUG(CREATE); */ }
 
 protected:
 	template <class T> friend class RefPointer;
@@ -73,12 +73,12 @@ protected:
 	void ref() const
     {
         OSAtomicIncrement32(&mRefCount);
-        RCDEBUG(UP, mRefCount);
+        //RCDEBUG(UP, mRefCount);
     }
 	
     unsigned int unref() const
     {
-        RCDEBUG(DOWN, mRefCount - 1);
+        //RCDEBUG(DOWN, mRefCount - 1);
         return OSAtomicDecrement32(&mRefCount);
     }
 	
