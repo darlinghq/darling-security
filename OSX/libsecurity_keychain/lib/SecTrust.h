@@ -33,6 +33,7 @@
 #include <Security/SecBase.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <AvailabilityMacros.h>
+#include <dispatch/dispatch.h>
 
 #if defined(__cplusplus)
 extern "C" {
