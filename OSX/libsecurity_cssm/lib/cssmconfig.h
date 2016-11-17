@@ -77,7 +77,11 @@ typedef uint8_t uint8;
 #endif
 
 typedef intptr_t CSSM_INTPTR;
+#ifndef __i386__
 typedef size_t CSSM_SIZE;
+#else
+typedef unsigned long CSSM_SIZE; /* Needed for Darling */
+#endif
 
 #define CSSMACI
 #define CSSMAPI
