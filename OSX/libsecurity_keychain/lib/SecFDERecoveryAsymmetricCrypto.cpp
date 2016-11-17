@@ -160,7 +160,7 @@ CFDataRef decodePrivateKeyHeader(SecKeychainRef keychain, const FVPrivateKeyHead
 		CssmAutoData clearBuf(allocator);
 		CssmAutoData remData(allocator);
 		size_t bytesDecrypted;
-		CSSM_RETURN crx = CSSM_DecryptData(cc, &cipherBuf, 1, &clearBuf.get(), 1, &bytesDecrypted, &remData.get());
+		CSSM_RETURN crx = CSSM_DecryptData(cc, &cipherBuf, 1, &clearBuf.get(), 1, (CSSM_SIZE*)&bytesDecrypted, &remData.get());
 		secdebug("FDERecovery", "decodePrivateKeyHeader: CSSM_DecryptData result: %d", crx);
 		throwIfError(crx);
 //		throwIfError(CSSM_DecryptData(cc, &cipherBuf, 1, &clearBuf.get(), 1, &bytesDecrypted, &remData.get()));
