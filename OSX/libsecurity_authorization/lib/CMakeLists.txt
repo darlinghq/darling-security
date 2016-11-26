@@ -21,7 +21,7 @@ set(security_authorization_sources
 	Authorization.cpp
 	trampolineClient.cpp
 	trampolineServer.cpp
-	Authorization.c
+	AuthorizationC.c
 )
 
 add_library(security_authorization OBJECT ${security_authorization_sources})
