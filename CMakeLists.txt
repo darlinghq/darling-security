@@ -16,6 +16,7 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -nostdlib -Wl,--vers
 add_definitions(
 	-D__APPLE_CPP__
 	-D__DARWIN_UNIX03
+	-DOBJC2RUNTIME=1
 )
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
@@ -45,6 +46,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src/launchd/liblaunch)
 include_directories(${CMAKE_SOURCE_DIR}/src/libc/darwin)
 include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/corefoundation/Headers
+	${CMAKE_BINARY_DIR}/src/external/corefoundation/Headers
 	${CMAKE_SOURCE_DIR}/src/external/foundation/Headers
 	${CMAKE_SOURCE_DIR}/src/external/libobjc2/objc
 )
