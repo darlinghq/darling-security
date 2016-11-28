@@ -9,14 +9,16 @@ add_definitions(
 add_subdirectory(libsecurity_keychain/libDER)
 add_subdirectory(libsecurity_keychain/lib)
 add_subdirectory(libsecurity_authorization/lib)
+add_subdirectory(libsecurity_utilities/lib)
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
 SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 add_library(Security SHARED
 	$<TARGET_OBJECTS:security_authorization>
+	$<TARGET_OBJECTS:security_utilities>
 )
 
-target_link_libraries(Security system auto)
+target_link_libraries(Security system auto CFFExtra CFF sqlite3)
 install(TARGETS Security DESTINATION ${CMAKE_INSTALL_LIBDIR}/darling)
 

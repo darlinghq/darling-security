@@ -10,7 +10,7 @@ endif(COMMAND cmake_policy)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse -msse2 -msse3 -w -nostdinc -fblocks")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__DARWIN_UNIX03 -fPIC -w")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -nostdinc -nostdinc++ -fblocks -fPIC -Wno-deprecated -include ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/security-duct.h")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -nostdinc -nostdinc++ -fblocks -fPIC -Wno-deprecated -include ${CMAKE_CURRENT_SOURCE_DIR}/../../../include/security-duct.h -include ${CMAKE_CURRENT_SOURCE_DIR}/../dtrace_fake.h")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -nostdlib -Wl,--version-script=${DARLING_TOP_DIRECTORY}/darwin.map")
 
 add_definitions(-D__strong=)
@@ -46,7 +46,7 @@ set(security_utilities_sources
 	debugging.cpp
 	debugging_internal.cpp
 	devrandom.cpp
-	dispatch.cpp
+	#dispatch.cpp
 	dyldcache.cpp
 	endian.cpp
 	errors.cpp
@@ -57,7 +57,7 @@ set(security_utilities_sources
 	headermap.cpp
 	hosts.cpp
 	inetreply.cpp
-	iodevices.cpp
+	#iodevices.cpp
 	ip++.cpp
 	kq++.cpp
 	logging.cpp
@@ -65,10 +65,10 @@ set(security_utilities_sources
 	macho++.cpp
 	machrunloopserver.cpp
 	machserver.cpp
-	muscle++.cpp
+	#muscle++.cpp
 	osxcode.cpp
-	pcsc++.cpp
-	powerwatch.cpp
+	#pcsc++.cpp
+	#powerwatch.cpp
 	seccfobject.cpp
 	selector.cpp
 	simpleprefs.cpp

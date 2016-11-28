@@ -40,10 +40,12 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_keychain/libDER)
 include_directories(${CMAKE_SOURCE_DIR}/src/copyfile)
 include_directories(${CMAKE_SOURCE_DIR}/src/external/openssl/src/include)
 include_directories(${CMAKE_SOURCE_DIR}/src/external/libxpc)
+include_directories(${CMAKE_SOURCE_DIR}/src/external/IOKitUser)
 include_directories(${CMAKE_SOURCE_DIR}/src/external/corecrypto/include)
 include_directories(${CMAKE_SOURCE_DIR}/src/sandbox)
 include_directories(${CMAKE_SOURCE_DIR}/src/launchd/liblaunch)
 include_directories(${CMAKE_SOURCE_DIR}/src/libc/darwin)
+include_directories(${CMAKE_SOURCE_DIR}/kernel-include/iokit)
 include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/corefoundation/Headers
 	${CMAKE_BINARY_DIR}/src/external/corefoundation/Headers

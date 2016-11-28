@@ -28,6 +28,7 @@
 #include <security_utilities/utilities.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <dispatch/dispatch.h>
+#include <sys/syslimits.h>
 
 namespace Security
 {
