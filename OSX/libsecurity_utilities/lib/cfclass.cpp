@@ -47,7 +47,7 @@ CFClass::CFClass(const char *name)
 	
     // update because we are now doing our own reference counting
     version |= _kCFRuntimeCustomRefCount; // see ma, no hands!
-    refcount = refCountForType;
+    refcount = (decltype(refcount)) refCountForType;
 
 	// register
 	typeID = _CFRuntimeRegisterClass(this);
