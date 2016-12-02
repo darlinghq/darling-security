@@ -17,8 +17,10 @@ SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 add_library(Security SHARED
 	$<TARGET_OBJECTS:security_authorization>
 	$<TARGET_OBJECTS:security_utilities>
+	$<TARGET_OBJECTS:security_keychain>
+	$<TARGET_OBJECTS:der>
 )
 
-target_link_libraries(Security system auto CFFExtra CFF sqlite3)
+target_link_libraries(Security system auto CFFExtra CFF sqlite3 xpc)
 install(TARGETS Security DESTINATION ${CMAKE_INSTALL_LIBDIR}/darling)
 

@@ -25,5 +25,5 @@ set(der_sources
 	libDERUtils/printFields.c
 )
 
-add_library(der STATIC ${der_sources})
+add_library(der OBJECT ${der_sources})
 
