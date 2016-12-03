@@ -46,6 +46,7 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/libobjc2/objc
 	${CMAKE_SOURCE_DIR}/src/external/libobjc2
 	${CMAKE_SOURCE_DIR}/src/external/libauto
+	${CMAKE_SOURCE_DIR}/src/external/zlib
 	${CMAKE_SOURCE_DIR}/src/external/libcxx/include
 	${CMAKE_SOURCE_DIR}/src/external/libdispatch
 	${CMAKE_SOURCE_DIR}/src/CommonCrypto
