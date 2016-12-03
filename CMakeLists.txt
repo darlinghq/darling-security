@@ -34,13 +34,10 @@ include_directories(
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_cdsa_utilities)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_cdsa_client)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_codesigning)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_asn1)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/authd)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_dotmac_tp/lib)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurityd)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/sec)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_keychain/libDER)
 
 include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/corefoundation/Headers
@@ -65,6 +62,7 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/CFF
 	${CMAKE_SOURCE_DIR}/src/libc/include/FreeBSD
 	${CMAKE_SOURCE_DIR}/src/external/libcxxabi/include
+	${CMAKE_SOURCE_DIR}/src/CoreServices
 )
 
 add_subdirectory(OSX)

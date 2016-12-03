@@ -1,8 +1,6 @@
 project(libsecurity_utilities)
 
-add_definitions(
-	-D__strong=
-)
+add_definitions(-D__strong=)
 
 include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
