@@ -27,6 +27,7 @@ include_directories(${CMAKE_SOURCE_DIR}/src/external/libobjc2)
 include_directories(${CMAKE_SOURCE_DIR}/src/external/libcxxabi/include)
 include_directories(${CMAKE_SOURCE_DIR}/src/CommonCrypto)
 include_directories(${CMAKE_SOURCE_DIR}/src/libc/include/FreeBSD)
+include_directories(${CMAKE_SOURCE_DIR}/src/CoreServices)
 
 add_definitions(-DOBJC2RUNTIME=1)
 
