@@ -6,6 +6,7 @@ add_definitions(
 	-Wno-deprecated
 	-Wno-bool-conversion
 	-Wno-null-conversion
+	-Wno-int-conversion
 	-D__nullable=
 	-D__nonnull=
 )
@@ -27,7 +28,7 @@ add_library(Security SHARED
 	$<TARGET_OBJECTS:security_utilities>
 	$<TARGET_OBJECTS:utilities>
 	$<TARGET_OBJECTS:security_keychain>
-	$<TARGET_OBJECTS:der>
+	$<TARGET_OBJECTS:security_keychain_der>
 	$<TARGET_OBJECTS:security_cssm>
 	#	$<TARGET_OBJECTS:security_transform>
 )

@@ -30,17 +30,16 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/include/Security
 )
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_cssm)
+# Leaving these here for now because they lack build scripts of their own
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_cdsa_utilities)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_cdsa_client)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_utilities)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_codesigning)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_asn1)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_authorization)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/authd)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_dotmac_tp/lib)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurityd)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/sec)
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_keychain/libDER)
 
 include_directories(
@@ -48,6 +47,8 @@ include_directories(
 	${CMAKE_BINARY_DIR}/src/external/corefoundation/Headers
 	${CMAKE_SOURCE_DIR}/src/external/foundation/Headers
 	${CMAKE_SOURCE_DIR}/src/external/libobjc2/objc
+	${CMAKE_SOURCE_DIR}/src/external/libobjc2
+	${CMAKE_SOURCE_DIR}/src/external/libauto
 	${CMAKE_SOURCE_DIR}/src/external/libcxx/include
 	${CMAKE_SOURCE_DIR}/src/external/libdispatch
 	${CMAKE_SOURCE_DIR}/src/CommonCrypto
@@ -62,6 +63,8 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/libc/darwin
 	${CMAKE_SOURCE_DIR}/src/external/sqlite
 	${CMAKE_SOURCE_DIR}/src/CFF
+	${CMAKE_SOURCE_DIR}/src/libc/include/FreeBSD
+	${CMAKE_SOURCE_DIR}/src/external/libcxxabi/include
 )
 
 add_subdirectory(OSX)
