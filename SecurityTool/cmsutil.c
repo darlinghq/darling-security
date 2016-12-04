@@ -63,7 +63,7 @@
 #include <Security/SecIdentity.h>
 #include <Security/SecIdentitySearch.h>
 #include <CoreFoundation/CFString.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 #include <stdio.h>
 #include <stdarg.h>

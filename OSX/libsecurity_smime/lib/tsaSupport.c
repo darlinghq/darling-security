@@ -31,7 +31,7 @@
 */
 
 #include <security_utilities/debugging.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 #include <Security/SecCmsDecoder.h>
 #include <Security/SecCmsMessage.h>

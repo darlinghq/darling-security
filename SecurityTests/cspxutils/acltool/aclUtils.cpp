@@ -27,7 +27,7 @@
  
 #include "aclUtils.h"
 #include <Security/SecTrustedApplicationPriv.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 /* Read a line from stdin into buffer as a null terminated string.  If buffer is
    non NULL use at most buffer_size bytes and return a pointer to buffer.  Otherwise

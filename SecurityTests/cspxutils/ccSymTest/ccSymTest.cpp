@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <CommonCrypto/CommonCryptor.h>
 #include "common.h"
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 /*
  * Defaults.

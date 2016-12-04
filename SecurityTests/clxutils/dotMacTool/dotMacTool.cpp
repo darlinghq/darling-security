@@ -15,7 +15,7 @@
 #include <security_cdsa_utils/cuPrintCert.h>
 
 #include "keyPicker.h"
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 #define USER_DEFAULT		"dmitchtest@mac.com"
 #define PWD_DEF				"123456"

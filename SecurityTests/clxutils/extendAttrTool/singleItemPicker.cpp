@@ -26,7 +26,7 @@
  */
  
 #include <clAppUtils/keyPicker.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 #include <Security/Security.h>
 #include <stdexcept>
 #include <ctype.h>

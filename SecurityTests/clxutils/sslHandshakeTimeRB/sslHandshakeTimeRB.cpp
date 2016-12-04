@@ -10,7 +10,7 @@
 #include <clAppUtils/ringBufferIo.h>
 #include <clAppUtils/sslRingBufferThreads.h>
 
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

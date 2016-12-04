@@ -14,7 +14,7 @@
 #include <Security/SecAsn1Coder.h>
 #include <Security/nameTemplates.h>				/* oh frabjous day */
 
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 static int indentSize = 0;
 void indentIncr(void)	{ indentSize += 3; }

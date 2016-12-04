@@ -7,7 +7,7 @@
 #include <security_dotmac_tp/dotMacTp.h>
 #include <clAppUtils/keyPicker.h>
 #include <unistd.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 /*
  * Defaults for the test setup du jour 

@@ -20,7 +20,7 @@
 #include "parseTrustedRootList.h"
 #include <Security/TrustSettingsSchema.h>		/* private header */
 #include "rootUtils.h"
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 #include <pthread.h>
 #include <sys/param.h>
 

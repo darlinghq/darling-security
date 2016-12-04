@@ -11,7 +11,7 @@
 #include <security_utilities/threading.h>
 #include <security_utilities/devrandom.h>
 
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

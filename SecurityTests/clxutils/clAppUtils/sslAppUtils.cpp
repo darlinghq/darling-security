@@ -9,7 +9,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 #include <Security/AuthSession.h>		// for Sec errors 
 #include <CoreFoundation/CFDate.h>
 

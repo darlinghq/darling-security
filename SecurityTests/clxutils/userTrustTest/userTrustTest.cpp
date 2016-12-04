@@ -11,7 +11,7 @@
 #include <Security/SecTrustPriv.h>
 #include <Security/SecPolicyPriv.h>
 #include <clAppUtils/tpUtils.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 #define IGNORE_EXISTING_STATE		0
 

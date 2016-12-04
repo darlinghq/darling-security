@@ -21,6 +21,8 @@ add_subdirectory(libsecurity_transform/lib)
 add_subdirectory(libsecurity_asn1/lib)
 add_subdirectory(libsecurity_manifest/lib)
 add_subdirectory(libsecurity_mds/lib)
+add_subdirectory(libsecurity_sd_cspdl/lib)
+add_subdirectory(libsecurity_smime/lib)
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
 SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
@@ -37,6 +39,8 @@ add_library(Security SHARED
 	$<TARGET_OBJECTS:security_asn1>
 	$<TARGET_OBJECTS:security_manifest>
 	$<TARGET_OBJECTS:security_mds>
+	$<TARGET_OBJECTS:security_sd_cspdl>
+	$<TARGET_OBJECTS:security_smime>
 )
 
 target_link_libraries(Security system auto CFFExtra CFF sqlite3 xpc)

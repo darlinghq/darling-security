@@ -46,7 +46,7 @@
 #include <Security/SecCertificatePriv.h>
 #include <Security/SecKeyPriv.h>
 #include <Security/Security.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 #include <Security/SecCmsBase.h>
 #include <Security/secasn1t.h>
 #include <security_asn1/plarenas.h>

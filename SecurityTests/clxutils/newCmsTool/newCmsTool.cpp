@@ -15,7 +15,7 @@
 #include <clAppUtils/sslAppUtils.h>
 #include <security_cdsa_utils/cuOidParser.h>
 #include <CoreFoundation/CoreFoundation.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 #include <Security/SecTrustPriv.h>		/* SecTrustGetCssmResultCode */
 #include <Security/SecIdentityPriv.h>	/* SecIdentityCreateWithCertificate */

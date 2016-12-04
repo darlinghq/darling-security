@@ -54,7 +54,7 @@
 #include <CoreFoundation/CFTimeZone.h>
 #include <utilities/SecCFWrappers.h>
 #include <AssertMacros.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 #include <Security/SecPolicyPriv.h>
 
 #include "tsaSupport.h"

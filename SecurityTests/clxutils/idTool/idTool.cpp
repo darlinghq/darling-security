@@ -4,7 +4,7 @@
 #include <Security/Security.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 #include <security_cdsa_utils/cuPrintCert.h>
 #include <utilLib/common.h>
 #include <utilLib/cspwrap.h>

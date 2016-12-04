@@ -9,7 +9,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <CommonCrypto/CommonCryptor.h>
 #include "common.h"
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 #define LOOPS_DEF		1000
 #define BUFSIZE_DEF		10240

@@ -26,7 +26,7 @@
  */
  
 #include "keyPicker.h"
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 OSStatus keyPicker(
 	SecKeychainRef  kcRef,		// NULL means the default list

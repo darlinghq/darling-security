@@ -42,7 +42,7 @@
 #include <syslog.h>
 
 /* for errKCDuplicateItem */
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 #define CERT_DEBUG	0
 #if	CERT_DEBUG
@@ -671,7 +671,7 @@ SECStatus CERT_ImportCerts(SecKeychainRef keychain, SECCertUsage usage, unsigned
 	    rv = SecCertificateAddToKeychain(cert, keychain);
 	    if (rv)
 	    {
-		if (rv == errKCDuplicateItem)
+		if (rv == errSecDuplicateItem)
 		    rv = noErr;
 		else
 		{

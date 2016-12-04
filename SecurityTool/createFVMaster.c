@@ -44,7 +44,7 @@
 
 #include "srCdsaUtils.h"
 
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 const char * const _masterKeychainName = "FileVaultMaster.keychain";
 const char * const _masterKeychainPath = "./FileVaultMaster";

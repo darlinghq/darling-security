@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <security_cdsa_utils/cuCdsaUtils.h>
 #include <security_cdsa_utils/cuFileIo.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 /*
  * Defaults for the test setup du jour 

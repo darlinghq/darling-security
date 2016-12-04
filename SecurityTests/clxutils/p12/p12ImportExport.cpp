@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <security_cdsa_utilities/KeySchema.h>
 #include <security_cdsa_utils/cuCdsaUtils.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 #include "p12GetPassKey.h"
 
 static void printOsError(

@@ -2,7 +2,7 @@
 #include "testutil.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 const char *sslGetCipherSuiteString(SSLCipherSuite cs)
 {

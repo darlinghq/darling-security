@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <CommonCrypto/CommonCryptor.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 static void report(
 	const char *name,

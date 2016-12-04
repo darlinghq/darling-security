@@ -6,7 +6,7 @@
 #include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <MacErrors.h>
 
 /* synchronizes multi-threaded access to printf() */
 pthread_mutex_t printfMutex = PTHREAD_MUTEX_INITIALIZER;
