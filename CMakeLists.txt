@@ -22,7 +22,7 @@ add_definitions(
 )
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
-SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE) 
+SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 include_directories(
@@ -49,7 +49,7 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/zlib
 	${CMAKE_SOURCE_DIR}/src/external/libcxx/include
 	${CMAKE_SOURCE_DIR}/src/external/libdispatch
-	${CMAKE_SOURCE_DIR}/src/CommonCrypto	
+	${CMAKE_SOURCE_DIR}/src/CommonCrypto
 	${CMAKE_SOURCE_DIR}/src/external/commoncrypto/include
 	${CMAKE_SOURCE_DIR}/src/external/corecrypto/include
 	${CMAKE_SOURCE_DIR}/src/copyfile
@@ -65,6 +65,7 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/libc/include/FreeBSD
 	${CMAKE_SOURCE_DIR}/src/external/libcxxabi/include
 	${CMAKE_SOURCE_DIR}/src/CoreServices
+	${CMAKE_SOURCE_DIR}/src/external/coretls/lib
 )
 
 add_subdirectory(OSX)

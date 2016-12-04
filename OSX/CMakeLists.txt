@@ -6,7 +6,10 @@ add_definitions(
 	-Wno-deprecated
 	-Wno-bool-conversion
 	-Wno-null-conversion
+	-Wno-enum-conversion
 	-Wno-int-conversion
+	-Wno-#warnings
+	-Wno-mismatched-new-delete
 	-D__nullable=
 	-D__nonnull=
 )
@@ -23,6 +26,7 @@ add_subdirectory(libsecurity_manifest/lib)
 add_subdirectory(libsecurity_mds/lib)
 add_subdirectory(libsecurity_sd_cspdl/lib)
 add_subdirectory(libsecurity_smime/lib)
+add_subdirectory(libsecurity_ssl/lib)
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
 SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
@@ -41,6 +45,7 @@ add_library(Security SHARED
 	$<TARGET_OBJECTS:security_mds>
 	$<TARGET_OBJECTS:security_sd_cspdl>
 	$<TARGET_OBJECTS:security_smime>
+	$<TARGET_OBJECTS:security_ssl>
 )
 
 target_link_libraries(Security system auto CFFExtra CFF sqlite3 xpc)

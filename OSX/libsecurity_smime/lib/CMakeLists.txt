@@ -34,7 +34,6 @@ add_library(security_smime OBJECT
 	secoid.c
 	smimeutil.c
 	siginfoUtils.cpp
-	tsaTemplates.c
 	tsaSupport.c
 )
 

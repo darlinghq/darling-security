@@ -401,7 +401,7 @@ static void ad_log_SecureTransport_early_fail(long signature)
 #endif
 
 
-#if (!TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR)
+#if (!TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR) && FALSE
 
 #include <msgtracer_client.h>
 
