@@ -30,6 +30,7 @@ add_subdirectory(libsecurity_ssl/lib)
 add_subdirectory(libsecurity_apple_csp)
 add_subdirectory(libsecurity_apple_cspdl/lib)
 add_subdirectory(libsecurity_apple_file_dl/lib)
+add_subdirectory(libsecurity_apple_x509_cl/lib)
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
 SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
@@ -52,6 +53,7 @@ add_library(Security SHARED
 	$<TARGET_OBJECTS:security_apple_csp>
 	$<TARGET_OBJECTS:security_apple_cspdl>
 	$<TARGET_OBJECTS:security_apple_file_dl>
+	$<TARGET_OBJECTS:security_apple_x509_cl>
 )
 
 target_link_libraries(Security system auto CFFExtra CFF sqlite3 xpc)
