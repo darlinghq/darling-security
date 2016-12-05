@@ -31,8 +31,6 @@ include_directories(
 )
 
 # Leaving these here for now because they lack build scripts of their own
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_cdsa_utilities)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_cdsa_client)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_codesigning)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/authd)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_dotmac_tp/lib)
