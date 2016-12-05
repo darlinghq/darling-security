@@ -45,6 +45,7 @@
 #include <CoreFoundation/CFError.h>
 #include <CoreFoundation/CFDictionary.h>
 
+extern "C" {
 
 static CFStringRef kSecSystemTrustStoreBundlePath = CFSTR("/System/Library/Security/Certificates.bundle");
 
@@ -220,3 +221,4 @@ errout:
 	return result;
 }
 
+}
