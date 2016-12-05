@@ -36,6 +36,7 @@ add_subdirectory(libsecurity_cdsa_client/lib)
 add_subdirectory(libsecurity_cdsa_plugin/lib)
 add_subdirectory(libsecurity_cdsa_utilities/lib)
 add_subdirectory(libsecurity_cdsa_utils/lib)
+add_subdirectory(libsecurity_filedb/lib)
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
 SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
@@ -64,6 +65,7 @@ add_library(Security SHARED
 	$<TARGET_OBJECTS:security_cdsa_plugin>
 	$<TARGET_OBJECTS:security_cdsa_utilities>
 	$<TARGET_OBJECTS:security_cdsa_utils>
+	$<TARGET_OBJECTS:security_filedb>
 )
 
 target_link_libraries(Security system auto CFFExtra CFF sqlite3 xpc)
