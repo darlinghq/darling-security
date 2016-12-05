@@ -21,4 +21,5 @@ add_library(security_cssm OBJECT
 	oidscert.cpp
 	oidscrl.cpp
 	transition.cpp
+	oidsalg.c
 )
