@@ -1,87 +1,95 @@
 project(libsecurity_codesigning)
 
-cmake_minimum_required(VERSION 2.4.0)
-enable_language(C ASM)
-
-if(COMMAND cmake_policy)
-	cmake_policy(SET CMP0003 NEW)
-	cmake_policy(SET CMP0005 NEW)
-endif(COMMAND cmake_policy)
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse -msse2 -msse3 -w -nostdinc -fblocks")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__DARWIN_UNIX03 -fPIC -w")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -nostdinc -nostdinc++ -fblocks -Wno-deprecated -include ${CMAKE_CURRENT_SOURCE_DIR}/../../include/security-duct.h")
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -nostdlib -Wl,--version-script=${DARLING_TOP_DIRECTORY}/darwin.map")
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/antlr2)
-include_directories(${CMAKE_SOURCE_DIR}/src/external/corefoundation/Headers)
-include_directories(${CMAKE_BINARY_DIR}/src/external/corefoundation/Headers)
-include_directories(${CMAKE_SOURCE_DIR}/src/external/foundation/Headers)
-include_directories(${CMAKE_SOURCE_DIR}/src/external/libcxx/include)
-include_directories(${CMAKE_SOURCE_DIR}/src/external/libdispatch)
-include_directories(${CMAKE_SOURCE_DIR}/src/external/sqlite)
-include_directories(${CMAKE_SOURCE_DIR}/src/CommonCrypto)
-include_directories(${CMAKE_SOURCE_DIR}/src/OpenScripting)
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/../libsecurityd)
-include_directories(${CMAKE_SOURCE_DIR}/src/libc/include/FreeBSD)
-
-add_definitions(-DOBJC2RUNTIME=1)
-
-set(security_codesigning_sources
-	lib/antlrplugin.cpp
-	lib/bundlediskrep.cpp
-	lib/cdbuilder.cpp
-	lib/Code.cpp
-	lib/codedirectory.cpp
-	lib/CodeSigner.cpp
-	lib/cs.cpp
-	lib/csdatabase.cpp
-	lib/cserror.cpp
-	lib/csgeneric.cpp
-	lib/cskernel.cpp
-	lib/csprocess.cpp
-	lib/csutilities.cpp
-	lib/detachedrep.cpp
-	lib/dirscanner.cpp
-	lib/diskrep.cpp
-	lib/drmaker.cpp
-	lib/evaluationmanager.cpp
-	lib/filediskrep.cpp
-	lib/kerneldiskrep.cpp
-	lib/machorep.cpp
-	lib/opaquewhitelist.cpp
-	lib/piddiskrep.cpp
-	lib/policydb.cpp
-	lib/policyengine.cpp
-	lib/quarantine++.cpp
-	lib/reqdumper.cpp
-	lib/reqinterp.cpp
-	lib/reqmaker.cpp
-	lib/reqparser.cpp
-	lib/reqreader.cpp
-	lib/requirement.cpp
-	lib/RequirementLexer.cpp
-	lib/RequirementParser.cpp
-	lib/Requirements.cpp
-	lib/resources.cpp
-	lib/SecAssessment.cpp
-	lib/SecCode.cpp
-	lib/SecCodeHost.cpp
-	lib/SecCodeSigner.cpp
-	lib/SecIntegrity.cpp
-	lib/SecRequirement.cpp
-	lib/SecStaticCode.cpp
-	lib/sigblob.cpp
-	lib/signer.cpp
-	lib/signerutils.cpp
-	lib/singlediskrep.cpp
-	lib/slcrep.cpp
-	lib/StaticCode.cpp
-	lib/xar++.cpp
-	lib/xpcengine.cpp
-
+include_directories(
+	${CMAKE_CURRENT_SOURCE_DIR}
+	${CMAKE_CURRENT_SOURCE_DIR}/lib
+	${CMAKE_CURRENT_SOURCE_DIR}/antlr2
 )
 
-add_library(security_codesigning STATIC ${security_codesigning_sources})
+add_library(security_codesigning OBJECT
+	antlr2/src/ANTLRUtil.cpp
+	antlr2/src/ASTFactory.cpp
+	antlr2/src/ASTNULLType.cpp
+	antlr2/src/ASTRefCount.cpp
+	antlr2/src/BaseAST.cpp
+	antlr2/src/BitSet.cpp
+	antlr2/src/CharBuffer.cpp
+	antlr2/src/CharScanner.cpp
+	lib/dirscanner.cpp
+	antlr2/src/CommonAST.cpp
+	antlr2/src/CommonASTWithHiddenTokens.cpp
+	antlr2/src/CommonHiddenStreamToken.cpp
+	antlr2/src/CommonToken.cpp
+	antlr2/src/InputBuffer.cpp
+	antlr2/src/LLkParser.cpp
+	antlr2/src/MismatchedCharException.cpp
+	antlr2/src/MismatchedTokenException.cpp
+	antlr2/src/NoViableAltException.cpp
+	antlr2/src/NoViableAltForCharException.cpp
+	antlr2/src/Parser.cpp
+	antlr2/src/RecognitionException.cpp
+	antlr2/src/String.cpp
+	antlr2/src/Token.cpp
+	antlr2/src/TokenBuffer.cpp
+	antlr2/src/TokenRefCount.cpp
+	antlr2/src/TokenStreamBasicFilter.cpp
+	antlr2/src/TokenStreamHiddenTokenFilter.cpp
+	antlr2/src/TokenStreamRewriteEngine.cpp
+	antlr2/src/TokenStreamSelector.cpp
+	antlr2/src/TreeParser.cpp
+	lib/bundlediskrep.cpp
+	lib/cdbuilder.cpp
+	#lib/codedirectory.cpp			FIXME: dispatch_qos_class_t
+	lib/cs.cpp
+	#lib/SecCode.cpp			FIXME: dispatch_qos_class_t
+	#lib/cskernel.cpp			FIXME: dispatch_qos_class_t
+	#lib/SecStaticCode.cpp			FIXME: dispatch_qos_class_t
+	#lib/csprocess.cpp			FIXME: dispatch_qos_class_t
+	lib/SecRequirement.cpp
+	lib/diskrep.cpp
+	#lib/filediskrep.cpp			FIXME: dispatch_qos_class_t
+	#lib/Code.cpp				FIXME: dispatch_qos_class_t
+	lib/kerneldiskrep.cpp
+	#lib/StaticCode.cpp			FIXME: dispatch_qos_class_t
+	lib/reqparser.cpp
+	lib/requirement.cpp
+	lib/Requirements.cpp
+	lib/reqdumper.cpp
+	#lib/reqinterp.cpp			FIXME: dispatch_qos_class_t
+	lib/reqmaker.cpp
+	#lib/antlrplugin.cpp			FIXME: CF_BRIDGED_TYPE
+	#lib/machorep.cpp			FIXME: dispatch_qos_class_t
+	lib/SecCodeHost.cpp
+	#lib/csgeneric.cpp			FIXME: dispatch_qos_class_t
+	#lib/SecCodeSigner.cpp			FIXME: dispatch_qos_class_t
+	#lib/CodeSigner.cpp			FIXME: dispatch_qos_class_t
+	#lib/signer.cpp				FIXME: dispatch_qos_class_t
+	#lib/evaluationmanager.cpp		FIXME: dispatch_qos_class_t
+	#lib/signerutils.cpp			FIXME: dispatch_qos_class_t
+	lib/sigblob.cpp
+	#lib/resources.cpp			FIXME: dispatch_qos_class_t
+	#lib/csutilities.cpp			FIXME: dispatch_qos_class_t
+	#lib/singlediskrep.cpp			FIXME: dispatch_qos_class_t
+	#lib/reqreader.cpp			FIXME: dispatch_qos_class_t
+	lib/cserror.cpp
+	lib/csdatabase.cpp
+	lib/detachedrep.cpp
+	#lib/slcrep.cpp				FIXME: CODESIGN_DISKREP_CREATE_SLC
+	#lib/SecTask.c				FIXME: CF_BRIDGED_TYPE
+	lib/policydb.cpp
+	#lib/opaquewhitelist.cpp		FIXME: dispatch_qos_class_t
+	#lib/SecAssessment.cpp			FIXME: dispatch_qos_class_t
+	lib/xpcengine.cpp
+	lib/xar++.cpp
+	#lib/policyengine.cpp			FIXME: CF_BRIDGED_TYPE
+	#lib/diskimagerep.cpp 			FIXME: Present in a newer version?
+	lib/quarantine++.cpp
+	#lib/drmaker.cpp			FIXME: dispatch_qos_class_t
+	#lib/RequirementLexer.cpp		FIXME: dispatch_qos_class_t
+	#lib/RequirementParser.cpp		FIXME: dispatch_qos_class_t
+	lib/piddiskrep.cpp
 
+	#lib/SecIntegrityLib.c			FIXME: CF_BRIDGED_TYPE
+	#lib/SecCodeHostLib.c			FIXME: CF_BRIDGED_TYPE
+	
+)
