@@ -47,6 +47,7 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/zlib
 	${CMAKE_SOURCE_DIR}/src/external/libcxx/include
 	${CMAKE_SOURCE_DIR}/src/external/libdispatch
+	${CMAKE_SOURCE_DIR}/src/external/openpam/include
 	${CMAKE_SOURCE_DIR}/src/CommonCrypto
 	${CMAKE_SOURCE_DIR}/src/external/commoncrypto/include
 	${CMAKE_SOURCE_DIR}/src/external/corecrypto/include
