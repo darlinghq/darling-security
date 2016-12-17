@@ -34,7 +34,7 @@
 #include <Security/cssmapplePriv.h>
 #include <security_utilities/unix++.h>
 #include <notify.h>
-
+#include "quarantine.h"
 #include "diskrep.h"
 #include "codedirectory.h"
 #include "csutilities.h"

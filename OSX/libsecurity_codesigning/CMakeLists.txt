@@ -4,6 +4,13 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/lib
 	${CMAKE_CURRENT_SOURCE_DIR}/antlr2
+	${CMAKE_CURRENT_SOURCE_DIR}/../securityd
+)
+
+add_definitions(
+	-Wno-unused-value
+	-Wno-format
+	-DCS_ENTITLEMENTS_VALIDATED=0
 )
 
 add_library(security_codesigning OBJECT
@@ -39,57 +46,57 @@ add_library(security_codesigning OBJECT
 	antlr2/src/TreeParser.cpp
 	lib/bundlediskrep.cpp
 	lib/cdbuilder.cpp
-	#lib/codedirectory.cpp			FIXME: dispatch_qos_class_t
+	lib/codedirectory.cpp
 	lib/cs.cpp
-	#lib/SecCode.cpp			FIXME: dispatch_qos_class_t
-	#lib/cskernel.cpp			FIXME: dispatch_qos_class_t
-	#lib/SecStaticCode.cpp			FIXME: dispatch_qos_class_t
-	#lib/csprocess.cpp			FIXME: dispatch_qos_class_t
+	lib/SecCode.cpp
+	lib/cskernel.cpp
+	lib/SecStaticCode.cpp
+	lib/csprocess.cpp
 	lib/SecRequirement.cpp
 	lib/diskrep.cpp
-	#lib/filediskrep.cpp			FIXME: dispatch_qos_class_t
-	#lib/Code.cpp				FIXME: dispatch_qos_class_t
+	lib/filediskrep.cpp
+	lib/Code.cpp
 	lib/kerneldiskrep.cpp
-	#lib/StaticCode.cpp			FIXME: dispatch_qos_class_t
+	lib/StaticCode.cpp
 	lib/reqparser.cpp
 	lib/requirement.cpp
 	lib/Requirements.cpp
 	lib/reqdumper.cpp
-	#lib/reqinterp.cpp			FIXME: dispatch_qos_class_t
+	lib/reqinterp.cpp
 	lib/reqmaker.cpp
-	#lib/antlrplugin.cpp			FIXME: CF_BRIDGED_TYPE
-	#lib/machorep.cpp			FIXME: dispatch_qos_class_t
+	lib/antlrplugin.cpp
+	lib/machorep.cpp
 	lib/SecCodeHost.cpp
-	#lib/csgeneric.cpp			FIXME: dispatch_qos_class_t
-	#lib/SecCodeSigner.cpp			FIXME: dispatch_qos_class_t
-	#lib/CodeSigner.cpp			FIXME: dispatch_qos_class_t
-	#lib/signer.cpp				FIXME: dispatch_qos_class_t
-	#lib/evaluationmanager.cpp		FIXME: dispatch_qos_class_t
-	#lib/signerutils.cpp			FIXME: dispatch_qos_class_t
+	lib/csgeneric.cpp
+	lib/SecCodeSigner.cpp
+	lib/CodeSigner.cpp
+	lib/signer.cpp
+	lib/evaluationmanager.cpp
+	lib/signerutils.cpp
 	lib/sigblob.cpp
-	#lib/resources.cpp			FIXME: dispatch_qos_class_t
-	#lib/csutilities.cpp			FIXME: dispatch_qos_class_t
-	#lib/singlediskrep.cpp			FIXME: dispatch_qos_class_t
-	#lib/reqreader.cpp			FIXME: dispatch_qos_class_t
+	lib/resources.cpp
+	lib/csutilities.cpp
+	lib/singlediskrep.cpp
+	lib/reqreader.cpp
 	lib/cserror.cpp
 	lib/csdatabase.cpp
 	lib/detachedrep.cpp
-	#lib/slcrep.cpp				FIXME: CODESIGN_DISKREP_CREATE_SLC
-	#lib/SecTask.c				FIXME: CF_BRIDGED_TYPE
+	lib/slcrep.cpp
+	lib/SecTask.c
 	lib/policydb.cpp
-	#lib/opaquewhitelist.cpp		FIXME: dispatch_qos_class_t
-	#lib/SecAssessment.cpp			FIXME: dispatch_qos_class_t
+	lib/opaquewhitelist.cpp
+	#lib/SecAssessment.cpp			FIXME: needs libquarantine
 	lib/xpcengine.cpp
 	lib/xar++.cpp
-	#lib/policyengine.cpp			FIXME: CF_BRIDGED_TYPE
+	#lib/policyengine.cpp			FIXME: Tons of missing constants
 	#lib/diskimagerep.cpp 			FIXME: Present in a newer version?
 	lib/quarantine++.cpp
-	#lib/drmaker.cpp			FIXME: dispatch_qos_class_t
-	#lib/RequirementLexer.cpp		FIXME: dispatch_qos_class_t
-	#lib/RequirementParser.cpp		FIXME: dispatch_qos_class_t
+	lib/drmaker.cpp
+	lib/RequirementLexer.cpp
+	lib/RequirementParser.cpp
 	lib/piddiskrep.cpp
 
-	#lib/SecIntegrityLib.c			FIXME: CF_BRIDGED_TYPE
-	#lib/SecCodeHostLib.c			FIXME: CF_BRIDGED_TYPE
-	
+	lib/SecIntegrityLib.c
+	#lib/SecCodeHostLib.c			FIXME: Multiple definitions of SecHostSetHostingPort
 )
+

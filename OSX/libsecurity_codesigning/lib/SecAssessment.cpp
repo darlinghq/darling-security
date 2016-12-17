@@ -31,7 +31,7 @@
 #include <security_utilities/unix++.h>
 #include <security_utilities/cfmunge.h>
 #include <notify.h>
-#include <esp.h>
+#include <netinet6/esp.h>
 
 using namespace CodeSigning;
 

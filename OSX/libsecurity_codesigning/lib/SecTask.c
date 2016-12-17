@@ -39,6 +39,7 @@
 #include "SecTask.h"
 #include "SecTaskPriv.h"
 
+#include <errno.h>
 
 struct __SecTask {
 	CFRuntimeBase base;

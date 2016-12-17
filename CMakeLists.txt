@@ -64,6 +64,7 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/libcxxabi/include
 	${CMAKE_SOURCE_DIR}/src/CoreServices
 	${CMAKE_SOURCE_DIR}/src/external/coretls/lib
+	${CMAKE_SOURCE_DIR}/src/OpenScripting
 )
 
 add_subdirectory(OSX)

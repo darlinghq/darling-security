@@ -166,13 +166,13 @@ static inline void checkFlags(SecCSFlags flags, SecCSFlags acceptable = 0)
 // and
 //	PROVIDER_PROBE_PREFIX_END(this)
 //
-#define DTRACK(_prefix, _obj, _args...) \
+#define DTRACK(_prefix, _obj, _args...)/* \
 	if (_prefix ## _START_ENABLED()) _prefix ## _START((_obj), ## _args); \
 	struct _DTFrame ## _prefix { void *me; \
 		_DTFrame ## _prefix(void *m) : me(m) { } \
 		~_DTFrame ## _prefix() { _prefix ## _END(me); } \
 	} _dtframe##_prefix((_obj));
-
+*/
 
 }	// CodeSigning
 }	// Security
