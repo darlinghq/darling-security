@@ -4,7 +4,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/lib
 	${CMAKE_CURRENT_SOURCE_DIR}/antlr2
-	${CMAKE_CURRENT_SOURCE_DIR}/../securityd
+	${CMAKE_CURRENT_SOURCE_DIR}/../libsecurityd
 )
 
 add_definitions(
@@ -85,7 +85,7 @@ add_library(security_codesigning OBJECT
 	lib/SecTask.c
 	lib/policydb.cpp
 	lib/opaquewhitelist.cpp
-	#lib/SecAssessment.cpp			FIXME: needs libquarantine
+	lib/SecAssessment.cpp
 	lib/xpcengine.cpp
 	lib/xar++.cpp
 	#lib/policyengine.cpp			FIXME: Tons of missing constants

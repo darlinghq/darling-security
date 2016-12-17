@@ -32,6 +32,7 @@
 #include <security_utilities/cfmunge.h>
 #include <notify.h>
 #include <netinet6/esp.h>
+#include "quarantine.h"
 
 using namespace CodeSigning;
 

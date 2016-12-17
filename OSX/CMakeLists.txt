@@ -41,6 +41,7 @@ add_subdirectory(libsecurity_checkpw/lib)
 add_subdirectory(libsecurity_cms/lib)
 add_subdirectory(libsecurity_comcryption/lib)
 add_subdirectory(libsecurity_codesigning)
+add_subdirectory(libsecurityd)
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
 SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
@@ -74,6 +75,7 @@ add_library(Security SHARED
 	$<TARGET_OBJECTS:security_cms>
 	$<TARGET_OBJECTS:security_comcryption>
 	$<TARGET_OBJECTS:security_codesigning>
+	$<TARGET_OBJECTS:secutityd_client>
 )
 
 target_link_libraries(Security system auto CFFExtra CFF sqlite3 xpc pam.2)

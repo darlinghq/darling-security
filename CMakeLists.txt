@@ -33,7 +33,6 @@ include_directories(
 # Leaving these here for now because they lack build scripts of their own
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/authd)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_dotmac_tp/lib)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurityd)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/sec)
 
 include_directories(
@@ -65,6 +64,8 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/CoreServices
 	${CMAKE_SOURCE_DIR}/src/external/coretls/lib
 	${CMAKE_SOURCE_DIR}/src/OpenScripting
+	${CMAKE_SOURCE_DIR}/src/libinfo/include
+	${CMAKE_SOURCE_DIR}/src/quarantine
 )
 
 add_subdirectory(OSX)
