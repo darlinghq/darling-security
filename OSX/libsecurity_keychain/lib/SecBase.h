@@ -33,6 +33,8 @@
 #include <CoreFoundation/CFBase.h>
 #include <AvailabilityMacros.h>
 
+#include <os/base.h>
+
 #if defined(__clang__)
 #define SEC_DEPRECATED_ATTRIBUTE DEPRECATED_ATTRIBUTE
 #else

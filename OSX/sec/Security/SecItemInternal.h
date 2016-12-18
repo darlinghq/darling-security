@@ -80,8 +80,6 @@ bool SecItemAuthDo(SecCFDictionaryCOW *auth_params, CFErrorRef *error, SecItemAu
 
 void SecItemAuthCopyParams(SecCFDictionaryCOW *auth_params, SecCFDictionaryCOW *query);
 
-TKTokenRef SecTokenCreate(CFStringRef token_id, CFDictionaryRef auth_params, CFErrorRef *error);
-
 __END_DECLS
 
 #endif /* !_SECURITY_SECITEMINTERNAL_H_ */

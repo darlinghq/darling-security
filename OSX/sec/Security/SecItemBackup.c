@@ -47,6 +47,8 @@
 #include <os/activity.h>
 #include <notify.h>
 
+#include <errno.h>
+
 static CFDataRef data_data_to_data_error_request(enum SecXPCOperation op, CFDataRef keybag, CFDataRef passcode, CFErrorRef *error) {
     __block CFDataRef result = NULL;
     securityd_send_sync_and_do(op, error, ^bool(xpc_object_t message, CFErrorRef *error) {

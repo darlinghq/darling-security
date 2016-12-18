@@ -34,6 +34,8 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <AvailabilityMacros.h>
 
+#include <dispatch/dispatch.h>
+
 __BEGIN_DECLS
 
 CF_ASSUME_NONNULL_BEGIN

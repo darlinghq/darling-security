@@ -1,6 +1,9 @@
 project(security_manifest)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(
+	${CMAKE_CURRENT_SOURCE_DIR}
+	${CMAKE_CURRENT_SOURCE_DIR}/../../sec
+)
 
 add_library(security_manifest OBJECT
 	AppleManifest.cpp

@@ -39,6 +39,7 @@
 #include <utilities/SecDb.h>
 #include <securityd/SecKeybagSupport.h>
 #include <Security/SecAccessControl.h>
+
 #include <Security/SecBasePriv.h>
 
 // MARK SecDbAttrKind, SecDbFlag
@@ -242,7 +243,7 @@ CFDateRef copyDate(CFTypeRef obj);
 // MARK: cFErrorPropagate which handles errSecAuthNeeded
 static inline
 bool SecErrorPropagate(CFErrorRef possibleError CF_CONSUMED, CFErrorRef *error) {
-    if (possibleError && error && *error && CFErrorGetCode(*error) == errSecAuthNeeded)
+    if (possibleError && error && *error && CFErrorGetCode(*error) == -25330)
         CFReleaseNull(*error);
     return CFErrorPropagate(possibleError, error);
 }

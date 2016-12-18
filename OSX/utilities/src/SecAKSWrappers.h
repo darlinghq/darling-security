@@ -35,7 +35,7 @@
 #if TARGET_OS_SIMULATOR
 #define TARGET_HAS_KEYSTORE 0
 #elif TARGET_OS_MAC && !(TARGET_CPU_X86)
-#define TARGET_HAS_KEYSTORE 1
+#define TARGET_HAS_KEYSTORE 0
 #elif TARGET_OS_EMBEDDED
 #define TARGET_HAS_KEYSTORE 1
 #else /* no keystore on this platform */

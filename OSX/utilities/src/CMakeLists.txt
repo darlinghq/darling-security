@@ -7,6 +7,7 @@ add_definitions(
 include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/../SecurityTool
+	${CMAKE_CURRENT_SOURCE_DIR}/../../sec
 )
 
 add_library(utilities OBJECT

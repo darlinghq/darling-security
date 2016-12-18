@@ -35,6 +35,9 @@
 extern "C" {
 #endif
 
+#undef CFReleaseSafe
+#undef CFReleaseNull
+
 #define CFReleaseSafe(CF) { CFTypeRef _cf = (CF); if (_cf) CFRelease(_cf); }
 #define CFReleaseNull(CF) { CFTypeRef _cf = (CF); \
 	if (_cf) { (CF) = NULL; CFRelease(_cf); } }

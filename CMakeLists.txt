@@ -19,6 +19,7 @@ add_definitions(
 	-D__APPLE_CPP__
 	-D__DARWIN_UNIX03
 	-DOBJC2RUNTIME=1
+	-DTARGET_HAS_KEYSTORE=0
 )
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
@@ -33,7 +34,6 @@ include_directories(
 # Leaving these here for now because they lack build scripts of their own
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/authd)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_dotmac_tp/lib)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/sec)
 
 include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/corefoundation/Headers
@@ -66,6 +66,7 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/OpenScripting
 	${CMAKE_SOURCE_DIR}/src/libinfo/include
 	${CMAKE_SOURCE_DIR}/src/quarantine
+	${CMAKE_SOURCE_DIR}/src/LocalAuthentication
 )
 
 add_subdirectory(OSX)
