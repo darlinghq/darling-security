@@ -54,7 +54,7 @@ DigestObject *MD2Object::digestClone() const
 	return new MD2Object(*this);
 }
 
-CSSM_SIZE MD2Object::digestSizeInBytes() const
+size_t MD2Object::digestSizeInBytes() const
 {
 	return CC_MD2_DIGEST_LENGTH;
 }
