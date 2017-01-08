@@ -55,10 +55,10 @@ void *CssmMemoryFunctionsAllocator::realloc(void *addr, size_t size) throw(std::
 CssmAllocatorMemoryFunctions::CssmAllocatorMemoryFunctions(Allocator &alloc)
 {
 	AllocRef = &alloc;
-	malloc_func = relayMalloc;
+	malloc_func = (CSSM_MALLOC) relayMalloc;
 	free_func = relayFree;
-	realloc_func = relayRealloc;
-	calloc_func = relayCalloc;
+	realloc_func = (CSSM_REALLOC) relayRealloc;
+	calloc_func = (CSSM_CALLOC) relayCalloc;
 }
 
 void *CssmAllocatorMemoryFunctions::relayMalloc(size_t size, void *ref) throw(std::bad_alloc)
