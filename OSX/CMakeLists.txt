@@ -78,6 +78,8 @@ add_library(Security SHARED
 	$<TARGET_OBJECTS:security_codesigning>
 	$<TARGET_OBJECTS:secutityd_client>
 	$<TARGET_OBJECTS:sec_item_shim>
+
+	ExtraConstants.c
 )
 
 target_link_libraries(Security system auto CFFExtra CFF sqlite3 xpc pam.2)
