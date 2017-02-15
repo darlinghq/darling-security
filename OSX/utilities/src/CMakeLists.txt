@@ -13,7 +13,7 @@ include_directories(
 add_library(utilities OBJECT
 	comparison.c
 #	debugging.c
-#	iCloudKeychainTrace.c 		FIXME: CFSTR
+	iCloudKeychainTrace.c
 #	der_array.c 			FIXME: corecrypto/ccdir.h
 #	der_boolean.c
 #	der_data.c
@@ -33,7 +33,7 @@ add_library(utilities OBJECT
 	SecdUsage.c
 #	SecCFWrappers.c 		FIXME: CommonCrypto/CommonRandom.h
 	SecCFCCWrappers.c
-#	SecXPCError.c 			FIXME: CFSTR
+	SecXPCError.c
 	SecBuffer.c
 #	iOSforOSX-SecAttr.c 		FIXME: CFSTR
 	iOSforOSX-SecRandom.c

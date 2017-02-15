@@ -8,6 +8,9 @@ include_directories(BEFORE
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/CKBridge
 )
 
+# set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc -include ${DARLING_TOP_DIRECTORY}/src/external/corefoundation/Headers/CoreFoundation/CFArray.h")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc -include CoreFoundation/CFArray.h")
+
 add_definitions(
 	-DSECTRUST_OSX
 	-DSECITEM_SHIM_OSX
@@ -19,7 +22,7 @@ add_library(sec_item_shim OBJECT
 	#Security/SecDH.c				FIXME: corecrypto/ccdh.h
 	SOSCircle/SecureObjectSync/SOSCloudCircle.c
 	#Security/SecAccessControl.c			FIXME: CoreFoundation issues
-	#Security/SecuritydXPC.c			FIXME: CoreFoundation issues
+	Security/SecuritydXPC.c
 	SOSCircle/osxshim.c
 	Security/SecItemConstants.c
 	Security/SecPasswordGenerate.c
