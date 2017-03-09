@@ -21,6 +21,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
+#include <Security/security-duct.h>
 /* CDSA */
 #include <Security/cssmconfig.h>
 #include <Security/cssmapple.h>

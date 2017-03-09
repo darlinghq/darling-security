@@ -13,8 +13,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse -msse2 -msse3 -nostdinc -fblocks -fPIC
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2 -msse3 -nostdinc -nostdinc++ -fblocks -fPIC")
 
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -nostdlib -Wl,--version-script=${DARLING_TOP_DIRECTORY}/darwin.map")
-
 add_definitions(
 	-D__APPLE_CPP__
 	-D__DARWIN_UNIX03
@@ -36,13 +34,11 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/authd)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_dotmac_tp/lib)
 
 include_directories(
-	${CMAKE_SOURCE_DIR}/src/external/corefoundation/Headers
-	${CMAKE_BINARY_DIR}/src/external/corefoundation/Headers
-	${CMAKE_SOURCE_DIR}/src/external/foundation/Headers
-	${CMAKE_SOURCE_DIR}/src/external/libobjc2/objc
-	${CMAKE_SOURCE_DIR}/src/external/libobjc2
+	${CMAKE_SOURCE_DIR}/src/external/corefoundation
+	${CMAKE_SOURCE_DIR}/src/external/foundation/include
 	${CMAKE_SOURCE_DIR}/src/external/libauto
 	${CMAKE_SOURCE_DIR}/src/external/zlib
+	${CMAKE_SOURCE_DIR}/src/external/libclosure
 	${CMAKE_SOURCE_DIR}/src/external/libcxx/include
 	${CMAKE_SOURCE_DIR}/src/external/libdispatch
 	${CMAKE_SOURCE_DIR}/src/external/openpam/include
