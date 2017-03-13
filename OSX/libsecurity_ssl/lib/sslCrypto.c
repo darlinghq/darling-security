@@ -38,6 +38,7 @@
 #include <Security/SecTrustPriv.h>
 #include <Security/SecPolicy.h>
 #include <Security/SecCertificate.h>
+#include <MacTypes.h>
 
 #include <AssertMacros.h>
 #include "utilities/SecCFRelease.h"

@@ -49,6 +49,7 @@
 #include <Security/SecTrust.h>
 #include <Security/SecTrustSettingsPriv.h>
 #include <Security/oidsalg.h>
+#include <MacTypes.h>
 #include "utilities/SecCFRelease.h"
 #include "utilities/SecCFWrappers.h"
 #include <pthread.h>

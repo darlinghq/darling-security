@@ -16,8 +16,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2 -msse3 -nostdinc -nostdinc+
 add_definitions(
 	-D__APPLE_CPP__
 	-D__DARWIN_UNIX03
-	-DOBJC2RUNTIME=1
+	-Dnil=NULL
 	-DTARGET_HAS_KEYSTORE=0
+	-DTARGET_OS_OSX=1
 )
 
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
@@ -42,6 +43,7 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/libcxx/include
 	${CMAKE_SOURCE_DIR}/src/external/libdispatch
 	${CMAKE_SOURCE_DIR}/src/external/openpam/include
+	${CMAKE_SOURCE_DIR}/src/external/syslog/libsystem_asl.tproj/include
 	${CMAKE_SOURCE_DIR}/src/CommonCrypto
 	${CMAKE_SOURCE_DIR}/src/external/commoncrypto/include
 	${CMAKE_SOURCE_DIR}/src/external/corecrypto/include
@@ -63,6 +65,9 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/libinfo/include
 	${CMAKE_SOURCE_DIR}/src/quarantine
 	${CMAKE_SOURCE_DIR}/src/LocalAuthentication
+	${CMAKE_SOURCE_DIR}/src/kernel/libsyscall/wrappers/libproc
+	${CMAKE_SOURCE_DIR}/src/libmalloc/include
+	${CMAKE_SOURCE_DIR}/src/external/objc4/runtime
 )
 
 add_subdirectory(OSX)

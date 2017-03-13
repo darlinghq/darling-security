@@ -6,12 +6,12 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/antlr2
 	${CMAKE_CURRENT_SOURCE_DIR}/../libsecurityd
 	${CMAKE_CURRENT_SOURCE_DIR}/../sec
+	${CMAKE_CURRENT_BINARY_DIR}/../libsecurityd
 )
 
 add_definitions(
 	-Wno-unused-value
 	-Wno-format
-	-DCS_ENTITLEMENTS_VALIDATED=0
 )
 
 add_library(security_codesigning OBJECT
@@ -101,3 +101,4 @@ add_library(security_codesigning OBJECT
 	#lib/SecCodeHostLib.c			FIXME: Multiple definitions of SecHostSetHostingPort
 )
 
+add_dependencies(security_codesigning securityd_client)

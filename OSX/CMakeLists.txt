@@ -73,7 +73,7 @@ add_framework(Security
 	$<TARGET_OBJECTS:security_cms>
 	$<TARGET_OBJECTS:security_comcryption>
 	$<TARGET_OBJECTS:security_codesigning>
-	$<TARGET_OBJECTS:secutityd_client>
+	$<TARGET_OBJECTS:securityd_client>
 	$<TARGET_OBJECTS:sec_item_shim>
 
 	ExtraConstants.c
@@ -84,4 +84,8 @@ add_framework(Security
 		sqlite3
 		xpc
 		pam.2
+		cxx
+		xpc
+		xar
+		CommonCrypto
 )

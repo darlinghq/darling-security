@@ -41,7 +41,7 @@ mig(mig/ucspNotify.defs)
 
 #add_library(securityd STATIC ${security_libsecurityd_sources})
 
-add_library(secutityd_client OBJECT
+add_library(securityd_client OBJECT
 	lib/SharedMemoryClient.cpp
 	lib/eventlistener.cpp
 	securityd_client/ucspNotifySender.cpp
@@ -61,4 +61,6 @@ add_library(secutityd_client OBJECT
 	lib/sec_xdr_sizeof.c
 	${CMAKE_CURRENT_BINARY_DIR}/mig/cshostingServer.cpp
 	${CMAKE_CURRENT_BINARY_DIR}/mig/cshostingUser.cpp
+	${CMAKE_CURRENT_BINARY_DIR}/mig/ucspUser.cpp
+	${CMAKE_CURRENT_BINARY_DIR}/mig/ucspNotifyUser.cpp
 )

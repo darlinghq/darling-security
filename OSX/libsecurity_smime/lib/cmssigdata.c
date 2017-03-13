@@ -56,6 +56,7 @@
 #include <Security/SecPolicyPriv.h>
 #include <utilities/SecCFWrappers.h>
 #include <syslog.h>
+#include <MacTypes.h>
 
 #ifndef NDEBUG
 #define SIGDATA_DEBUG	1

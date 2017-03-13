@@ -39,6 +39,7 @@
 #include <Security/SecCmsContentInfo.h>
 #include <Security/SecCmsDigestContext.h>
 #include <Security/SecCmsMessage.h>
+#include <MacTypes.h>
 
 #include "cmslocal.h"
 
