@@ -39,8 +39,40 @@ add_subdirectory(libsecurity_checkpw/lib)
 add_subdirectory(libsecurity_cms/lib)
 add_subdirectory(libsecurity_comcryption/lib)
 add_subdirectory(libsecurity_codesigning)
+add_subdirectory(libsecurity_cryptkit)
 add_subdirectory(libsecurityd)
 add_subdirectory(sec)
+
+make_fat(security_authorization)
+make_fat(security_utilities)
+make_fat(utilities)
+make_fat(security_keychain)
+make_fat(security_keychain_der)
+make_fat(security_cssm)
+make_fat(security_transform)
+make_fat(security_asn1)
+make_fat(security_manifest)
+make_fat(security_mds)
+make_fat(security_sd_cspdl)
+make_fat(security_smime)
+make_fat(security_ssl)
+make_fat(security_apple_csp)
+make_fat(security_apple_cspdl)
+make_fat(security_apple_file_dl)
+make_fat(security_apple_x509_cl)
+make_fat(security_apple_x509_tp)
+make_fat(security_cdsa_client)
+make_fat(security_cdsa_plugin)
+make_fat(security_cdsa_utilities)
+make_fat(security_cdsa_utils)
+make_fat(security_filedb)
+make_fat(security_checkpw)
+make_fat(security_cms)
+make_fat(security_comcryption)
+make_fat(security_codesigning)
+make_fat(securityd_client)
+make_fat(sec_item_shim)
+make_fat(security_cryptkit)
 
 add_framework(Security
 	FAT CURRENT_VERSION
@@ -75,6 +107,7 @@ add_framework(Security
 	$<TARGET_OBJECTS:security_codesigning>
 	$<TARGET_OBJECTS:securityd_client>
 	$<TARGET_OBJECTS:sec_item_shim>
+	$<TARGET_OBJECTS:security_cryptkit>
 
 	ExtraConstants.c
 

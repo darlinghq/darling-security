@@ -62,14 +62,14 @@ SecKeyRef SecKeyCreateECPrivateKey(CFAllocatorRef allocator,
 /* These are the named curves we support. These values come from RFC 4492
    section 5.1.1, with the exception of SSL_Curve_None which means
    "ECDSA not negotiated". */
-/*typedef enum
+typedef enum
 {
 	kSecECCurveNone = -1,
 	kSecECCurveSecp256r1 = 23,
 	kSecECCurveSecp384r1 = 24,
 	kSecECCurveSecp521r1 = 25
 } SecECNamedCurve;
-*/
+
 /* Return a named curve enum for ecPrivateKey. */
 SecECNamedCurve SecECKeyGetNamedCurve(SecKeyRef ecPrivateKey);
 CFDataRef SecECKeyCopyPublicBits(SecKeyRef key);

@@ -101,6 +101,10 @@
 
 #include <ctkclient.h>
 
+#ifdef DARLING
+static CFStringRef kAKSKeyOpDelete = CFSTR("KeyOpDelete");
+#endif
+
 /* Return an OSStatus for a sqlite3 error code. */
 static OSStatus osstatus_for_s3e(int s3e)
 {
@@ -1318,8 +1322,8 @@ SecItemAdd(CFDictionaryRef attributes, CFTypeRef *result)
             } else {
                 // Send request to an appropriate token instead of secd.
                 return SecTokenItemAdd(token, attributes, auth_params, result, error);
-            }*/;
-        });
+            };
+        })*/;
     });
 
 #ifndef SECITEM_SHIM_OSX
@@ -1331,6 +1335,9 @@ errOut:
 	return status;
 }
 
+#ifdef DARLING
+typedef void* TKTokenRef;
+#endif
 
 OSStatus
 #if SECITEM_SHIM_OSX
