@@ -6,10 +6,8 @@ include_directories(BEFORE
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/Regressions
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/SecureObjectSync
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/CKBridge
+	${CMAKE_CURRENT_SOURCE_DIR}/Security
 )
-
-# set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc -include ${DARLING_TOP_DIRECTORY}/src/external/corefoundation/Headers/CoreFoundation/CFArray.h")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc -include CoreFoundation/CFArray.h")
 
 add_definitions(
 	-DSECTRUST_OSX

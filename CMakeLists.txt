@@ -1,17 +1,12 @@
 project(Security)
 
-cmake_minimum_required(VERSION 2.4.0)
-
-enable_language(C ASM)
-
-if(COMMAND cmake_policy)
-	cmake_policy(SET CMP0003 NEW)
-	cmake_policy(SET CMP0005 NEW)
-endif(COMMAND cmake_policy)
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse -msse2 -msse3 -nostdinc -fblocks -fPIC")
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2 -msse3 -nostdinc -nostdinc++ -fblocks -fPIC")
+add_compile_options(
+	-fconstant-cfstrings
+	-fblocks
+	-nostdinc
+	-nostdinc++
+#	-fobjc-arc
+)
 
 add_definitions(
 	-D__APPLE_CPP__
@@ -19,11 +14,10 @@ add_definitions(
 	-Dnil=NULL
 	-DTARGET_HAS_KEYSTORE=0
 	-DTARGET_OS_OSX=1
+	-DNDEBUG=1
+	-D__KEYCHAINCORE__=1
+	-DOSSPINLOCK_USE_INLINED=0
 )
-
-SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/darling")
-SET(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -40,7 +34,6 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/external/libauto
 	${CMAKE_SOURCE_DIR}/src/external/zlib
 	${CMAKE_SOURCE_DIR}/src/external/libclosure
-	${CMAKE_SOURCE_DIR}/src/external/libcxx/include
 	${CMAKE_SOURCE_DIR}/src/external/libdispatch
 	${CMAKE_SOURCE_DIR}/src/external/openpam/include
 	${CMAKE_SOURCE_DIR}/src/external/syslog/libsystem_asl.tproj/include
@@ -68,6 +61,11 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/kernel/libsyscall/wrappers/libproc
 	${CMAKE_SOURCE_DIR}/src/libmalloc/include
 	${CMAKE_SOURCE_DIR}/src/external/objc4/runtime
+)
+
+
+include_directories(BEFORE
+	${CMAKE_SOURCE_DIR}/src/external/libcxx/include
 )
 
 add_subdirectory(OSX)
