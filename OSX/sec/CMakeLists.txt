@@ -9,21 +9,16 @@ include_directories(BEFORE
 	${CMAKE_CURRENT_SOURCE_DIR}/Security
 )
 
-add_definitions(
-	-DSECTRUST_OSX
-	-DSECITEM_SHIM_OSX
-	-DMULTIPLE_KEYCHAINS
-)
-
 add_library(sec_item_shim OBJECT
 	Security/SecItemBackup.c
-	Security/SecItem.c				# FIXME: CoreFoundation issues
-	#Security/SecDH.c				FIXME: corecrypto/ccdh.h
+	Security/SecItem.c
+	Security/SecDH.c
 	SOSCircle/SecureObjectSync/SOSCloudCircle.c
-	# Security/SecAccessControl.c		#	FIXME: requires ACM
-	Security/SecCertificate.c
+	Security/SecAccessControl.c
 	Security/SecuritydXPC.c
 	SOSCircle/osxshim.c
 	Security/SecItemConstants.c
 	Security/SecPasswordGenerate.c
 )
+
+target_compile_definitions(sec_item_shim PRIVATE -DSECITEM_SHIM_OSX=1)
