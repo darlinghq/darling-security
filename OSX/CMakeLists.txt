@@ -2,7 +2,7 @@ project(Security.framework)
 
 add_definitions(
 	-Wno-c++11-extensions
-	-Wno-implicit-function-declaration
+	#-Wno-implicit-function-declaration
 	-Wno-deprecated
 	-Wno-bool-conversion
 	-Wno-null-conversion
