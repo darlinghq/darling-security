@@ -77,6 +77,7 @@ make_fat(security_cryptkit)
 make_fat(libsecurity_pkcs12)
 make_fat(security_SecureObjectSync)
 make_fat(security_SecTrustOSX)
+make_fat(security_SecOtrOSX)
 
 add_framework(Security
 	FAT CURRENT_VERSION
@@ -115,6 +116,7 @@ add_framework(Security
 	$<TARGET_OBJECTS:libsecurity_pkcs12>
 	$<TARGET_OBJECTS:security_SecureObjectSync>
 	$<TARGET_OBJECTS:security_SecTrustOSX>
+	$<TARGET_OBJECTS:security_SecOtrOSX>
 
 	ExtraConstants.c
 

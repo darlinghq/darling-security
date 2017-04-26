@@ -1,5 +1,9 @@
 project(libsecurity_keychain)
 
+add_definitions(
+	-DSECTRUST_OSX=0
+)
+
 include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -9,20 +13,19 @@ include_directories(
 set(security_keychain_sources
 	Access.cpp
 	ACL.cpp
+	CCallbackMgr.cp
 	Certificate.cpp
 	CertificateRequest.cpp
-	CertificateValues.cpp
 	cssmdatetime.cpp
 	defaultcreds.cpp
 	DLDBListCFPref.cpp
 	DynamicDLDBList.cpp
-	ExtendedAttribute.cpp
 	Globals.cpp
 	Identity.cpp
 	IdentityCursor.cpp
 	Item.cpp
-	KCCursor.cpp
 	KCEventNotifier.cpp
+	KCCursor.cpp
 	KCUtilities.cpp
 	Keychains.cpp
 	KeyItem.cpp
@@ -33,49 +36,58 @@ set(security_keychain_sources
 	SecAccess.cpp
 	SecACL.cpp
 	SecBase.cpp
-	SecCertificateBundle.cpp
 	SecCertificate.cpp
+	SecCertificateBundle.cpp
 	SecCertificateRequest.cpp
 	SecCFTypes.cpp
-	SecExport.cpp
-	SecExternalRep.cpp
-	SecFDERecoveryAsymmetricCrypto.cpp
 	SecIdentity.cpp
 	SecIdentitySearch.cpp
-	SecImport.cpp
-	SecImportExportAgg.cpp
-	SecImportExportCrypto.cpp
-	SecImportExportOpenSSH.cpp
-	SecImportExportPem.cpp
-	SecImportExportPkcs8.cpp
-	SecImportExportUtils.cpp
-	SecItem.cpp
-	SecKeychainAddIToolsPassword.cpp
-	SecKeychain.cpp
-	SecKeychainItem.cpp
-	SecKeychainItemExtendedAttributes.cpp
-	SecKeychainSearch.cpp
 	SecKey.cpp
-	SecNetscapeTemplates.cpp
+	SecKeychain.cpp
+	SecKeychainAddIToolsPassword.cpp
+	SecKeychainItem.cpp
+	SecKeychainSearch.cpp
 	SecPassword.cpp
-	SecPkcs8Templates.cpp
 	SecPolicy.cpp
 	SecPolicySearch.cpp
 	SecTrust.cpp
 	SecTrustedApplication.cpp
-	SecTrustSettings.cpp
-	SecWrappedKeys.cpp
 	StorageManager.cpp
-	TrustAdditions.cpp
 	Trust.cpp
 	TrustedApplication.cpp
 	TrustItem.cpp
+	TrustStore.cpp
+	SecExport.cpp
+	SecImport.cpp
+	SecExternalRep.cpp
+	SecImportExportAgg.cpp
+	SecImportExportPem.cpp
+	SecImportExportUtils.cpp
+	SecNetscapeTemplates.cpp
+	SecImportExportPkcs8.cpp
+	SecPkcs8Templates.cpp
+	SecWrappedKeys.cpp
+	SecImportExportCrypto.cpp
 	TrustRevocation.cpp
+	UnlockReferralItem.cpp
+	SecTrustSettings.cpp
 	TrustSettings.cpp
 	TrustSettingsUtils.cpp
-	TrustStore.cpp
-	UnlockReferralItem.cpp
-	CCallbackMgr.cp # Yes, it is .cp
+	SecItem.cpp
+	SecItemConstants.c
+	SecImportExportOpenSSH.cpp
+	ExtendedAttribute.cpp
+	SecKeychainItemExtendedAttributes.cpp
+	SecImportExport.c
+	TrustAdditions.cpp
+	CertificateValues.cpp
+	SecCertificateP.c
+	SecFrameworkP.c
+	SecBase64P.c
+	SecRecoveryPassword.c
+	SecFDERecoveryAsymmetricCrypto.cpp
+	SecRandom.c
+	tsaDERUtilities.c
 )
 
 add_library(security_keychain OBJECT ${security_keychain_sources})

@@ -105,3 +105,15 @@ add_library(security_SecTrustOSX OBJECT
 	Security/SecRSAKey.c
 )
 target_compile_definitions(security_SecTrustOSX PRIVATE SECTRUST_OSX=0)
+
+add_library(security_SecOtrOSX OBJECT
+	Security/SecOTRDHKey.c
+	Security/SecOTRFullIdentity.c
+	Security/SecOTRMath.c
+	Security/SecOTRPacketData.c
+	Security/SecOTRPackets.c
+	Security/SecOTRPublicIdentity.c
+	Security/SecOTRSession.c
+	Security/SecOTRSessionAKE.c
+	Security/SecOTRUtils.c
+)
