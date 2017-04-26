@@ -5,14 +5,17 @@ add_compile_options(
 )
 
 include_directories(BEFORE
-	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/ipc
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/Regressions
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/SecureObjectSync
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/CKBridge
 	${CMAKE_CURRENT_SOURCE_DIR}/Security
 	${CMAKE_CURRENT_SOURCE_DIR}/securityd
+	${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+#include_directories(AFTER
+#)
 
 add_library(sec_item_shim OBJECT
 	Security/SecItemBackup.c
@@ -89,3 +92,16 @@ add_library(security_SecureObjectSync OBJECT
 	SOSCircle/SecureObjectSync/SOSKVSKeys.c
 	SOSCircle/SecureObjectSync/SOSAccountPersistence.c
 )
+
+add_library(security_SecTrustOSX OBJECT
+	Security/SecCertificate.c
+	Security/SecCertificatePath.c
+	Security/SecPolicy.c
+	Security/SecTrust.c
+	Security/SecTrustSettings.c
+	Security/SecTrustStore.c
+	Security/SecKey.c
+	Security/SecECKey.c
+	Security/SecRSAKey.c
+)
+target_compile_definitions(security_SecTrustOSX PRIVATE SECTRUST_OSX=0)

@@ -101,11 +101,6 @@ SecKeyRef SecCertificateCopyPublicKey_ios(SecCertificateRef certificate);
 SecKeyRef SecCertificateCopyPublicKey(SecCertificateRef certificate);
 #endif
 
-#define SecCEBasicConstraints CE_BasicConstraints
-#define SecCEPolicyConstraints CE_PolicyConstraints
-#define SecCECertificatePolicies SecCertificatePathRef
-#define SecCEGeneralNameType CE_GeneralNameType
-
 /* Return the SecCEBasicConstraints extension for this certificate if it
    has one. */
 const SecCEBasicConstraints *

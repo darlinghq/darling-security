@@ -27,6 +27,7 @@
 #define _CERT_EXTENSIONS_H_
 
 #include <Security/cssmtype.h>
+#include <Security/x509defs.h>
 
 /***
  *** Structs for declaring extension-specific data. 
