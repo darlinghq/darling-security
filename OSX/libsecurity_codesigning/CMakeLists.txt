@@ -9,9 +9,10 @@ include_directories(
 	${CMAKE_CURRENT_BINARY_DIR}/../libsecurityd
 )
 
-add_definitions(
+add_compile_options(
 	-Wno-unused-value
 	-Wno-format
+	-includeunknown.h
 )
 
 add_library(security_codesigning OBJECT
@@ -89,8 +90,7 @@ add_library(security_codesigning OBJECT
 	lib/SecAssessment.cpp
 	lib/xpcengine.cpp
 	lib/xar++.cpp
-	#lib/policyengine.cpp			FIXME: Tons of missing constants
-	#lib/diskimagerep.cpp 			FIXME: Present in a newer version?
+	lib/policyengine.cpp
 	lib/quarantine++.cpp
 	lib/drmaker.cpp
 	lib/RequirementLexer.cpp
@@ -98,7 +98,7 @@ add_library(security_codesigning OBJECT
 	lib/piddiskrep.cpp
 
 	lib/SecIntegrityLib.c
-	#lib/SecCodeHostLib.c			FIXME: Multiple definitions of SecHostSetHostingPort
+	lib/SecCodeHostLib.c
 )
 
 add_dependencies(security_codesigning securityd_client)

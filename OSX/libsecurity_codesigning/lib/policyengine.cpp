@@ -46,6 +46,7 @@
 
 extern "C" {
 #include <OpenScriptingUtilPriv.h>
+#include <CoreFoundation/CFURLPriv.h>
 }
 
 

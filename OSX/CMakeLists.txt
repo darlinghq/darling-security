@@ -1,6 +1,6 @@
 project(Security.framework)
 
-add_definitions(
+add_compile_options(
 	-Wno-c++11-extensions
 	#-Wno-implicit-function-declaration
 	-Wno-deprecated
@@ -42,6 +42,7 @@ add_subdirectory(libsecurity_codesigning)
 add_subdirectory(libsecurity_cryptkit)
 add_subdirectory(libsecurityd)
 add_subdirectory(sec)
+add_subdirectory(libsecurity_pkcs12/lib)
 
 make_fat(security_authorization)
 make_fat(security_utilities)
@@ -73,6 +74,8 @@ make_fat(security_codesigning)
 make_fat(securityd_client)
 make_fat(sec_item_shim)
 make_fat(security_cryptkit)
+make_fat(libsecurity_pkcs12)
+make_fat(security_SecureObjectSync)
 
 add_framework(Security
 	FAT CURRENT_VERSION
@@ -108,6 +111,8 @@ add_framework(Security
 	$<TARGET_OBJECTS:securityd_client>
 	$<TARGET_OBJECTS:sec_item_shim>
 	$<TARGET_OBJECTS:security_cryptkit>
+	$<TARGET_OBJECTS:libsecurity_pkcs12>
+	$<TARGET_OBJECTS:security_SecureObjectSync>
 
 	ExtraConstants.c
 
@@ -120,5 +125,9 @@ add_framework(Security
 		cxx
 		xpc
 		xar
+		z
+		#coretls not built yet
 		CommonCrypto
+		objc
+		bsm.0
 )

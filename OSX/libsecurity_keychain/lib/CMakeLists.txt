@@ -75,6 +75,7 @@ set(security_keychain_sources
 	TrustSettingsUtils.cpp
 	TrustStore.cpp
 	UnlockReferralItem.cpp
+	CCallbackMgr.cp # Yes, it is .cp
 )
 
 add_library(security_keychain OBJECT ${security_keychain_sources})
