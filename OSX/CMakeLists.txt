@@ -43,6 +43,7 @@ add_subdirectory(libsecurity_cryptkit)
 add_subdirectory(libsecurityd)
 add_subdirectory(sec)
 add_subdirectory(libsecurity_pkcs12/lib)
+add_subdirectory(libsecurity_ocspd)
 
 make_fat(security_authorization)
 make_fat(security_utilities)
@@ -78,6 +79,7 @@ make_fat(libsecurity_pkcs12)
 make_fat(security_SecureObjectSync)
 make_fat(security_SecTrustOSX)
 make_fat(security_SecOtrOSX)
+make_fat(libsecurity_ocspd)
 
 add_framework(Security
 	FAT CURRENT_VERSION
@@ -117,6 +119,7 @@ add_framework(Security
 	$<TARGET_OBJECTS:security_SecureObjectSync>
 	$<TARGET_OBJECTS:security_SecTrustOSX>
 	$<TARGET_OBJECTS:security_SecOtrOSX>
+	$<TARGET_OBJECTS:libsecurity_ocspd>
 
 	ExtraConstants.c
 
