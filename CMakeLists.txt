@@ -57,10 +57,11 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/src/OpenScripting
 	${CMAKE_SOURCE_DIR}/src/libinfo/include
 	${CMAKE_SOURCE_DIR}/src/quarantine
-	${CMAKE_SOURCE_DIR}/src/LocalAuthentication
+	${CMAKE_SOURCE_DIR}/src/LocalAuthentication/include
 	${CMAKE_SOURCE_DIR}/src/kernel/libsyscall/wrappers/libproc
 	${CMAKE_SOURCE_DIR}/src/libmalloc/include
 	${CMAKE_SOURCE_DIR}/src/external/objc4/runtime
+	${CMAKE_SOURCE_DIR}/src/CryptoTokenKit/include
 )
 
 

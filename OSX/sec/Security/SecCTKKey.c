@@ -37,6 +37,8 @@
 #include "SecRSAKey.h"
 #include "SecCTKKeyPriv.h"
 
+#include <ACMDefs.h>
+
 const CFStringRef kSecUseToken = CFSTR("u_Token");
 const CFStringRef kSecUseTokenObjectID = CFSTR("u_TokenOID");
 

@@ -81,6 +81,8 @@
 typedef const struct AuthorizationOpaqueRef *	AuthorizationRef;
 #endif
 
+#include <MacTypes.h>
+
 #define SOSCKCSCOPE "sync"
 #define RUN_AS_ROOT_ERROR 550
 

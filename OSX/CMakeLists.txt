@@ -80,6 +80,8 @@ make_fat(security_SecureObjectSync)
 make_fat(security_SecTrustOSX)
 make_fat(security_SecOtrOSX)
 make_fat(libsecurity_ocspd)
+make_fat(security_security)
+make_fat(security_securityd)
 
 add_framework(Security
 	FAT CURRENT_VERSION
@@ -120,6 +122,8 @@ add_framework(Security
 	$<TARGET_OBJECTS:security_SecTrustOSX>
 	$<TARGET_OBJECTS:security_SecOtrOSX>
 	$<TARGET_OBJECTS:libsecurity_ocspd>
+	$<TARGET_OBJECTS:security_security>
+	$<TARGET_OBJECTS:security_securityd>
 
 	ExtraConstants.c
 
@@ -133,8 +137,9 @@ add_framework(Security
 		xpc
 		xar
 		z
-		#coretls not built yet
 		CommonCrypto
 		objc
 		bsm.0
+		SystemConfiguration
+		AppleSystemInfo
 )

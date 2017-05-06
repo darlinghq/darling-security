@@ -2,9 +2,13 @@ project(security_sec)
 
 add_compile_options(
 	-Wno-visibility
+	-Wno-unused-value
+	-includeACMDefs.h
 )
 
 include_directories(BEFORE
+	${CMAKE_CURRENT_SOURCE_DIR}/SharedWebCredential
+	${CMAKE_CURRENT_SOURCE_DIR}/../regressions
 	${CMAKE_CURRENT_SOURCE_DIR}/ipc
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/Regressions
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/SecureObjectSync
@@ -117,3 +121,86 @@ add_library(security_SecOtrOSX OBJECT
 	Security/SecOTRSessionAKE.c
 	Security/SecOTRUtils.c
 )
+
+add_library(security_security OBJECT
+	Security/p12import.c
+	Security/p12pbegen.c
+	Security/pbkdf2.c
+	Security/SecAccessControl.c
+	Security/SecBase64.c
+	securityd/Regressions/secd-52-offering-gencount-reset.c
+	Security/SecCertificate.c
+	Security/SecCertificatePath.c
+	Security/SecCertificateRequest.c
+	Security/SecCMS.c
+	Security/SecDH.c
+	Security/SecCTKKey.c
+	securityd/Regressions/secd-95-escrow-persistence.c
+	Security/SecECKey.c
+	Security/SecFramework.c
+	Security/SecIdentity.c
+	Security/SecImportExport.c
+	Security/SecItem.c
+	Security/SecItemConstants.c
+	Security/SecKey.c
+	Security/SecPBKDF.c
+	Security/SecPolicy.c
+	SOSCircle/SecureObjectSync/SOSCloudCircle.c
+	Security/SecRSAKey.c
+	Security/SecSCEP.c
+	Security/SecTrust.c
+	Security/SecTrustSettings.c
+	Security/SecSharedCredential.c
+	Security/SecItemBackup.c
+	Security/Tool/verify_cert.c
+	Security/SecPasswordGenerate.c
+	Security/SecTrustStore.c
+	Security/vmdh.c
+	Security/SecOTRDHKey.c
+	Security/SecServerEncryptionSupport.c
+	Security/SecOTRFullIdentity.c
+	Security/SecOTRMath.c
+	Security/SecOTRPacketData.c
+	Security/SecOTRPackets.c
+	Security/SecOTRPublicIdentity.c
+	Security/SecOTRSession.c
+	Security/SecOTRSessionAKE.c
+	Security/SecOTRUtils.c
+	Security/SecuritydXPC.c
+)
+target_compile_definitions(security_security PRIVATE INDIGO=1)
+
+add_library(security_securityd OBJECT
+	securityd/SecLogSettingsServer.c
+	securityd/SecItemSchema.c
+	securityd/SecItemDb.c
+	securityd/OTATrustUtilities.c
+	securityd/SecOTRRemote.c
+	securityd/asynchttp.c
+	securityd/policytree.c
+	securityd/SecCAIssuerCache.c
+	securityd/SecCAIssuerRequest.c
+	securityd/SecItemServer.c
+	Security/SecuritydXPC.c
+	securityd/SecOCSPCache.c
+	securityd/iCloudTrace.c
+	SOSCircle/SecureObjectSync/SOSEngine.c
+	securityd/SecDbKeychainItem.c
+	securityd/SecOCSPRequest.c
+	securityd/SecOCSPResponse.c
+	securityd/SecPolicyServer.c
+	securityd/SecKeybagSupport.c
+	securityd/SecItemDataSource.c
+	securityd/SecDbQuery.c
+	securityd/SecItemBackupServer.c
+	securityd/SecTrustServer.c
+	securityd/nameconstraints.c
+	securityd/SecTrustStoreServer.c
+	securityd/spi.c
+	securityd/SOSCloudCircleServer.c
+	SharedWebCredential/swcagent_client.c
+	SOSCircle/SecureObjectSync/SOSChangeTracker.c
+	securityd/SecDbItem.c
+)
+
+target_compile_definitions(security_securityd PRIVATE INDIGO=1)

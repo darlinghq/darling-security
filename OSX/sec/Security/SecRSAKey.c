@@ -46,7 +46,7 @@
 #include <Security/SecInternal.h>
 
 #include <corecrypto/ccn.h>
-#include <corecrypto/ccrsa.h>
+#include <corecrypto/ccrsa_priv.h>
 #include <corecrypto/ccsha1.h>
 
 #include <libDER/asn1Types.h>

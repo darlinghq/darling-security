@@ -52,6 +52,7 @@
 #include <string.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <Security/SecBase.h>
 #include <CoreFoundation/CFData.h>
 #include <CoreFoundation/CFDate.h>
 #include <CoreFoundation/CFDictionary.h>
@@ -100,10 +101,7 @@
 #include <LocalAuthentication/LACFSupport.h>
 
 #include <ctkclient.h>
-
-#ifdef DARLING
-static CFStringRef kAKSKeyOpDelete = CFSTR("KeyOpDelete");
-#endif
+#include <ACMDefs.h>
 
 /* Return an OSStatus for a sqlite3 error code. */
 static OSStatus osstatus_for_s3e(int s3e)
@@ -274,9 +272,9 @@ OSStatus SecErrorGetOSStatus(CFErrorRef error) {
             status = osstatus_for_ids_error(CFErrorGetCode(error));
         } else if (CFEqual(CFSTR(kLAErrorDomain), domain)) {
             status = osstatus_for_localauthentication_error(CFErrorGetCode(error));
-        } /*else if (CFEqual(CFSTR(kTKErrorDomain), domain)) {
+        } else if (CFEqual(CFSTR(kTKErrorDomain), domain)) {
             status = osstatus_for_ctk_error(CFErrorGetCode(error));
-        } */ else {
+        } else {
             secnotice("securityd", "unknown error domain: %@ for error: %@", domain, error);
             status = errSecInternal;
         }
@@ -622,7 +620,7 @@ static CFDictionaryRef SecTokenItemValueCopy(CFDataRef db_value, CFErrorRef *err
 out:
     return plist;
 }
-/*
+
 TKTokenRef SecTokenCreate(CFStringRef token_id, CFDictionaryRef auth_params, CFErrorRef *error) {
     CFMutableDictionaryRef token_attrs = NULL;
     TKTokenRef token = NULL;
@@ -637,8 +635,7 @@ TKTokenRef SecTokenCreate(CFStringRef token_id, CFDictionaryRef auth_params, CFE
     CFReleaseSafe(token_attrs);
     return token;
 }
-*/
-/*
+
 static bool SecTokenItemCreateFromAttributes(CFDictionaryRef attributes, CFDictionaryRef auth_params,
                                              TKTokenRef token, CFDataRef object_id, CFTypeRef *ref, CFErrorRef *error) {
     bool ok = false;
@@ -665,11 +662,11 @@ out:
     CFReleaseSafe(attrs);
     return ok;
 }
-*/
+
 
 /* Turn the returned single value or dictionary that contains all the attributes to create a
  ref into the exact result the client asked for */
-/*static bool SecItemResultCopyPrepared(CFTypeRef raw_result, TKTokenRef token,
+static bool SecItemResultCopyPrepared(CFTypeRef raw_result, TKTokenRef token,
                                       CFDictionaryRef query, CFDictionaryRef auth_params,
                                       CFTypeRef *result, CFErrorRef *error) {
     bool ok = false;
@@ -837,7 +834,7 @@ static bool SecItemResultProcess(CFDictionaryRef query, CFDictionaryRef auth_par
 out:
     return ok;
 }
-*/
+
 static bool SecItemAttributesPrepare(SecCFDictionaryCOW *attrs, CFErrorRef *error) {
     bool ok = false;
     CFDataRef ac_data = NULL, acm_context = NULL;
@@ -1059,7 +1056,7 @@ static SecItemAuthResult SecItemCreatePairsFromError(CFErrorRef *error, CFArrayR
     }
     return kSecItemAuthResultError;
 }
-/*
+
 // Wrapper to handle automatic authentication and token/secd case switching.
 static bool SecItemAuthDoQuery(SecCFDictionaryCOW *query, SecCFDictionaryCOW *attributes, const void *secItemOperation, CFErrorRef *error,
                                    bool (^perform)(TKTokenRef token, CFDictionaryRef query, CFDictionaryRef attributes, CFDictionaryRef auth_params, CFErrorRef *error)) {
@@ -1133,7 +1130,7 @@ out:
     CFReleaseSafe(auth_params.mutable_dictionary);
     return ok;
 }
-*/
+
 #if SECITEM_SHIM_OSX
 /* TODO: Should be in some header */
 OSStatus SecItemAdd_ios(CFDictionaryRef attributes, CFTypeRef *result);
@@ -1192,7 +1189,7 @@ static bool SecTokenCreateAccessControlError(CFStringRef operation, CFDataRef ac
     CFRelease(ac_pair);
     return false;
 }
-/*
+
 static bool SecTokenProcessError(CFStringRef operation, TKTokenRef token, CFTypeRef object_or_attrs, CFErrorRef *error) {
     if (CFEqualSafe(CFErrorGetDomain(*error), CFSTR(kTKErrorDomain)) &&
         CFErrorGetCode(*error) == kTKErrorCodeAuthenticationFailed) {
@@ -1291,7 +1288,7 @@ out:
     CFReleaseSafe(ref);
     return ok;
 }
-*/
+
 OSStatus
 #if SECITEM_SHIM_OSX
 SecItemAdd_ios(CFDictionaryRef attributes, CFTypeRef *result)
@@ -1310,7 +1307,7 @@ SecItemAdd(CFDictionaryRef attributes, CFTypeRef *result)
 #endif // *** END SECITEM_SHIM_OSX ***
 
     status = SecOSStatusWith(^bool(CFErrorRef *error) {
-        return 0 /*SecItemAuthDoQuery(&attrs, NULL, SecItemAdd, error, ^bool(TKTokenRef token, CFDictionaryRef attributes, CFDictionaryRef unused, CFDictionaryRef auth_params, CFErrorRef *error) {
+        return SecItemAuthDoQuery(&attrs, NULL, SecItemAdd, error, ^bool(TKTokenRef token, CFDictionaryRef attributes, CFDictionaryRef unused, CFDictionaryRef auth_params, CFErrorRef *error) {
             if (token == NULL) {
                 CFTypeRef raw_result = NULL;
                 if (!SECURITYD_XPC(sec_item_add, cftype_ag_to_bool_cftype_error_request, attributes, SecAccessGroupsGetCurrent(), &raw_result, error))
@@ -1322,8 +1319,8 @@ SecItemAdd(CFDictionaryRef attributes, CFTypeRef *result)
             } else {
                 // Send request to an appropriate token instead of secd.
                 return SecTokenItemAdd(token, attributes, auth_params, result, error);
-            };
-        })*/;
+            }
+        });
     });
 
 #ifndef SECITEM_SHIM_OSX
@@ -1335,9 +1332,6 @@ errOut:
 	return status;
 }
 
-#ifdef DARLING
-typedef void* TKTokenRef;
-#endif
 
 OSStatus
 #if SECITEM_SHIM_OSX
@@ -1464,7 +1458,7 @@ static bool SecItemRawUpdate(CFDictionaryRef query, CFDictionaryRef attributesTo
     }
     return ok;
 }
-/*
+
 static bool SecTokenItemUpdate(TKTokenRef token, CFDictionaryRef query, CFDictionaryRef attributesToUpdate, CFErrorRef *error) {
     return SecTokenItemForEachMatching(query, error, ^bool(CFDictionaryRef object_data, CFDictionaryRef item_query, CFErrorRef *error) {
         bool ok = false;
@@ -1488,7 +1482,7 @@ static bool SecTokenItemUpdate(TKTokenRef token, CFDictionaryRef query, CFDictio
         return ok;
     });
 }
-*/
+
 OSStatus
 #if SECITEM_SHIM_OSX
 SecItemUpdate_ios(CFDictionaryRef inQuery, CFDictionaryRef inAttributesToUpdate)
@@ -1659,5 +1653,6 @@ bool _SecKeychainRollKeys(bool force, CFErrorRef *error)
         });
     return result;
 }
+
 
 
