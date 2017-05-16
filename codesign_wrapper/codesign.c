@@ -13,6 +13,7 @@
 #include <mach-o/loader.h>
 #include <mach-o/fat.h>
 #include <CommonCrypto/CommonDigest.h>
+#include <CommonCrypto/CommonDigestSPI.h>
 
 #define DEBUG_ASSERT_PRODUCTION_CODE 0
 #include <AssertMacros.h>

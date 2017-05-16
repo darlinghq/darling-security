@@ -204,3 +204,64 @@ add_library(security_securityd OBJECT
 )
 
 target_compile_definitions(security_securityd PRIVATE INDIGO=1)
+
+add_library(security_secipc OBJECT
+	ipc/client.c
+)
+target_compile_definitions(security_secipc PRIVATE SECITEM_SHIM_OSX=1)
+
+add_library(security_securityd_regressions OBJECT
+	securityd/Regressions/sd-10-policytree.c
+	securityd/Regressions/SOSTransportTestTransports.c
+	securityd/Regressions/secd-90-hsa2.c
+)
+
+add_library(security_libsecd_regressions OBJECT
+	securityd/Regressions/secd-62-account-backup.c
+	securityd/Regressions/secd-50-message.c
+	securityd/Regressions/secd-55-account-incompatibility.c
+	securityd/Regressions/secd-01-items.c
+	securityd/Regressions/secd-58-password-change.c
+	securityd/Regressions/secd-57-account-leave.c
+	securityd/Regressions/secd-62-account-hsa-join.c
+	securityd/Regressions/secd-32-restore-bad-backup.c
+	securityd/Regressions/secd-49-manifests.c
+	securityd/Regressions/secd-60-account-cloud-identity.c
+	securityd/Regressions/secd-75-engine-views.c
+	securityd/Regressions/secd-70-engine-smash.c
+	securityd/Regressions/secd-70-otr-remote.c
+	securityd/Regressions/secd-56-account-apply.c
+	securityd/Regressions/secd-63-account-resurrection.c
+	securityd/Regressions/secd-02-upgrade-while-locked.c
+	securityd/Regressions/secd-80-views-basic.c
+	securityd/Regressions/secd-03-corrupted-items.c
+	securityd/Regressions/secd-40-cc-gestalt.c
+	securityd/Regressions/secd-05-corrupted-items.c
+	securityd/Regressions/secd-70-engine.c
+	securityd/Regressions/secd-65-account-retirement-reset.c
+	SOSCircle/Regressions/SOSTestDevice.c
+	securityd/Regressions/secd-04-corrupted-items.c
+	securityd/Regressions/secd-52-account-changed.c
+	securityd/Regressions/secd-30-keychain-upgrade.c
+	securityd/Regressions/secd-31-keychain-bad.c
+	securityd/Regressions/secd-31-keychain-unreadable.c
+	securityd/Regressions/secd-50-account.c
+	securityd/Regressions/secd-51-account-inflate.c
+	securityd/Regressions/secd-82-persistent-ref.c
+	securityd/Regressions/secd-74-engine-beer-servers.c
+	securityd/Regressions/secd-81-item-acl-stress.c
+	securityd/Regressions/secd-64-circlereset.c
+	securityd/Regressions/secd-81-item-acl.c
+	securityd/Regressions/secd-70-engine-corrupt.c
+	securityd/Regressions/SOSTransportTestTransports.c
+	securityd/Regressions/secd-34-backup-der-parse.c
+	securityd/Regressions/secd-61-account-leave-not-in-kansas-anymore.c
+	SOSCircle/Regressions/SOSTestDataSource.c
+	securityd/Regressions/secd-35-keychain-migrate-inet.c
+	securityd/Regressions/secd-33-keychain-ctk.c
+	SOSCircle/Regressions/SOSRegressionUtilities.c
+	securityd/Regressions/secd-55-account-circle.c
+	securityd/Regressions/SecdTestKeychainUtilities.c
+	securityd/Regressions/secd-82-secproperties-basic.c
+	securityd/Regressions/secd-59-account-cleanup.c
+)

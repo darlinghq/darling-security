@@ -8,64 +8,66 @@ include_directories(
 )
 
 add_library(security_utilities OBJECT
-	adornments.cpp
 	alloc.cpp
-	blob.cpp
 	bufferfifo.cpp
 	buffers.cpp
-	ccaudit.cpp
-	cfclass.cpp
-	cfmach++.cpp
 	cfmunge.cpp
 	cfutilities.cpp
-	coderepository.cpp
+	dispatch.cpp
 	daemon.cpp
 	debugging.cpp
-	debugging_internal.cpp
 	devrandom.cpp
-	#dispatch.cpp
 	dyldcache.cpp
 	endian.cpp
 	errors.cpp
 	fdmover.cpp
 	fdsel.cpp
 	globalizer.cpp
-	hashing.cpp
 	headermap.cpp
 	hosts.cpp
 	inetreply.cpp
-	#iodevices.cpp
 	ip++.cpp
-	kq++.cpp
 	logging.cpp
 	mach++.cpp
+	mach_notify.c
 	macho++.cpp
 	machrunloopserver.cpp
 	machserver.cpp
-	#muscle++.cpp
-	osxcode.cpp
-	#pcsc++.cpp
-	#powerwatch.cpp
-	seccfobject.cpp
+	powerwatch.cpp
 	selector.cpp
-	simpleprefs.cpp
 	socks++.cpp
 	socks++4.cpp
 	socks++5.cpp
-	sqlite++.cpp
 	streams.cpp
-	superblob.cpp
 	threading.cpp
 	timeflow.cpp
 	tqueue.cpp
 	trackingallocator.cpp
-	transactions.cpp
 	typedvalue.cpp
 	unix++.cpp
-	unixchild.cpp
 	url.cpp
 	utilities.cpp
+	cfclass.cpp
+	seccfobject.cpp
+	pcsc++.cpp
+	unixchild.cpp
+	osxcode.cpp
+	cfmach++.cpp
+	adornments.cpp
+	muscle++.cpp
+	transactions.cpp
+	simpleprefs.cpp
+	iodevices.cpp
+	coderepository.cpp
+	ccaudit.cpp
+	hashing.cpp
+	blob.cpp
+	superblob.cpp
+	crc.c
 	vproc++.cpp
+	sqlite++.cpp
+	kq++.cpp
+	debugging_internal.cpp
 )
 
 set_property(TARGET security_utilities PROPERTY

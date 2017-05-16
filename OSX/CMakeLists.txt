@@ -44,6 +44,7 @@ add_subdirectory(libsecurityd)
 add_subdirectory(sec)
 add_subdirectory(libsecurity_pkcs12/lib)
 add_subdirectory(libsecurity_ocspd)
+add_subdirectory(regressions/test)
 
 make_fat(security_authorization)
 make_fat(security_utilities)
@@ -82,6 +83,21 @@ make_fat(security_SecOtrOSX)
 make_fat(libsecurity_ocspd)
 make_fat(security_security)
 make_fat(security_securityd)
+make_fat(security_securityd_regressions)
+make_fat(security_regressions)
+make_fat(security_libsecd_regressions)
+
+add_library(security_codesign_wrapper OBJECT
+	../codesign_wrapper/codesign_wrapper.c
+	../codesign_wrapper/codesign.c
+	../codesign_wrapper/MISEntitlement.c
+)
+target_compile_definitions(security_codesign_wrapper PRIVATE INDIGO=1)
+target_include_directories(security_codesign_wrapper PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/../codesign_wrapper
+)
+make_fat(security_codesign_wrapper)
+make_fat(security_secipc)
 
 add_framework(Security
 	FAT CURRENT_VERSION
@@ -124,11 +140,17 @@ add_framework(Security
 	$<TARGET_OBJECTS:libsecurity_ocspd>
 	$<TARGET_OBJECTS:security_security>
 	$<TARGET_OBJECTS:security_securityd>
+	$<TARGET_OBJECTS:security_codesign_wrapper>
+	$<TARGET_OBJECTS:security_secipc>
+	$<TARGET_OBJECTS:security_securityd_regressions>
+	$<TARGET_OBJECTS:security_regressions>
+	$<TARGET_OBJECTS:security_libsecd_regressions>
 
 	ExtraConstants.c
 
 	DEPENDENCIES
 		system
+		system_coretls #Hack
 		CoreFoundation
 		sqlite3
 		xpc
@@ -137,9 +159,10 @@ add_framework(Security
 		xpc
 		xar
 		z
-		CommonCrypto
 		objc
 		bsm.0
 		SystemConfiguration
 		AppleSystemInfo
+		CryptoTokenKit
+		LocalAuthentication
 )

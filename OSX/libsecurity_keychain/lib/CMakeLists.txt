@@ -2,6 +2,7 @@ project(libsecurity_keychain)
 
 add_definitions(
 	-DSECTRUST_OSX=0
+	-DNDEBUG=1
 )
 
 include_directories(
@@ -91,4 +92,3 @@ set(security_keychain_sources
 )
 
 add_library(security_keychain OBJECT ${security_keychain_sources})
-
