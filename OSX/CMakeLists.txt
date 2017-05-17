@@ -99,6 +99,11 @@ target_include_directories(security_codesign_wrapper PRIVATE
 make_fat(security_codesign_wrapper)
 make_fat(security_secipc)
 
+add_darling_static_library(libsecurity_utilities_static
+	$<TARGET_OBJECTS:security_utilities>
+)
+make_fat(libsecurity_utilities_static)
+
 add_framework(Security
 	FAT CURRENT_VERSION
 	VERSION "A"
