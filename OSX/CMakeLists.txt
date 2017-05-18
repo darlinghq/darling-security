@@ -151,8 +151,6 @@ add_framework(Security
 	$<TARGET_OBJECTS:security_regressions>
 	$<TARGET_OBJECTS:security_libsecd_regressions>
 
-	ExtraConstants.c
-
 	DEPENDENCIES
 		system
 		system_coretls #Hack

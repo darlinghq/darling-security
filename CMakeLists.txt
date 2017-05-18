@@ -7,8 +7,9 @@ add_compile_options(
 	-nostdinc++
 #	-fobjc-arc
 	-Wno-unused-command-line-argument
-	-Wl,-undefined,dynamic_lookup
 )
+
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-flat_namespace,-undefined,suppress")
 
 add_definitions(
 	-D__APPLE_CPP__
