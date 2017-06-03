@@ -34,7 +34,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "Security_regressions.h"
+#include "shared_regressions.h"
 
 /* Set this to 1 to test support for the legacy ecdsa-with-specified
    signature oid. */
@@ -1082,7 +1082,7 @@ unsigned char secp521r1server_secp521r1ca_cer[714]={
 
 static void test_trust_ok(const uint8_t *cert_data, size_t cert_len,
     const uint8_t *root_data, size_t root_len, const char *date_str,
-    CFStringRef testname, const char *directive,
+    CFStringRef CF_CONSUMED testname, const char *directive,
     const char *reason, const char *file, int line) {
     SecTrustResultType trustResult;
     SETUP: {
@@ -1145,13 +1145,10 @@ static void tests(void)
         "20060303001200", "End_P384_combined_SHA1_cer");
     trust_ok(End_P521_combined_SHA1_cer, RootP256_cer,
         "20060303001200", "End_P521_combined_SHA1_cer");
-    TODO: {
-        todo("ecdsa-with-SHA512 seems to be failing");
-        trust_ok(End_P256_combined_SHA512_cer, RootP256_cer,
-            "20060303001200", "End_P256_combined_SHA512_cer");
-        trust_ok(End_P521_combined_SHA512_cer, RootP256_cer,
-            "20060303001200", "End_P521_combined_SHA512_cer");
-    }
+    trust_ok(End_P256_combined_SHA512_cer, RootP256_cer,
+        "20060303001200", "End_P256_combined_SHA512_cer");
+    trust_ok(End_P521_combined_SHA512_cer, RootP256_cer,
+        "20060303001200", "End_P521_combined_SHA512_cer");
 
     /* Verification of ECC certs created by NSS */
     trust_ok(ECCCA_cer, ECCCA_cer,

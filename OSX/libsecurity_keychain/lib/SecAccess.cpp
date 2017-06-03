@@ -27,10 +27,11 @@
 #include <Security/SecTrustedApplication.h>
 #include <Security/SecTrustedApplicationPriv.h>
 #include <security_keychain/Access.h>
+#include <security_utilities/casts.h>
+#include <utilities/SecCFRelease.h>
 #include "SecBridge.h"
 #include <sys/param.h>
 
-#undef secdebug
 #include <utilities/SecCFWrappers.h>
 
 
@@ -66,6 +67,8 @@ const CFStringRef kSecACLAuthorizationKeychainItemDelete = CFSTR("ACLAuthorizati
 
 const CFStringRef kSecACLAuthorizationChangeACL = CFSTR("ACLAuthorizationChangeACL");
 const CFStringRef kSecACLAuthorizationChangeOwner = CFSTR("ACLAuthorizationChangeOwner");
+const CFStringRef kSecACLAuthorizationPartitionID = CFSTR("ACLAuthorizationPartitionID");
+const CFStringRef kSecACLAuthorizationIntegrity = CFSTR("ACLAuthorizationIntegrity");
 
 
 static CFArrayRef copyTrustedAppListFromBundle(CFStringRef bundlePath, CFStringRef trustedAppListFileName);
@@ -95,8 +98,9 @@ static CFStringRef gKeys[] =
 	kSecACLAuthorizationKeychainItemDelete,
 
 	kSecACLAuthorizationChangeACL,
-	kSecACLAuthorizationChangeOwner
-
+	kSecACLAuthorizationChangeOwner,
+    kSecACLAuthorizationPartitionID,
+    kSecACLAuthorizationIntegrity
 };
 
 static sint32 gValues[] =
@@ -121,7 +125,9 @@ static sint32 gValues[] =
 	CSSM_ACL_AUTHORIZATION_DB_MODIFY,
 	CSSM_ACL_AUTHORIZATION_DB_DELETE,
 	CSSM_ACL_AUTHORIZATION_CHANGE_ACL,
-	CSSM_ACL_AUTHORIZATION_CHANGE_OWNER
+	CSSM_ACL_AUTHORIZATION_CHANGE_OWNER,
+    CSSM_ACL_AUTHORIZATION_PARTITION_ID,
+    CSSM_ACL_AUTHORIZATION_INTEGRITY
 };
 
 static
@@ -226,6 +232,7 @@ CFStringRef GetAuthStringFromACLAuthorizationTag(sint32 tag)
 	{
 		result = (CFStringRef)CFDictionaryGetValue(gTagMapping, aNum);
 	}
+    CFReleaseSafe(aNum);
 	return result;
 }
 
@@ -287,7 +294,7 @@ SecAccessRef SecAccessCreateWithOwnerAndACL(uid_t userId, gid_t groupId, SecAcce
 	CSSM_ACL_PROCESS_SUBJECT_SELECTOR selector =
 	{
 		CSSM_ACL_PROCESS_SELECTOR_CURRENT_VERSION,	// selector version
-		ownerType,
+		int_cast<UInt32, uint16>(ownerType),
 		userId,
 		groupId
 	};

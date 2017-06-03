@@ -31,7 +31,7 @@
 #include <assert.h>
 #include <security_utilities/debugging.h>
 
-#define feeSigObjDebug(args...)		secdebug("feeSig", ##args)
+#define feeSigObjDebug(args...)		secinfo("feeSig", ##args)
 
 CryptKit::FEESigner::~FEESigner()
 {
@@ -113,7 +113,7 @@ void CryptKit::FEERawSigner::sign(
 {
 	feeSig 			fsig;
 	feeReturn		frtn;
-	unsigned char	*feeSig;
+	unsigned char	*feeSig = NULL;
 	unsigned		feeSigLen=0;
 	
 	if(mFeeKey == NULL) {

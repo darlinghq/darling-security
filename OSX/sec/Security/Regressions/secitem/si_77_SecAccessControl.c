@@ -23,36 +23,28 @@
 
 
 #include <Security/SecItem.h>
+#include <Security/SecItemPriv.h>
 #include <Security/SecAccessControl.h>
 #include <Security/SecAccessControlPriv.h>
 #include <Security/SecInternal.h>
 #include <utilities/SecCFWrappers.h>
+#include <utilities/SecAKSWrappers.h>
 #include <utilities/array_size.h>
 #include <utilities/der_plist.h>
 #include <libaks_acl_cf_keys.h>
 #include <ACMDefs.h>
 #include <ACMAclDefs.h>
 
-#if TARGET_OS_MAC && !(TARGET_OS_EMBEDDED || TARGET_IPHONE_SIMULATOR)
-#define USE_KEYSTORE  1
-#elif TARGET_OS_EMBEDDED && !TARGET_IPHONE_SIMULATOR
-#define USE_KEYSTORE  1
-#else /* no keystore on this platform */
-#define USE_KEYSTORE  0
-#endif
-
-#if USE_KEYSTORE
+#if TARGET_HAS_KEYSTORE
 #include <Security/SecRandom.h>
 #include <securityd/SecDbItem.h>
 #include <coreauthd_spi.h>
 #include <corecrypto/ccder.h>
-#endif
+#endif /* TARGET_HAS_KEYSTORE */
 
 #include "Security_regressions.h"
 
-static CFTypeRef kSecAccessControlKeyProtection = CFSTR("prot");
-
-#if USE_KEYSTORE
+#if LA_CONTEXT_IMPLEMENTED && TARGET_HAS_KEYSTORE
 static bool aks_consistency_test(bool currentAuthDataFormat, kern_return_t expectedAksResult, SecAccessControlRef access_control, CFDataRef acm_context);
 static CFDataRef kc_create_auth_data(SecAccessControlRef access_control, CFDictionaryRef auth_attributes);
 static CFDataRef kc_copy_constraints_data(SecAccessControlRef access_control, CFDictionaryRef auth_attributes);
@@ -64,7 +56,7 @@ static int aks_crypt_acl(CFTypeRef operation, keybag_handle_t keybag,
 static void tests(void)
 {
     CFAllocatorRef allocator = kCFAllocatorDefault;
-    CFTypeRef protection = kSecAttrAccessibleAlways;
+    CFTypeRef protection = kSecAttrAccessibleAlwaysPrivate;
     CFErrorRef error = NULL;
 
     // Simple API tests:
@@ -274,7 +266,7 @@ static void tests(void)
 
     CFReleaseNull(acl);
 
-#if USE_KEYSTORE
+#if LA_CONTEXT_IMPLEMENTED && TARGET_HAS_KEYSTORE
     // AKS consistency test:
 
     acl = SecAccessControlCreateWithFlags(allocator, protection, kSecAccessControlUserPresence, &error);
@@ -352,7 +344,7 @@ static void tests(void)
     CFReleaseNull(acl);
 }
 
-#if USE_KEYSTORE
+#if LA_CONTEXT_IMPLEMENTED && TARGET_HAS_KEYSTORE
 
 static bool aks_consistency_test(bool currentAuthDataFormat, kern_return_t expectedAksResult, SecAccessControlRef access_control, CFDataRef acm_context)
 {
@@ -512,7 +504,7 @@ static CFDataRef kc_copy_constraints_data(SecAccessControlRef access_control, CF
 
 int si_77_SecAccessControl(int argc, char *const *argv)
 {
-#if USE_KEYSTORE
+#if LA_CONTEXT_IMPLEMENTED && TARGET_HAS_KEYSTORE
     plan_tests(71);
 #else
     plan_tests(63);

@@ -24,7 +24,6 @@
 
 #include <stdint.h>
 #include <sys/types.h>
-#include "utilities/comparison.h"
 #include <CoreFoundation/CFDate.h>
 
 #include "SecOTRSession.h"
@@ -104,7 +103,7 @@ static void SecOTRSExpireCachedKeysForFullKey(SecOTRSessionRef session, SecOTRFu
 {
     for(int i = 0; i < kOTRKeyCacheSize; ++i)
     {
-        if (0 == constant_memcmp(session->_keyCache[i]._fullKeyHash, SecFDHKGetHash(myKey), CCSHA1_OUTPUT_SIZE)) {
+        if (0 == timingsafe_bcmp(session->_keyCache[i]._fullKeyHash, SecFDHKGetHash(myKey), CCSHA1_OUTPUT_SIZE)) {
             CFDataAppendBytes(session->_macKeysToExpose, session->_keyCache[i]._receiveMacKey, sizeof(session->_keyCache[i]._receiveMacKey));
             bzero(&session->_keyCache[i], sizeof(session->_keyCache[i]));
         }
@@ -115,7 +114,7 @@ static void SecOTRSExpireCachedKeysForPublicKey(SecOTRSessionRef session, SecOTR
 {
     for(int i = 0; i < kOTRKeyCacheSize; ++i)
     {
-        if (0 == constant_memcmp(session->_keyCache[i]._publicKeyHash, SecPDHKGetHash(theirKey), CCSHA1_OUTPUT_SIZE)) {
+        if (0 == timingsafe_bcmp(session->_keyCache[i]._publicKeyHash, SecPDHKGetHash(theirKey), CCSHA1_OUTPUT_SIZE)) {
             CFDataAppendBytes(session->_macKeysToExpose, session->_keyCache[i]._receiveMacKey, sizeof(session->_keyCache[i]._receiveMacKey));
             
             bzero(&session->_keyCache[i], sizeof(session->_keyCache[i]));
@@ -314,6 +313,13 @@ void SecOTRSessionReset(SecOTRSessionRef session)
 }
 
 
+static void SecOTRPIPerformWithSerializationString(SecOTRPublicIdentityRef id, void (^action)(CFStringRef string)) {
+    CFMutableDataRef idData = CFDataCreateMutable(kCFAllocatorDefault, 0);
+    SecOTRPIAppendSerialization(id, idData, NULL);
+    CFDataPerformWithHexString(idData, action);
+    CFReleaseNull(idData);
+}
+
 SecOTRSessionRef SecOTRSessionCreateFromID(CFAllocatorRef allocator,
                                            SecOTRFullIdentityRef myID,
                                            SecOTRPublicIdentityRef theirID)
@@ -323,8 +329,8 @@ SecOTRSessionRef SecOTRSessionCreateFromID(CFAllocatorRef allocator,
     (void)SecOTRGetDefaultsWriteSeconds();
     newID->_queue = dispatch_queue_create("OTRSession", DISPATCH_QUEUE_SERIAL);
 
-    newID->_me = myID;
-    newID->_them = theirID;
+    newID->_me = CFRetainSafe(myID);
+    newID->_them = CFRetainSafe(theirID);
     newID->_receivedDHMessage = NULL;
     newID->_receivedDHKeyMessage = NULL;
     newID->_myKey = NULL;
@@ -344,8 +350,15 @@ SecOTRSessionRef SecOTRSessionCreateFromID(CFAllocatorRef allocator,
     
     SecOTRSessionResetInternal(newID);
 
-    CFRetain(newID->_me);
-    CFRetain(newID->_them);
+    {
+        SecOTRPublicIdentityRef myPublicID = SecOTRPublicIdentityCopyFromPrivate(kCFAllocatorDefault, newID->_me, NULL);
+        SecOTRPIPerformWithSerializationString(myPublicID, ^(CFStringRef myIDString) {
+            SecOTRPIPerformWithSerializationString(newID->_them, ^(CFStringRef theirIDString) {
+                secnotice("otr", "%@ Creating with M: %@, T: %@", newID, myIDString, theirIDString);
+            });
+        });
+        CFReleaseNull(myPublicID);
+    }
 
     return newID;
 }
@@ -441,8 +454,8 @@ static void SecOTRSFindKeysForMessage(SecOTRSessionRef session,
     
     for(int i = 0; i < kOTRKeyCacheSize; ++i)
     {
-        if (0 == constant_memcmp(session->_keyCache[i]._fullKeyHash, SecFDHKGetHash(myKey), CCSHA1_OUTPUT_SIZE)
-         && (0 == constant_memcmp(session->_keyCache[i]._publicKeyHash, SecPDHKGetHash(theirKey), CCSHA1_OUTPUT_SIZE))) {
+        if (0 == timingsafe_bcmp(session->_keyCache[i]._fullKeyHash, SecFDHKGetHash(myKey), CCSHA1_OUTPUT_SIZE)
+         && (0 == timingsafe_bcmp(session->_keyCache[i]._publicKeyHash, SecPDHKGetHash(theirKey), CCSHA1_OUTPUT_SIZE))) {
             cachedKeys = &session->_keyCache[i];
 #if DEBUG
             secdebug("OTR","session@[%p] found key match: mk: %@, tk: %@", session, myKey, theirKey);
@@ -757,6 +770,18 @@ abort:
     return result;
 }
 
+
+bool SecOTRSIsForKeys(SecOTRSessionRef session, SecKeyRef myPublic, SecKeyRef theirPublic)
+{
+    __block bool isForKeys = false;
+
+    dispatch_sync(session->_queue, ^{
+        isForKeys = SecOTRFICompareToPublicKey(session->_me, myPublic) &&
+                    SecOTRPICompareToPublicKey(session->_them, theirPublic);
+    });
+
+    return isForKeys;
+}
 
 bool SecOTRSGetIsReadyForMessages(SecOTRSessionRef session)
 {
@@ -1100,7 +1125,7 @@ static OSStatus SecOTRVerifyAndExposeRaw_locked(SecOTRSessionRef session,
                macDataSize, macDataStart,
                mac);
 
-        require_noerr_action_quiet(constant_memcmp(mac, bytes, sizeof(mac)), fail, result = errSecAuthFailed);
+        require_noerr_action_quiet(timingsafe_bcmp(mac, bytes, sizeof(mac)), fail, result = errSecAuthFailed);
 
         uint8_t* dataSpace = CFDataIncreaseLengthAndGetMutableBytes(exposedMessageContents, (CFIndex)messageSize);
 
@@ -1229,7 +1254,7 @@ static OSStatus SecOTRVerifyAndExposeRawCompact_locked(SecOTRSessionRef session,
            macDataSize, macDataStart,
            mac);
 
-    require_noerr_action_quiet(constant_memcmp(mac, bytes, kCompactMessageMACSize), fail, result = errSecAuthFailed);
+    require_noerr_action_quiet(timingsafe_bcmp(mac, bytes, kCompactMessageMACSize), fail, result = errSecAuthFailed);
 
     uint8_t* dataSpace = CFDataIncreaseLengthAndGetMutableBytes(exposedMessageContents, (CFIndex)messageSize);
 

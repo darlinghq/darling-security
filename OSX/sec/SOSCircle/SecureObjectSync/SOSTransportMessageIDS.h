@@ -9,10 +9,11 @@ typedef enum {
     kIDSStartPingTestMessage = 1,
     kIDSEndPingTestMessage= 2,
     kIDSSendOneMessage = 3,
-    kIDSSyncMessagesRaw = 4,
-    kIDSSyncMessagesCompact = 5,
+    kIDSPeerReceivedACK = 4,
     kIDSPeerAvailability = 6,
-    kIDSPeerAvailabilityDone = 7
+    kIDSPeerAvailabilityDone = 7,
+    kIDSKeychainSyncIDSFragmentation = 8,
+    kIDSPeerUsesACK = 9
 } idsOperation;
 
 //error handling stuff
@@ -24,11 +25,8 @@ typedef enum {
     kSecIDSErrorCouldNotFindMatchingAuthToken = -4,
     kSecIDSErrorDeviceIsLocked = -5,
     kSecIDSErrorNoPeersAvailable = -6
-
+    
 } idsError;
-
-
-extern const CFStringRef kSecIDSErrorDomain;
 
 typedef struct __OpaqueSOSTransportMessageIDS *SOSTransportMessageIDSRef;
 
@@ -36,4 +34,8 @@ SOSTransportMessageIDSRef SOSTransportMessageIDSCreate(SOSAccountRef account, CF
 
 HandleIDSMessageReason SOSTransportMessageIDSHandleMessage(SOSAccountRef account, CFDictionaryRef message, CFErrorRef *error);
 
-void SOSTransportMessageIDSGetIDSDeviceID(SOSAccountRef account);
+bool SOSTransportMessageIDSGetIDSDeviceID(SOSAccountRef account);
+
+void SOSTransportMessageIDSSetFragmentationPreference(SOSTransportMessageRef transport, CFBooleanRef preference);
+CFBooleanRef SOSTransportMessageIDSGetFragmentationPreference(SOSTransportMessageRef transport);
+

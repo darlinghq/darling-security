@@ -5,6 +5,7 @@
 #ifndef _SSLS_APP_UTILS_H_
 #define _SSLS_APP_UTILS_H_ 1
 
+#include <Security/SecBase.h>
 #include <Security/SecureTransport.h>
 #include <Security/SecureTransportPriv.h>
 #include <CoreFoundation/CFArray.h>
@@ -15,7 +16,9 @@
 extern "C" {
 #endif
 
+#if ! SEC_OS_OSX_INCLUDES
 typedef struct OpaqueSecKeychainRef *SecKeychainRef;
+#endif
 
 /* disable some Panther-only features */
 #define JAGUAR_BUILD	0
@@ -158,6 +161,9 @@ int sslCheckFile(const char *path);
 /* Stringify a SSL_ECDSA_NamedCurve */
 extern const char *sslCurveString(
 	SSL_ECDSA_NamedCurve namedCurve);
+
+SecKeyRef create_private_key_from_der(bool ecdsa, const unsigned char *pkey_der, size_t pkey_der_len);
+CFArrayRef chain_from_der(bool ecdsa, const unsigned char *pkey_der, size_t pkey_der_len, const unsigned char *cert_der, size_t cert_der_len);
 
 #ifdef	__cplusplus
 }

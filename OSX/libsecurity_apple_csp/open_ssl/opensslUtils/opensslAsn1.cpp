@@ -24,9 +24,9 @@
 #include "AppleCSPUtils.h"
 #include "opensshCoding.h"
 #include <Security/osKeyTemplates.h>
-#include <openssl/err.h>
-#include <openssl/bn.h>
-#include <openssl/crypto.h>
+#include <openssl/opensslerr.h>
+#include <openssl/bn_legacy.h>
+#include <openssl/crypto_legacy.h>
 
 #include <security_asn1/SecNssCoder.h>
 #include <security_asn1/secerr.h>
@@ -37,7 +37,7 @@
 
 #include <assert.h>
 
-#define sslAsn1Debug(args...)	secdebug("sslAsn1", ##args)
+#define sslAsn1Debug(args...)	secinfo("sslAsn1", ##args)
 
 #ifndef	NDEBUG
 /* set to 1 to see all ASN related errors */

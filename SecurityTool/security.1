@@ -127,16 +127,26 @@ Add certificates to a keychain.
 Find a generic password item.
 .It Nm delete-generic-password
 Delete a generic password item.
+.It Nm set-generic-password-partition-list
+Set the partition list of a generic password item.
 .It Nm find-internet-password
 Find an internet password item.
 .It Nm delete-internet-password
 Delete an internet password item.
+.It Nm set-internet-password-partition-list
+Set the partition list of a internet password item.
+.It Nm find-key
+Find keys in the keychain
+.It Nm set-key-partition-list
+Set the partition list of a key.
 .It Nm find-certificate
 Find a certificate item.
 .It Nm find-identity
 Find an identity (certificate + private key).
 .It Nm delete-certificate
 Delete a certificate from a keychain.
+.It Nm delete-identity
+Delete a certificate and its private key from a keychain.
 .It Nm set-identity-preference
 Set the preferred identity to use for a service.
 .It Nm get-identity-preference
@@ -175,6 +185,12 @@ Execute tool with privileges.
 Run
 .Pa /usr/bin/leaks
 on this process.
+.It Nm smartcards
+Enable, disable or list disabled smartcard tokens.
+.It Nm list-smartcards
+Display available smartcards.
+.It Nm export-smartcard
+Export items from a smartcard.
 .It Nm error
 Display a descriptive message for the given error code(s).
 .El
@@ -272,7 +288,8 @@ If neither
 .Fl P
 or
 .Fl p Ar password
-are specified, the user is prompted for a password on the command line.
+are specified, the user is prompted for a password on the command line. Use
+of the -p option is insecure.
 .El
 .It
 .Nm delete-keychain
@@ -437,7 +454,7 @@ Specify password to be added (legacy option, equivalent to
 .Fl w Ns
 \&)
 .It Fl w Ar password
-Specify password to be added
+Specify password to be added. Put at end of command to be prompted (recommended)
 .It Fl A
 Allow any application to access this item without warning (insecure, not recommended!)
 .It Fl T Ar appPath
@@ -491,7 +508,7 @@ Specify server name (required)
 .It Fl t Ar authenticationType
 Specify authentication type (as a four-character SecAuthenticationType, default is "dflt")
 .It Fl w Ar password
-Specify password to be added
+Specify password to be added. Put at end of command to be prompted (recommended)
 .It Fl A
 Allow any application to access this item without warning (insecure, not recommended!)
 .It Fl T Ar appPath
@@ -667,6 +684,160 @@ Display the password(only) for the item found
 .El
 .El
 .It
+.Nm find-key
+.Op Ar options...
+.Op Ar keychain...
+.Bl -item -offset -indent
+Search the keychain for keys.
+.It
+.Bl -tag -compact -width -indent-indent
+.It Fl a Ar application-label
+Match "application label" string
+.It Fl c Ar creator
+Match creator (four-character code)
+.It Fl d
+Match keys that can decrypt
+.It Fl D Ar description
+Match "description" string
+.It Fl e
+Match keys that can encrypt
+.It Fl j Ar comment
+Match comment string
+.It Fl l Ar label
+Match label string
+.It Fl r
+Match keys that can derive
+.It Fl s
+Match keys that can sign
+.It Fl t Ar type
+Type of key to find: one of "symmetric", "public", or "private"
+.It Fl u
+Match keys that can unwrap
+.It Fl v
+Match keys that can verify
+.It Fl w
+Match keys that can wrap
+.El
+.El
+.It
+.Nm set-generic-password-partition-list
+.Op Fl a Ar account
+.Op Fl s Ar service
+.Op Fl S Ar <partition list (comma separated)>
+.Op Fl k Ar <keychain password>
+.Op Ar options...
+.Op Ar keychain
+.Bl -item -offset -indent
+Sets the "partition list" for a generic password. The "partition list" is an extra parameter in the ACL which limits access to the item based on an application's code signature. You must present the keychain's password to change a partition list.
+.It
+.Bl -tag -compact -width -indent-indent
+.It Fl S Ar partition-list
+Comma-separated partition list. See output of "security dump-keychain" for examples.
+.It Fl k Ar password
+Password for keychain
+.It Fl a Ar account
+Match account string
+.It Fl c Ar creator
+Match creator (four-character code)
+.It Fl C Ar type
+Match type (four-character code)
+.It Fl D Ar kind
+Match kind string
+.It Fl G Ar value
+Match value string (generic attribute)
+.It Fl j Ar comment
+Match comment string
+.It Fl l Ar label
+Match label string
+.It Fl s Ar service
+Match service string
+.El
+.El
+.It
+.Nm set-internet-password-partition-list
+.Op Fl a Ar account
+.Op Fl s Ar server
+.Op Fl S Ar <partition list (comma separated)>
+.Op Fl k Ar <keychain password>
+.Op Ar options...
+.Op Ar keychain
+.Bl -item -offset -indent
+Sets the "partition list" for an internet password. The "partition list" is an extra parameter in the ACL which limits access to the item based on an application's code signature. You must present the keychain's password to change a partition list.
+.It
+.Bl -tag -compact -width -indent-indent
+.It Fl S Ar partition-list
+Comma-separated partition list. See output of "security dump-keychain" for examples.
+.It Fl k Ar password
+Password for keychain
+.It Fl a Ar account
+Match account string
+.It Fl c Ar creator
+Match creator (four-character code)
+.It Fl C Ar type
+Match type (four-character code)
+.It Fl d Ar securityDomain
+Match securityDomain string
+.It Fl D Ar kind
+Match kind string
+.It Fl j Ar comment
+Match comment string
+.It Fl l Ar label
+Match label string
+.It Fl p Ar path
+Match path string
+.It Fl P Ar port
+Match port number
+.It Fl r Ar protocol
+Match protocol (four-character code)
+.It Fl s Ar server
+Match server string
+.It Fl t Ar authenticationType
+Match authenticationType (four-character code)
+.El
+.El
+.It
+.Nm set-key-partition-list
+.Op Fl S Ar <partition list (comma separated)>
+.Op Fl k Ar <keychain password>
+.Op Ar options...
+.Op Ar keychain
+.Bl -item -offset -indent
+Sets the "partition list" for a key. The "partition list" is an extra parameter in the ACL which limits access to the key based on an application's code signature. You must present the keychain's password to change a partition list. If you'd like to run /usr/bin/codesign with the key, "apple:" must be an element of the partition list.
+.It
+.Bl -tag -compact -width -indent-indent
+.It Fl S Ar partition-list
+Comma-separated partition list. See output of "security dump-keychain" for examples.
+.It Fl k Ar password
+Password for keychain
+.It Fl a Ar application-label
+Match "application label" string
+.It Fl c Ar creator
+Match creator (four-character code)
+.It Fl d
+Match keys that can decrypt
+.It Fl D Ar description
+Match "description" string
+.It Fl e
+Match keys that can encrypt
+.It Fl j Ar comment
+Match comment string
+.It Fl l Ar label
+Match label string
+.It Fl r
+Match keys that can derive
+.It Fl s
+Match keys that can sign
+.It Fl t Ar type
+Type of key to find: one of "symmetric", "public", or "private"
+.It Fl u
+Match keys that can unwrap
+.It Fl v
+Match keys that can verify
+.It Fl w
+Match keys that can wrap
+.El
+.El
+.It
 .Nm find-certificate
 .Op Fl h
 .Op Fl a
@@ -774,6 +945,30 @@ Also delete user trust settings for this certificate
 .El
 .It
 The certificate to be deleted must be uniquely specified either by a
+string found in its common name, or by its SHA-1 hash.
+.El
+.It
+.Nm delete-identity
+.Op Fl h
+.Op Fl c Ar name
+.Op Fl Z Ar hash
+.Op Fl t
+.Op Ar keychain...
+.Bl -item -offset -indent
+Delete a certificate and its private key from a keychain.  If no
+.Ar keychain Ns
+\& arguments are provided, the default search list is used.
+.It
+.Bl -tag -compact -width -indent-indent
+.It Fl c Ar name
+Specify certificate to delete by its common name
+.It Fl Z Ar hash
+Specify certificate to delete by its SHA-1 hash
+.It Fl t
+Also delete user trust settings for this identity certificate
+.El
+.It
+The identity to be deleted must be uniquely specified either by a
 string found in its common name, or by its SHA-1 hash.
 .El
 .It
@@ -1093,7 +1288,6 @@ Install (or re-install) the Module Directory Services (MDS) database. This is a 
 .Op Fl k Ar keychain
 .Op Fl i Ar settingsFileIn
 .Op Fl o Ar settingsFileOut
-.Op Fl D
 certFile
 .Bl -item -offset -indent
 Add certificate (in DER or PEM format) from  
@@ -1107,7 +1301,7 @@ Add to admin cert store; default is user.
 .It Fl r Ar resultType
 resultType = trustRoot|trustAsRoot|deny|unspecified; default is trustRoot.
 .It Fl p Ar policy
-Specify policy constraint (ssl, smime, codeSign, IPSec, iChat, basic, swUpdate, pkgSign, pkinitClient, pkinitServer, eap).
+Specify policy constraint (ssl, smime, codeSign, IPSec, basic, swUpdate, pkgSign, eap, macappstore, appleID, timestamping).
 .It Fl r Ar resultType
 resultType = trustRoot|trustAsRoot|deny|unspecified; default is trustRoot.
 .It Fl a Ar appPath
@@ -1124,8 +1318,6 @@ Specify keychain to which cert is added.
 Input trust settings file; default is user domain.
 .It Fl o Ar settingsFileOut
 Output trust settings file; default is user domain.
-.It Fl D
-Add default setting instead of per-cert setting. No certFile is specified when using this option
 .El
 .It
 .Sy Key usage codes:
@@ -1147,7 +1339,6 @@ Add default setting instead of per-cert setting. No certFile is specified when u
 .It
 .Nm remove-trusted-cert
 .Op Fl d
-.Op Fl D
 certFile
 .Bl -item -offset -indent
 Remove certificate (in DER or PEM format) in  
@@ -1158,8 +1349,6 @@ Options:
 .Bl -tag -compact -width -indent-indent
 .It Fl d
 Remove from admin cert store; default is user. 
-.It Fl D
-Remove Default Root Cert setting instead of an actual cert setting. No certFile is specified when using this option. 
 .El
 .\"marker.
 .El
@@ -1249,7 +1438,7 @@ Certificate to verify, in DER or PEM format. Can be specified more than once; le
 .It Fl r Ar rootCertFile
 Root certificate, in DER or PEM format. Can be specified more than once. If not specified, the system anchor certificates are used. If one root certificate is specified, and zero (non-root) certificates are specified, the root certificate is verified against itself. 
 .It Fl p Ar policy
-Specify verification policy (ssl, smime, codeSign, IPSec, iChat, basic, swUpdate, pkgSign, pkinitClient, pkinitServer, eap, appleID, macappstore, timestamping). Default is basic.
+Specify verification policy (ssl, smime, codeSign, IPSec, basic, swUpdate, pkgSign, eap, appleID, macappstore, timestamping). Default is basic.
 .It Fl k Ar keychain
 Keychain to search for intermediate certs. Can be specified multiple times. Default is the current user's keychain search list.
 .It Fl d Ar date
@@ -1369,6 +1558,70 @@ Ignore leaks called from
 .El
 .El
 .It
+.Nm smartcards
+.Ar token
+.Op Fl l
+.Op Fl e Ar token
+.Op Fl d Ar token
+.Bl -item -offset -indent
+Enable, disable or list disabled smartcard tokens.
+.It
+Options:
+.Bl -tag -compact -width -indent-indent
+.It Fl l
+List disabled smartcard tokens.
+.It Fl e Ar token
+Enable smartcard token.
+.It Fl d Ar token
+Disable smartcard token.
+.El
+.It
+.Sy To list tokens available in the system
+.It
+.Bl -tag -compact -width -indent
+.It pluginkit -m -p com.apple.ctk-tokens
+.El
+.It
+.Sy Examples
+.It
+.Bl -tag -compact -width -indent
+.It security smartcards token -l
+.It security smartcards token -d com.apple.CryptoTokenKit.pivtoken
+.It security smartcards token -e com.apple.CryptoTokenKit.pivtoken
+.El
+.El
+.It
+.Nm list-smartcards
+.Bl -item -offset -indent
+Display
+.Ar id Ns
+s of available smartcards.
+.El
+.It
+.Nm export-smartcard
+.Ar token
+.Op Fl i Ar id
+.Op Fl t Ar certs Ns | Ns Ar privKeys Ns | Ns Ar identities Ns | Ns Ar all
+.Bl -item -offset -indent
+Export items from a smartcard. If
+.Ar id
+isn't provided, items from all smartcards will be exported.
+.It
+Options:
+.Bl -tag -compact -width -indent-indent
+.It Fl i Ar id
+Export items from token specified by token
+.Ar id Ns
+, available
+.Ar id Ns
+s can be listed by list-smartcards command.
+.It Fl t Ar certs Ns | Ns Ar privKeys Ns | Ns Ar identities Ns | Ns Ar all
+Export items of the specified type (Default:
+.Ar all Ns
+)
+.El
+.El
+.It
 .Nm error
 .Op Fl h
 .Op Ar <error code(s)...>
@@ -1406,7 +1659,8 @@ Property list file containing the common keychain search list, which is appended
 .\" List links in ascending order by section, alphabetically within a section.
 .\" Please do not reference files that do not exist without filing a bug report
 .Xr certtool 1 ,
-.Xr leaks 1
+.Xr leaks 1 ,
+.Xr pluginkit 8
 .\" .Xr systemkeychain 8 
 .Sh HISTORY
 .Nm

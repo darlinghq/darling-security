@@ -221,7 +221,7 @@ static void test_v6(void) {
 }
 #endif
 
-static int kTestTestCount = 10 + kSecdTestSetupTestCount;
+static int kTestTestCount = 11 + kSecdTestSetupTestCount;
 static void tests(void)
 {
 
@@ -240,48 +240,13 @@ static void tests(void)
     
     ok(NULL != account, "Created");
     
-    ok(SOSAccountResetToOffering(account, &error), "Reset to offering (%@)", error);
+    ok(SOSAccountResetToOffering_wTxn(account, &error), "Reset to offering (%@)", error);
     CFReleaseNull(error);
 
-
-    // Use this part with suitable changes to test when we allow account upgrades.
-    size_t size = SOSAccountGetDEREncodedSize(account, &error);
-    CFReleaseNull(error);
-    uint8_t buffer[size];
-    uint8_t* start = SOSAccountEncodeToDER(account, &error, buffer, buffer + sizeof(buffer));
-    CFReleaseNull(error);
-    
-    ok(start, "successful encoding");
-    ok(start == buffer, "Used whole buffer");
-    
-    CFDataRef accountData = CFDataCreate(kCFAllocatorDefault, buffer, size);
-    ok(accountData, "Made CFData for Account");
-    
-    SOSAccountRef inflated = SOSAccountCreateFromData(kCFAllocatorDefault, accountData, test_factory, &error);
-    CFReleaseNull(error);
-    
-    ok(inflated, "inflated");
-    ok(CFEqualSafe(inflated, account), "Compares");
-    
-    CFDataRef secondData = SOSAccountCopyEncodedData(inflated, kCFAllocatorDefault, &error);
-    CFReleaseNull(error);
-    SOSAccountRef inflated2 = SOSAccountCreateFromData(kCFAllocatorDefault, secondData, test_factory, &error);
-    ok(inflated2, "inflated2");
-    ok(CFEqual(account, inflated2), "Compares");
-
-    
+    ok(testAccountPersistence(account), "Test Account->DER->Account Equivalence");
     CFReleaseNull(account);
-    CFReleaseNull(inflated);
-    CFReleaseNull(inflated2);
-    CFReleaseNull(accountData);
-    CFReleaseNull(secondData);
 
-    SOSUnregisterAllTransportMessages();
-    SOSUnregisterAllTransportCircles();
-    SOSUnregisterAllTransportKeyParameters();
-    CFArrayRemoveAllValues(key_transports);
-    CFArrayRemoveAllValues(circle_transports);
-    CFArrayRemoveAllValues(message_transports);
+    SOSTestCleanup();
     
     test_factory->release(test_factory);
     SOSDataSourceRelease(test_source, NULL);

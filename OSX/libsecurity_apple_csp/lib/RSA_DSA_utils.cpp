@@ -26,16 +26,16 @@
 #include <opensslUtils/opensslUtils.h>
 #include <security_utilities/logging.h>
 #include <security_utilities/debugging.h>
-#include <openssl/bn.h>
-#include <openssl/rsa.h>
-#include <openssl/dsa.h>
-#include <openssl/err.h>
+#include <openssl/bn_legacy.h>
+#include <openssl/rsa_legacy.h>
+#include <openssl/dsa_legacy.h>
+#include <openssl/opensslerr.h>
 #include <security_utilities/simpleprefs.h>
 #include <security_utilities/threading.h>
 #include <security_utilities/globalizer.h>
 #include <CoreFoundation/CFNumber.h>
 
-#define rsaMiscDebug(args...)	secdebug("rsaMisc", ## args)
+#define rsaMiscDebug(args...)	secinfo("rsaMisc", ## args)
 
 /*
  * Obtain and cache max key sizes. System preferences only consulted 
@@ -100,12 +100,18 @@ RSAKeySizes::RSAKeySizes()
 	maxPubExponentSize = RSA_MAX_PUB_EXPONENT_SIZE;
 	
 	/* now see if there are prefs set for either of these */
-	Dictionary* d = Dictionary::CreateDictionary(kRSAKeySizePrefsDomain, Dictionary::US_System, true);
+    Dictionary* d = NULL;
+    try {
+        d = Dictionary::CreateDictionary(kRSAKeySizePrefsDomain, Dictionary::US_System, true);
+    } catch(...) {
+        return;
+    }
+
 	if (!d)
 	{
 		return;
 	}
-	
+
 	if (d->dict())
 	{
 		auto_ptr<Dictionary>apd(d);

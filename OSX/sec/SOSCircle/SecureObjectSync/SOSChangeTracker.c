@@ -27,7 +27,7 @@
 
 #include <Security/SecureObjectSync/SOSChangeTracker.h>
 #include <Security/SecureObjectSync/SOSDigestVector.h>
-#include <Security/SecureObjectSync/SOSEngine.h>
+#include <Security/SecureObjectSync/SOSEnginePriv.h>
 #include <Security/SecureObjectSync/SOSManifest.h>
 #include <Security/SecureObjectSync/SOSInternal.h>
 #include <utilities/SecCFError.h>
@@ -72,7 +72,7 @@ CFStringRef SOSChangesCopyDescription(CFArrayRef changes) {
     if (changes) CFArrayForEachC(changes, change) {
         CFStringRef changeDesc = SOSChangeCopyDescription(change);
         CFStringAppend(desc, changeDesc);
-        CFRetainSafe(changeDesc);
+        CFReleaseNull(changeDesc);
     }
     CFStringAppend(desc, CFSTR(")"));
     return desc;

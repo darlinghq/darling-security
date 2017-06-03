@@ -25,8 +25,8 @@
 
 #include "db_commands.h"
 
-#include "readline.h"
-#include "security.h"
+#include "readline_cssm.h"
+#include "security_tool.h"
 
 #include <stdio.h>
 #include <stdlib.h>

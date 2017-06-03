@@ -42,7 +42,8 @@ enum {
     kSecPasswordTypeSafari = 0,
     kSecPasswordTypeiCloudRecovery = 1,
     kSecPasswordTypeWifi = 2,
-    kSecPasswordTypePIN = 3
+    kSecPasswordTypePIN = 3,
+    kSecPasswordTypeiCloudRecoveryKey __OSX_AVAILABLE(10.12.4) __IOS_AVAILABLE(10.4) = 4,
 } __OSX_AVAILABLE_STARTING(__MAC_10_9, __IPHONE_7_0);
 
 // Keys for external dictionaries with password generation requirements we read from plist.
@@ -95,7 +96,13 @@ extern CFStringRef kSecPasswordSeparator
 CFDictionaryRef SecPasswordCopyDefaultPasswordLength(SecPasswordType type, CFErrorRef *error)
     __OSX_AVAILABLE_STARTING(__MAC_10_9, __IPHONE_7_0);
 
-    
+/*
+ * Check that password is propery formated (groups, checksum). Make no claim about password quality.
+ */
+bool
+SecPasswordValidatePasswordFormat(SecPasswordType type, CFStringRef password, CFErrorRef *error)
+    __OSX_AVAILABLE(10.12.4) __IOS_AVAILABLE(10.4) __WATCHOS_AVAILABLE(3.4) __TVOS_AVAILABLE(10.4);
+
 /*
  @function SecPasswordIsPasswordWeak
  @abstract Evalutes the weakness of a passcode. This function can take any type of passcode.  Currently
@@ -111,6 +118,13 @@ bool SecPasswordIsPasswordWeak(CFStringRef passcode)
 @function SecPasswordIsPasswordWeak2
 @abstract Evalutes the weakness of a passcode. This function can take any type of passcode.  Currently
 the function evaluates passcodes with only ASCII characters
+ ***conditions in which a passcode will be evaluated as weak***
+ * all repeating characters
+ * repeating 2 digits
+ * is found in the black list of the top 10 most commonly used passcodes
+ * incrementing digits
+ * decrementing digits (including 0987)
+ * low enough levels of entropy (complex passcodes)
 @param passcode a string of any length and type (4 or 6 digit PIN, complex passcode)
 @param isSimple is to indicate whether we're evaluating a 4 or 6 digit PIN or a complex passcode
 @result True if the password is weak, False if the password is strong.

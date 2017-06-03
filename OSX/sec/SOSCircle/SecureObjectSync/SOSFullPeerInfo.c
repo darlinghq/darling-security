@@ -26,18 +26,19 @@
 
 #include <Security/SecureObjectSync/SOSFullPeerInfo.h>
 #include <Security/SecureObjectSync/SOSPeerInfoV2.h>
+#include <Security/SecureObjectSync/SOSPeerInfoDER.h>
 
 #include <Security/SecureObjectSync/SOSCircle.h>
 
 #include <Security/SecureObjectSync/SOSInternal.h>
 #include <Security/SecureObjectSync/SOSAccountPriv.h>
+#include <Security/SecureObjectSync/SOSPeerInfoDER.h>
 
 #include <Security/SecKeyPriv.h>
 #include <Security/SecItemPriv.h>
 #include <Security/SecOTR.h>
 #include <CoreFoundation/CFArray.h>
 #include <dispatch/dispatch.h>
-#include <SOSPeerInfoDER.h>
 #include <Security/SecFramework.h>
 
 #include <stdlib.h>
@@ -84,7 +85,6 @@ struct __OpaqueSOSFullPeerInfo {
 CFGiblisWithHashFor(SOSFullPeerInfo);
 
 
-static CFStringRef sPublicKeyKey = CFSTR("PublicSigningKey");
 
 CFStringRef kSOSFullPeerInfoDescriptionKey = CFSTR("SOSFullPeerInfoDescription");
 CFStringRef kSOSFullPeerInfoSignatureKey = CFSTR("SOSFullPeerInfoSignature");
@@ -113,7 +113,7 @@ fail:
 
 bool SOSFullPeerInfoUpdateToThisPeer(SOSFullPeerInfoRef peer, SOSPeerInfoRef pi, CFErrorRef *error) {
     return SOSFullPeerInfoUpdate(peer, error, ^SOSPeerInfoRef(SOSPeerInfoRef peer, SecKeyRef key, CFErrorRef *error) {
-        return SOSPeerInfoSign(key, pi, error) ? pi: NULL;
+        return SOSPeerInfoSign(key, pi, error) ? CFRetainSafe(pi): NULL;
     });
 }
 
@@ -130,15 +130,15 @@ SOSFullPeerInfoRef SOSFullPeerInfoCreateWithViews(CFAllocatorRef allocator,
     SOSFullPeerInfoRef result = NULL;
     SOSFullPeerInfoRef fpi = CFTypeAllocate(SOSFullPeerInfo, struct __OpaqueSOSFullPeerInfo, allocator);
 
-    bool useIDS = whichTransportType == kSOSTransportIDS || whichTransportType == kSOSTransportFuture;
-
-    CFStringRef transportType = useIDS ? SOSTransportMessageTypeIDS : SOSTransportMessageTypeKVS;
-    CFBooleanRef preferIDS = useIDS ? kCFBooleanTrue : kCFBooleanFalse;
     CFStringRef IDSID = CFSTR("");
+    CFStringRef transportType =SOSTransportMessageTypeIDSV2;
+    CFBooleanRef preferIDS = kCFBooleanFalse;
+    CFBooleanRef preferIDSFragmentation = kCFBooleanTrue;
+    CFBooleanRef preferACKModel = kCFBooleanTrue;
 
     fpi->peer_info = SOSPeerInfoCreateWithTransportAndViews(allocator, gestalt, backupKey,
                                                             IDSID, transportType, preferIDS,
-                                                            initialViews,
+                                                            preferIDSFragmentation, preferACKModel, initialViews,
                                                             signingKey, error);
     require_quiet(fpi->peer_info, exit);
 
@@ -150,6 +150,23 @@ SOSFullPeerInfoRef SOSFullPeerInfoCreateWithViews(CFAllocatorRef allocator,
 exit:
     CFReleaseNull(fpi);
     return result;
+}
+
+SOSFullPeerInfoRef SOSFullPeerInfoCopyFullPeerInfo(SOSFullPeerInfoRef toCopy) {
+    SOSFullPeerInfoRef retval = NULL;
+    SOSFullPeerInfoRef fpi = CFTypeAllocate(SOSFullPeerInfo, struct __OpaqueSOSFullPeerInfo, kCFAllocatorDefault);
+    SOSPeerInfoRef piToCopy = SOSFullPeerInfoGetPeerInfo(toCopy);
+    
+    require_quiet(piToCopy, errOut);
+    require_quiet(fpi, errOut);
+    fpi->peer_info = SOSPeerInfoCreateCopy(kCFAllocatorDefault, piToCopy, NULL);
+    require_quiet(fpi->peer_info, errOut);
+    fpi->key_ref = toCopy->key_ref;
+    CFTransferRetained(retval, fpi);
+
+errOut:
+    CFReleaseNull(fpi);
+    return retval;
 }
 
 bool SOSFullPeerInfoUpdateTransportType(SOSFullPeerInfoRef peer, CFStringRef transportType, CFErrorRef* error)
@@ -171,6 +188,18 @@ bool SOSFullPeerInfoUpdateTransportPreference(SOSFullPeerInfoRef peer, CFBoolean
     });
 }
 
+bool SOSFullPeerInfoUpdateTransportFragmentationPreference(SOSFullPeerInfoRef peer, CFBooleanRef preference, CFErrorRef* error){
+    return SOSFullPeerInfoUpdate(peer, error, ^SOSPeerInfoRef(SOSPeerInfoRef peer, SecKeyRef key, CFErrorRef *error) {
+        return SOSPeerInfoSetIDSFragmentationPreference(kCFAllocatorDefault, peer, preference, key, error);
+    });
+}
+
+bool SOSFullPeerInfoUpdateTransportAckModelPreference(SOSFullPeerInfoRef peer, CFBooleanRef preference, CFErrorRef* error){
+    return SOSFullPeerInfoUpdate(peer, error, ^SOSPeerInfoRef(SOSPeerInfoRef peer, SecKeyRef key, CFErrorRef *error) {
+        return SOSPeerInfoSetIDSACKModelPreference(kCFAllocatorDefault, peer, preference, key, error);
+    });
+}
+
 SOSFullPeerInfoRef SOSFullPeerInfoCreateCloudIdentity(CFAllocatorRef allocator, SOSPeerInfoRef peer, CFErrorRef* error) {
     SOSFullPeerInfoRef fpi = CFTypeAllocate(SOSFullPeerInfo, struct __OpaqueSOSFullPeerInfo, allocator);
     
@@ -183,7 +212,8 @@ SOSFullPeerInfoRef SOSFullPeerInfoCreateCloudIdentity(CFAllocatorRef allocator, 
         goto exit;
     }
 
-    pubKey = SOSPeerInfoCopyPubKey(peer);
+    pubKey = SOSPeerInfoCopyPubKey(peer, error);
+    require_quiet(pubKey, exit);
     
     fpi->key_ref = SecKeyCreatePersistentRefToMatchingPrivateKey(pubKey, error);
     
@@ -276,6 +306,14 @@ bool SOSFullPeerInfoUpdateGestalt(SOSFullPeerInfoRef peer, CFDictionaryRef gesta
     });
 }
 
+bool SOSFullPeerInfoUpdateV2Dictionary(SOSFullPeerInfoRef peer, CFDictionaryRef newv2dict, CFErrorRef* error)
+{
+    return SOSFullPeerInfoUpdate(peer, error, ^SOSPeerInfoRef(SOSPeerInfoRef peer, SecKeyRef key, CFErrorRef *error) {
+        return SOSPeerInfoCopyWithV2DictionaryUpdate(kCFAllocatorDefault, peer,
+                                                newv2dict, key, error);
+    });
+}
+
 bool SOSFullPeerInfoUpdateBackupKey(SOSFullPeerInfoRef peer, CFDataRef backupKey, CFErrorRef* error)
 {
     return SOSFullPeerInfoUpdate(peer, error, ^SOSPeerInfoRef(SOSPeerInfoRef peer, SecKeyRef key, CFErrorRef *error) {
@@ -300,6 +338,8 @@ bool SOSFullPeerInfoReplaceEscrowRecords(SOSFullPeerInfoRef peer, CFDictionaryRe
 SOSViewResultCode SOSFullPeerInfoUpdateViews(SOSFullPeerInfoRef peer, SOSViewActionCode action, CFStringRef viewname, CFErrorRef* error)
 {
     __block SOSViewResultCode retval = kSOSCCGeneralViewError;
+    
+    secnotice("viewChange", "%s view %@", SOSViewsXlateAction(action), viewname);
     
     return SOSFullPeerInfoUpdate(peer, error, ^SOSPeerInfoRef(SOSPeerInfoRef peer, SecKeyRef key, CFErrorRef *error) {
         return SOSPeerInfoCopyWithViewsChange(kCFAllocatorDefault, peer, action, viewname, &retval, key, error);
@@ -339,6 +379,8 @@ static bool sosFullPeerInfoRequiresUpdate(SOSFullPeerInfoRef peer, CFSetRef mini
     if(!(SOSPeerInfoV2DictionaryHasString(peer->peer_info, sDeviceID)))return true;
     if(!(SOSPeerInfoV2DictionaryHasString(peer->peer_info, sTransportType))) return true;
     if(!(SOSPeerInfoV2DictionaryHasBoolean(peer->peer_info, sPreferIDS))) return true;
+    if(!(SOSPeerInfoV2DictionaryHasBoolean(peer->peer_info, sPreferIDSFragmentation))) return true;
+    if(!(SOSPeerInfoV2DictionaryHasBoolean(peer->peer_info, sPreferIDSACKModel))) return true;
     if(SOSFullPeerInfoNeedsViewUpdate(peer, minimumViews, excludedViews)) return true;
 
     return false;
@@ -362,7 +404,7 @@ bool SOSFullPeerInfoUpdateToCurrent(SOSFullPeerInfoRef peer, CFSetRef minimumVie
                          secnotice("upgrade", "SOSFullPeerInfoCopyDeviceKey failed: %@", copyError));
     
     SOSPeerInfoRef newPeer = SOSPeerInfoCreateCurrentCopy(kCFAllocatorDefault, peer->peer_info,
-                                                          NULL, NULL, NULL, newViews,
+                                                          NULL, NULL, kCFBooleanFalse, kCFBooleanTrue, kCFBooleanTrue, newViews,
                                                           device_key, &createError);
     require_action_quiet(newPeer, errOut,
                          secnotice("upgrade", "Peer info v2 create copy failed: %@", createError));
@@ -382,7 +424,6 @@ errOut:
 SOSViewResultCode SOSFullPeerInfoViewStatus(SOSFullPeerInfoRef peer, CFStringRef viewname, CFErrorRef *error)
 {
     SOSPeerInfoRef pi = SOSFullPeerInfoGetPeerInfo(peer);
-    secnotice("views", "have pi %s", (pi)? "true": "false");
     if(!pi) return kSOSCCGeneralViewError;
     return SOSPeerInfoViewStatus(pi, viewname, error);
 }
@@ -422,27 +463,35 @@ SOSPeerInfoRef SOSFullPeerInfoGetPeerInfo(SOSFullPeerInfoRef fullPeer) {
 
 // MARK: Private Key Retrieval and Existence
 
-static SecKeyRef SOSFullPeerInfoCopyPubKey(SOSFullPeerInfoRef fpi) {
+static SecKeyRef SOSFullPeerInfoCopyPubKey(SOSFullPeerInfoRef fpi, CFErrorRef *error) {
     SecKeyRef retval = NULL;
     require_quiet(fpi, errOut);
     SOSPeerInfoRef pi = SOSFullPeerInfoGetPeerInfo(fpi);
     require_quiet(pi, errOut);
-    retval = SOSPeerInfoCopyPubKey(pi);
+    retval = SOSPeerInfoCopyPubKey(pi, error);
 
 errOut:
     return retval;
 }
 
 static SecKeyRef SOSFullPeerInfoCopyMatchingPrivateKey(SOSFullPeerInfoRef fpi, CFErrorRef *error) {
-    SecKeyRef pub = SOSFullPeerInfoCopyPubKey(fpi);
-    SecKeyRef retval = SecKeyCopyMatchingPrivateKey(pub, error);
+    SecKeyRef retval = NULL;
+
+    SecKeyRef pub = SOSFullPeerInfoCopyPubKey(fpi, error);
+    require_quiet(pub, exit);
+    retval = SecKeyCopyMatchingPrivateKey(pub, error);
+exit:
     CFReleaseNull(pub);
     return retval;
 }
 
 static OSStatus SOSFullPeerInfoGetMatchingPrivateKeyStatus(SOSFullPeerInfoRef fpi, CFErrorRef *error) {
-    SecKeyRef pub = SOSFullPeerInfoCopyPubKey(fpi);
-    OSStatus retval = SecKeyGetMatchingPrivateKeyStatus(pub, error);
+    OSStatus retval = errSecParam;
+    SecKeyRef pub = SOSFullPeerInfoCopyPubKey(fpi, error);
+    require_quiet(pub, exit);
+    retval = SecKeyGetMatchingPrivateKeyStatus(pub, error);
+
+exit:
     CFReleaseNull(pub);
     return retval;
 }
@@ -460,15 +509,24 @@ bool SOSFullPeerInfoPrivKeyExists(SOSFullPeerInfoRef peer) {
 }
 
 bool SOSFullPeerInfoPurgePersistentKey(SOSFullPeerInfoRef fpi, CFErrorRef* error) {
-    SecKeyRef pub = SOSFullPeerInfoCopyPubKey(fpi);
-    CFDictionaryRef privQuery = CreatePrivateKeyMatchingQuery(pub, false);
-    CFMutableDictionaryRef query = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, privQuery);
+    bool result = false;
+    CFDictionaryRef privQuery = NULL;
+    CFMutableDictionaryRef query = NULL;
+
+    SecKeyRef pub = SOSFullPeerInfoCopyPubKey(fpi, error);
+    require_quiet(pub, fail);
+
+    privQuery = CreatePrivateKeyMatchingQuery(pub, false);
+    query = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, privQuery);
     CFDictionaryAddValue(query, kSecUseTombstones, kCFBooleanFalse);
-    SecItemDelete(query);
+
+    result = SecError(SecItemDelete(query), error, CFSTR("Deleting while purging"));
+
+fail:
     CFReleaseNull(privQuery);
     CFReleaseNull(query);
     CFReleaseNull(pub);
-    return true;
+    return result;
 }
 
 SecKeyRef  SOSFullPeerInfoCopyDeviceKey(SOSFullPeerInfoRef fullPeer, CFErrorRef* error) {

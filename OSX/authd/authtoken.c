@@ -60,6 +60,7 @@ struct _auth_token_s {
     
     bool least_privileged;
     bool appleSigned;
+	bool firstPartySigned;
     
     bool sandboxed;
     char * code_url;
@@ -292,13 +293,15 @@ auth_token_least_privileged(auth_token_t auth)
 uid_t
 auth_token_get_uid(auth_token_t auth)
 {
-    return auth ? auth->auditInfo.euid : (uid_t)-2;
+    assert(auth); // marked non-null
+    return auth->auditInfo.euid;
 }
 
 pid_t
 auth_token_get_pid(auth_token_t auth)
 {
-    return auth ? auth->auditInfo.pid : -1;
+    assert(auth); // marked non-null
+    return auth->auditInfo.pid;
 }
 
 session_t
@@ -479,14 +482,13 @@ auth_token_apple_signed(auth_token_t auth)
 
 bool auth_token_is_creator(auth_token_t auth, process_t proc)
 {
+    assert(proc); // marked non-null
     __block bool creator = false;
-    if (proc) {
-        dispatch_sync(auth->dispatch_queue, ^{
-            if (auth->creator == proc) {
-                creator = true;
-            }
-        });
-    }
+    dispatch_sync(auth->dispatch_queue, ^{
+        if (auth->creator == proc) {
+            creator = true;
+        }
+    });
     return creator;
 }
 

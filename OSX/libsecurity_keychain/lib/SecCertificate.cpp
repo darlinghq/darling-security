@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2015 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2002-2016 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -38,6 +38,7 @@
 // %%% used by SecCertificate{Copy,Set}Preference
 #include <Security/SecKeychainItemPriv.h>
 #include <Security/SecIdentityPriv.h>
+#include <Security/SecItemPriv.h>
 #include <security_keychain/KCCursor.h>
 #include <security_cdsa_utilities/Schema.h>
 #include <security_cdsa_utils/cuCdsaUtils.h>
@@ -50,7 +51,6 @@
 #include "AppleBaselineEscrowCertificates.h"
 
 
-SecCertificateRef SecCertificateCreateItemImplInstance(SecCertificateRef certificate);
 OSStatus SecCertificateGetCLHandle_legacy(SecCertificateRef certificate, CSSM_CL_HANDLE *clHandle);
 extern CSSM_KEYUSE ConvertArrayToKeyUsage(CFArrayRef usage);
 
@@ -63,9 +63,7 @@ SEC_CONST_DECL (kSecCertificateEscrowFileName, "AppleESCertificates");
 
 using namespace CssmClient;
 
-#if !SECTRUST_OSX
-CFTypeID
-SecCertificateGetTypeID(void)
+CFTypeID static SecCertificateGetTypeID_osx(void)
 {
 	BEGIN_SECAPI
 
@@ -73,15 +71,35 @@ SecCertificateGetTypeID(void)
 
 	END_SECAPI1(_kCFRuntimeNotATypeID)
 }
+
+Boolean
+SecCertificateIsItemImplInstance(SecCertificateRef certificate)
+{
+    if (certificate == NULL) {
+        return false;
+    }
+
+    CFTypeID typeID = CFGetTypeID(certificate);
+
+#if 0 /* debug code to verify type IDs */
+	syslog(LOG_ERR, "SecCertificate typeID=%d [STU=%d, OSX=%d, SKI=%d]",
+			(int)typeID,
+			(int)SecCertificateGetTypeID(),
+			(int)SecCertificateGetTypeID_osx(),
+			(int)SecKeychainItemGetTypeID());
 #endif
+	if (typeID == _kCFRuntimeNotATypeID) {
+		return false;
+	}
+
+    return (typeID == SecCertificateGetTypeID_osx() ||
+            typeID == SecKeychainItemGetTypeID()) ? true : false;
+}
 
 /* convert a new-world SecCertificateRef to an old-world ItemImpl instance */
 SecCertificateRef
 SecCertificateCreateItemImplInstance(SecCertificateRef certificate)
 {
-#if !SECTRUST_OSX
-    return (SecCertificateRef)(certificate ? CFRetain(certificate) : NULL);
-#else
 	if (!certificate) {
 		return NULL;
 	}
@@ -104,16 +122,12 @@ SecCertificateCreateItemImplInstance(SecCertificateRef certificate)
 	catch (...) {}
 	CFRelease(data);
 	return implCertRef;
-#endif
 }
 
 /* convert an old-world ItemImpl instance to a new-world SecCertificateRef */
 SecCertificateRef
 SecCertificateCreateFromItemImplInstance(SecCertificateRef certificate)
 {
-#if !SECTRUST_OSX
-    return (SecCertificateRef)(certificate ? CFRetain(certificate) : NULL);
-#else
 	if (!certificate) {
 		return NULL;
 	}
@@ -141,67 +155,41 @@ SecCertificateCreateFromItemImplInstance(SecCertificateRef certificate)
 	if (data)
 		CFRelease(data);
 	return result;
-#endif
 }
+
 
 /* OS X only: DEPRECATED_IN_MAC_OS_X_VERSION_10_7_AND_LATER */
 OSStatus
 SecCertificateCreateFromData(const CSSM_DATA *data, CSSM_CERT_TYPE type, CSSM_CERT_ENCODING encoding, SecCertificateRef *certificate)
 {
-#if !SECTRUST_OSX
-	BEGIN_SECAPI
-
-	SecPointer<Certificate> certificatePtr(new Certificate(Required(data), type, encoding));
-	Required(certificate) = certificatePtr->handle();
-
-	END_SECAPI
-#else
 	/* bridge to support old functionality */
 	if (!data || !data->Data || !data->Length || !certificate) {
 		return errSecParam;
 	}
 	SecCertificateRef certRef = NULL;
-	CFDataRef dataRef = CFDataCreate(NULL, data->Data, data->Length);
+
+    // <rdar://problem/24403998> REG: Adobe {Photoshop, InDesign} CC(2015) crashes on launch
+    // If you take the length that SecKeychainItemCopyContent gives you (a Uint32) and assign it incorrectly
+    // to a CSSM_DATA Length field (a CSSM_SIZE, i.e., a size_t), the upper 32 bits aren't set. If those bits
+    // are non-zero, the length is incredibly wrong.
+    //
+    // Assume that there will not exist a certificate > 4GiB, and fake this length field.
+    CSSM_SIZE length = data->Length & 0xfffffffful;
+
+	CFDataRef dataRef = CFDataCreate(NULL, data->Data, length);
 	if (dataRef) {
 		certRef = SecCertificateCreateWithData(NULL, dataRef);
 		CFRelease(dataRef);
 	}
 	*certificate = certRef;
 	return (certRef) ? errSecSuccess : errSecUnknownFormat;
-#endif
 }
-
-#if !SECTRUST_OSX
-/* new in 10.6 */
-SecCertificateRef
-SecCertificateCreateWithData(CFAllocatorRef allocator, CFDataRef data)
-{
-	SecCertificateRef certificate = NULL;
-    OSStatus __secapiresult;
-	try {
-		CSSM_DATA cssmCertData;
-		cssmCertData.Length = (data) ? (CSSM_SIZE)CFDataGetLength(data) : 0;
-		cssmCertData.Data = (data) ? (uint8 *)CFDataGetBytePtr(data) : NULL;
-
-		//NOTE: there isn't yet a Certificate constructor which accepts a CFAllocatorRef
-		SecPointer<Certificate> certificatePtr(new Certificate(cssmCertData, CSSM_CERT_X_509v3, CSSM_CERT_ENCODING_DER));
-		certificate = certificatePtr->handle();
-
-		__secapiresult=errSecSuccess;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-    return certificate;
-}
-#endif
 
 /* OS X only: __OSX_AVAILABLE_STARTING(__MAC_10_3, __IPHONE_NA) */
 OSStatus
 SecCertificateAddToKeychain(SecCertificateRef certificate, SecKeychainRef keychain)
 {
-	// This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+	// This macro creates an ItemImpl certificate if it does not exist
 	BEGIN_SECCERTAPI
 
 	Item item(Certificate::required(__itemImplRef));
@@ -214,98 +202,27 @@ SecCertificateAddToKeychain(SecCertificateRef certificate, SecKeychainRef keycha
 OSStatus
 SecCertificateGetData(SecCertificateRef certificate, CSSM_DATA_PTR data)
 {
-	// This macro converts a new-style SecCertificateRef to an old-style ItemImpl
 	BEGIN_SECCERTAPI
 
-	Required(data) = Certificate::required(__itemImplRef)->data();
+	if (!certificate || !data) {
+		__secapiresult=errSecParam;
+	}
+	else if (SecCertificateIsItemImplInstance(certificate)) {
+		Required(data) = Certificate::required(certificate)->data();
+	}
+	else {
+		data->Length = (CSSM_SIZE)SecCertificateGetLength(certificate);
+		data->Data = (uint8*)SecCertificateGetBytePtr(certificate);
+	}
 
 	END_SECCERTAPI
 }
-
-#if !SECTRUST_OSX
-/* new in 10.6 */
-CFDataRef
-SecCertificateCopyData(SecCertificateRef certificate)
-{
-	CFDataRef data = NULL;
-    OSStatus __secapiresult = errSecSuccess;
-	try {
-		CssmData output = Certificate::required(certificate)->data();
-		CFIndex length = (CFIndex)output.length();
-		const UInt8 *bytes = (const UInt8 *)output.data();
-		if (length && bytes) {
-			data = CFDataCreate(NULL, bytes, length);
-		}
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-    return data;
-}
-#endif
-
-#if !SECTRUST_OSX
-CFDataRef
-SecCertificateGetSHA1Digest(SecCertificateRef certificate)
-{
-	CFDataRef data = NULL;
-    OSStatus __secapiresult = errSecSuccess;
-	try {
-		data = Certificate::required(certificate)->sha1Hash();
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-    return data;
-}
-#endif
-
-#if !SECTRUST_OSX
-CFDataRef
-SecCertificateCopyPublicKeySHA1Digest(SecCertificateRef certificate)
-{
-    CFDataRef data = NULL;
-    OSStatus __secapiresult = errSecSuccess;
-    try {
-        CssmData output = Certificate::required(certificate)->publicKeyHash();
-        CFIndex length = (CFIndex)output.length();
-        const UInt8 *bytes = (const UInt8 *)output.data();
-        if (length && bytes) {
-            data = CFDataCreate(NULL, bytes, length);
-        }
-    }
-    catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-    catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-    catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-    catch (...) { __secapiresult=errSecInternalComponent; }
-    return data;
-}
-#endif
-
-#if !SECTRUST_OSX
-CFArrayRef
-SecCertificateCopyDNSNames(SecCertificateRef certificate)
-{
-	CFArrayRef names = NULL;
-	OSStatus __secapiresult = errSecSuccess;
-	try {
-		names = Certificate::required(certificate)->copyDNSNames();
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-    return names;
-}
-#endif
 
 /* OS X only: DEPRECATED_IN_MAC_OS_X_VERSION_10_7_AND_LATER */
 OSStatus
 SecCertificateGetType(SecCertificateRef certificate, CSSM_CERT_TYPE *certificateType)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(certificateType) = Certificate::required(__itemImplRef)->type();
@@ -317,7 +234,7 @@ SecCertificateGetType(SecCertificateRef certificate, CSSM_CERT_TYPE *certificate
 OSStatus
 SecCertificateGetSubject(SecCertificateRef certificate, const CSSM_X509_NAME **subject)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(subject) = Certificate::required(__itemImplRef)->subjectName();
@@ -329,7 +246,7 @@ SecCertificateGetSubject(SecCertificateRef certificate, const CSSM_X509_NAME **s
 OSStatus
 SecCertificateGetIssuer(SecCertificateRef certificate, const CSSM_X509_NAME **issuer)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(issuer) = Certificate::required(__itemImplRef)->issuerName();
@@ -341,55 +258,12 @@ SecCertificateGetIssuer(SecCertificateRef certificate, const CSSM_X509_NAME **is
 OSStatus
 SecCertificateGetCLHandle(SecCertificateRef certificate, CSSM_CL_HANDLE *clHandle)
 {
-#if !SECTRUST_OSX
-    BEGIN_SECAPI
-
-    Required(clHandle) = Certificate::required(certificate)->clHandle();
-
-    END_SECAPI
-#else
-#if 0
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(clHandle) = Certificate::required(__itemImplRef)->clHandle();
 
     END_SECCERTAPI
-#endif
-	/* bridge code to support deprecated functionality */
-	OSStatus __secapiresult=errSecSuccess;
-	bool kcItem=true;
-	SecCertificateRef __itemImplRef=(SecCertificateRef)SecCertificateCopyKeychainItem(certificate);
-	if (!__itemImplRef) { __itemImplRef=SecCertificateCreateItemImplInstance(certificate); kcItem=false; }
-	try {
-		Required(clHandle) = Certificate::required(__itemImplRef)->clHandle();
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-	if (__itemImplRef) {
-		if (!kcItem) {
-			/* we can't release the temporary certificate, or the CL handle becomes invalid.
-			 * for now, just stick the temporary certificate into an array.
-			 * TBD: use a dictionary, indexed by hash of certificate. */
-			static CFMutableArrayRef sLegacyCertArray = NULL;
-			if (!sLegacyCertArray) {
-				sLegacyCertArray = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
-				if (!sLegacyCertArray) {
-					return errSecAllocate;
-				}
-			}
-			CFArrayAppendValue(sLegacyCertArray, __itemImplRef);
-#ifndef NDEBUG
-			syslog(LOG_ERR, "WARNING: SecCertificateGetCLHandle called on certificate which is not in a keychain.");
-#endif
-		}
-		CFRelease(__itemImplRef);
-	}
-	return __secapiresult;
-
-#endif
 }
 
 /* private function; assumes input is old-style ItemImpl certificate reference,
@@ -405,7 +279,6 @@ SecCertificateGetCLHandle_legacy(SecCertificateRef certificate, CSSM_CL_HANDLE *
     END_SECAPI
 }
 
-
 /*
  * Private API to infer a display name for a SecCertificateRef which
  * may or may not be in a keychain.
@@ -415,7 +288,7 @@ SecCertificateGetCLHandle_legacy(SecCertificateRef certificate, CSSM_CL_HANDLE *
 OSStatus
 SecCertificateInferLabel(SecCertificateRef certificate, CFStringRef *label)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Certificate::required(__itemImplRef)->inferLabel(false, &Required(label));
@@ -427,7 +300,7 @@ SecCertificateInferLabel(SecCertificateRef certificate, CFStringRef *label)
 OSStatus
 SecCertificateCopyPublicKey(SecCertificateRef certificate, SecKeyRef *key)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(key) = Certificate::required(__itemImplRef)->publicKey()->handle();
@@ -439,7 +312,7 @@ SecCertificateCopyPublicKey(SecCertificateRef certificate, SecKeyRef *key)
 OSStatus
 SecCertificateGetAlgorithmID(SecCertificateRef certificate, const CSSM_X509_ALGORITHM_IDENTIFIER **algid)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(algid) = Certificate::required(__itemImplRef)->algorithmID();
@@ -447,62 +320,11 @@ SecCertificateGetAlgorithmID(SecCertificateRef certificate, const CSSM_X509_ALGO
     END_SECCERTAPI
 }
 
-/* OS X only: __OSX_AVAILABLE_STARTING(__MAC_10_5, __IPHONE_NA) */
-OSStatus
-SecCertificateCopyCommonName(SecCertificateRef certificate, CFStringRef *commonName)
-{
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
-    BEGIN_SECCERTAPI
-
-    Required(commonName) = Certificate::required(__itemImplRef)->commonName();
-
-    END_SECCERTAPI
-}
-
-#if !SECTRUST_OSX
-/* new in 10.6 */
-CFStringRef
-SecCertificateCopySubjectSummary(SecCertificateRef certificate)
-{
-	CFStringRef summary = NULL;
-    OSStatus __secapiresult;
-	try {
-		Certificate::required(certificate)->inferLabel(false, &summary);
-
-		__secapiresult=errSecSuccess;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-    return summary;
-}
-#endif
-
-#if !SECTRUST_OSX
-CFStringRef
-SecCertificateCopyIssuerSummary(SecCertificateRef certificate)
-{
-	CFStringRef issuerStr = NULL;
-	SecCertificateRefP certP = NULL;
-	CFDataRef certData = SecCertificateCopyData(certificate);
-	if (certData) {
-		certP = SecCertificateCreateWithDataP(NULL, certData);
-		CFRelease(certData);
-	}
-	if (certP) {
-		issuerStr = SecCertificateCopyIssuerSummaryP(certP);
-		CFRelease(certP);
-	}
-	return issuerStr;
-}
-#endif
-
 /* OS X only */
 OSStatus
 SecCertificateCopySubjectComponent(SecCertificateRef certificate, const CSSM_OID *component, CFStringRef *result)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(result) = Certificate::required(__itemImplRef)->distinguishedName(&CSSMOID_X509V1SubjectNameCStruct, component);
@@ -522,7 +344,7 @@ SecCertificateGetCommonName(SecCertificateRef certificate, CFStringRef *commonNa
 OSStatus
 SecCertificateGetEmailAddress(SecCertificateRef certificate, CFStringRef *emailAddress)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(emailAddress) = Certificate::required(__itemImplRef)->copyFirstEmailAddress();
@@ -534,7 +356,7 @@ SecCertificateGetEmailAddress(SecCertificateRef certificate, CFStringRef *emailA
 OSStatus
 SecCertificateCopyEmailAddresses(SecCertificateRef certificate, CFArrayRef *emailAddresses)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(emailAddresses) = Certificate::required(__itemImplRef)->copyEmailAddresses();
@@ -550,7 +372,7 @@ SecCertificateCopyEmailAddresses(SecCertificateRef certificate, CFArrayRef *emai
 OSStatus
 SecCertificateCopyFieldValues(SecCertificateRef certificate, const CSSM_OID *field, CSSM_DATA_PTR **fieldValues)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(fieldValues) = Certificate::required(__itemImplRef)->copyFieldValues(Required(field));
@@ -562,7 +384,7 @@ SecCertificateCopyFieldValues(SecCertificateRef certificate, const CSSM_OID *fie
 OSStatus
 SecCertificateReleaseFieldValues(SecCertificateRef certificate, const CSSM_OID *field, CSSM_DATA_PTR *fieldValues)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Certificate::required(__itemImplRef)->releaseFieldValues(Required(field), fieldValues);
@@ -574,7 +396,7 @@ SecCertificateReleaseFieldValues(SecCertificateRef certificate, const CSSM_OID *
 OSStatus
 SecCertificateCopyFirstFieldValue(SecCertificateRef certificate, const CSSM_OID *field, CSSM_DATA_PTR *fieldValue)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Required(fieldValue) = Certificate::required(__itemImplRef)->copyFirstFieldValue(Required(field));
@@ -586,7 +408,7 @@ SecCertificateCopyFirstFieldValue(SecCertificateRef certificate, const CSSM_OID 
 OSStatus
 SecCertificateReleaseFirstFieldValue(SecCertificateRef certificate, const CSSM_OID *field, CSSM_DATA_PTR fieldValue)
 {
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
     Certificate::required(__itemImplRef)->releaseFieldValue(Required(field), fieldValue);
@@ -599,20 +421,36 @@ OSStatus
 SecCertificateFindByIssuerAndSN(CFTypeRef keychainOrArray,const CSSM_DATA *issuer,
 	const CSSM_DATA *serialNumber, SecCertificateRef *certificate)
 {
+    if (issuer && serialNumber) {
+        CFRef<CFMutableDictionaryRef> query = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(query, kSecClass, kSecClassCertificate);
+        CFDictionarySetValue(query, kSecReturnRef, kCFBooleanTrue);
+        CFDictionarySetValue(query, kSecAttrNoLegacy, kCFBooleanTrue);
+
+        CFRef<CFDataRef> issuerData = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, (const UInt8 *)issuer->Data, issuer->Length, kCFAllocatorNull);
+        CFDictionarySetValue(query, kSecAttrIssuer, issuerData);
+
+        CFRef<CFDataRef> serialNumberData = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, (const UInt8 *)serialNumber->Data, serialNumber->Length, kCFAllocatorNull);
+        CFDictionarySetValue(query, kSecAttrSerialNumber, serialNumberData);
+
+        OSStatus status = SecItemCopyMatching(query, (CFTypeRef*)certificate);
+        if (status == errSecSuccess) {
+            return status;
+        }
+    }
+
 	BEGIN_SECAPI
 
 	StorageManager::KeychainList keychains;
 	globals().storageManager.optionalSearchList(keychainOrArray, keychains);
 	Required(certificate) = Certificate::findByIssuerAndSN(keychains, CssmData::required(issuer), CssmData::required(serialNumber))->handle();
 
-#if SECTRUST_OSX
     // convert ItemImpl-based SecCertificateRef to new-world version before returning
 	CssmData certData = Certificate::required(*certificate)->data();
 	CFRef<CFDataRef> cfData(CFDataCreate(NULL, certData.Data, certData.Length));
 	SecCertificateRef tmpRef = *certificate;
 	*certificate = SecCertificateCreateWithData(NULL, cfData);
 	CFRelease(tmpRef);
-#endif
 
 	END_SECAPI
 }
@@ -622,20 +460,33 @@ OSStatus
 SecCertificateFindBySubjectKeyID(CFTypeRef keychainOrArray, const CSSM_DATA *subjectKeyID,
 	SecCertificateRef *certificate)
 {
-	BEGIN_SECAPI
+    if (subjectKeyID) {
+        CFRef<CFMutableDictionaryRef> query = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(query, kSecClass, kSecClassCertificate);
+        CFDictionarySetValue(query, kSecReturnRef, kCFBooleanTrue);
+        CFDictionarySetValue(query, kSecAttrNoLegacy, kCFBooleanTrue);
+
+        CFRef<CFDataRef> subjectKeyIDData = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, (const UInt8 *)subjectKeyID->Data, subjectKeyID->Length, kCFAllocatorNull);
+        CFDictionarySetValue(query, kSecAttrSubjectKeyID, subjectKeyIDData);
+
+        OSStatus status = SecItemCopyMatching(query, (CFTypeRef*)certificate);
+        if (status == errSecSuccess) {
+            return status;
+        }
+    }
+
+    BEGIN_SECAPI
 
 	StorageManager::KeychainList keychains;
 	globals().storageManager.optionalSearchList(keychainOrArray, keychains);
 	Required(certificate) = Certificate::findBySubjectKeyID(keychains, CssmData::required(subjectKeyID))->handle();
 
-#if SECTRUST_OSX
     // convert ItemImpl-based SecCertificateRef to new-world version before returning
 	CssmData certData = Certificate::required(*certificate)->data();
 	CFRef<CFDataRef> cfData(CFDataCreate(NULL, certData.Data, certData.Length));
 	SecCertificateRef tmpRef = *certificate;
 	*certificate = SecCertificateCreateWithData(NULL, cfData);
 	CFRelease(tmpRef);
-#endif
 
 	END_SECAPI
 }
@@ -644,20 +495,37 @@ SecCertificateFindBySubjectKeyID(CFTypeRef keychainOrArray, const CSSM_DATA *sub
 OSStatus
 SecCertificateFindByEmail(CFTypeRef keychainOrArray, const char *emailAddress, SecCertificateRef *certificate)
 {
-	BEGIN_SECAPI
+    if (emailAddress) {
+        CFRef<CFMutableDictionaryRef> query = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(query, kSecClass, kSecClassCertificate);
+        CFDictionarySetValue(query, kSecReturnRef, kCFBooleanTrue);
+        CFDictionarySetValue(query, kSecAttrNoLegacy, kCFBooleanTrue);
+
+        CFRef<CFStringRef> emailAddressString = CFStringCreateWithCString(kCFAllocatorDefault, emailAddress, kCFStringEncodingUTF8);
+        CFTypeRef keys[] = { kSecPolicyName };
+        CFTypeRef values[] = { emailAddressString };
+        CFRef<CFDictionaryRef> properties = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFRef<SecPolicyRef> policy = SecPolicyCreateWithProperties(kSecPolicyAppleSMIME, properties);
+        CFDictionarySetValue(query, kSecMatchPolicy, policy);
+
+        OSStatus status = SecItemCopyMatching(query, (CFTypeRef*)certificate);
+        if (status == errSecSuccess) {
+            return status;
+        }
+    }
+
+    BEGIN_SECAPI
 
 	StorageManager::KeychainList keychains;
 	globals().storageManager.optionalSearchList(keychainOrArray, keychains);
 	Required(certificate) = Certificate::findByEmail(keychains, emailAddress)->handle();
 
-#if SECTRUST_OSX
     // convert ItemImpl-based SecCertificateRef to new-world version before returning
 	CssmData certData = Certificate::required(*certificate)->data();
 	CFRef<CFDataRef> cfData(CFDataCreate(NULL, certData.Data, certData.Length));
 	SecCertificateRef tmpRef = *certificate;
 	*certificate = SecCertificateCreateWithData(NULL, cfData);
 	CFRelease(tmpRef);
-#endif
 
 	END_SECAPI
 }
@@ -753,20 +621,6 @@ SecDigestGetData (CSSM_ALGORITHMS alg, CSSM_DATA* digest, const CSSM_DATA* data)
 	END_SECAPI1(1);
 }
 
-#if !SECTRUST_OSX
-/* determine whether a cert is self-signed */
-OSStatus SecCertificateIsSelfSigned(
-	SecCertificateRef certificate,
-	Boolean *isSelfSigned)		/* RETURNED */
-{
-    BEGIN_SECAPI
-
-	*isSelfSigned = Certificate::required(certificate)->isSelfSigned();
-
-	END_SECAPI
-}
-#endif
-
 /* OS X only: DEPRECATED_IN_MAC_OS_X_VERSION_10_7_AND_LATER */
 OSStatus
 SecCertificateCopyPreference(
@@ -813,14 +667,13 @@ SecCertificateCopyPreference(
 
 	*certificate = (SecCertificateRef)certItemRef;
 
-#if SECTRUST_OSX
-	// convert ItemImpl-based SecCertificateRef to new-world version before returning
-	CssmData certData = Certificate::required(*certificate)->data();
-	CFRef<CFDataRef> cfData(CFDataCreate(NULL, certData.Data, certData.Length));
-	SecCertificateRef tmpRef = *certificate;
-	*certificate = SecCertificateCreateWithData(NULL, cfData);
-	CFRelease(tmpRef);
-#endif
+	if (certItemRef && (CFGetTypeID(certItemRef) == SecIdentityGetTypeID())) {
+		// SecKeychainItemCopyFromPersistentReference handed out an identity reference
+		*certificate = NULL;
+		status = SecIdentityCopyCertificate((SecIdentityRef)certItemRef, certificate);
+		CFRelease(certItemRef);
+		return status;
+	}
 
     END_SECAPI
 }
@@ -901,7 +754,7 @@ OSStatus SecCertificateDeletePreferenceItemWithNameAndKeyUsage(
 	// cut things off at that point if we're still finding items (if they can't
 	// be deleted for some reason, we'd never break out of the loop.)
 
-	OSStatus status;
+	OSStatus status = errSecSuccess;
 	SecKeychainItemRef item = NULL;
 	int count = 0, maxUsages = 12;
 	while (++count <= maxUsages &&
@@ -931,7 +784,7 @@ OSStatus SecCertificateSetPreference(
 		return SecCertificateDeletePreferenceItemWithNameAndKeyUsage(NULL, name, keyUsage);
 	}
 
-    // This macro converts a new-style SecCertificateRef to an old-style ItemImpl
+    // This macro creates an ItemImpl certificate if it does not exist
     BEGIN_SECCERTAPI
 
 	// determine the account attribute
@@ -1045,9 +898,20 @@ CFDictionaryRef SecCertificateCopyValues(SecCertificateRef certificate, CFArrayR
 {
 	CFDictionaryRef result = NULL;
 	OSStatus __secapiresult;
+	SecCertificateRef tmpcert = NULL;
+
+	// convert input to a new-style certificate reference if necessary,
+	// since the implementation of CertificateValues calls SecCertificate API functions
+	// which now assume a unified certificate reference.
+	if (SecCertificateIsItemImplInstance(certificate)) {
+		tmpcert = SecCertificateCreateFromItemImplInstance(certificate);
+	}
+	if (certificate && !tmpcert) {
+		tmpcert = (SecCertificateRef) CFRetain(certificate);
+	}
 	try
 	{
-		CertificateValues cv(certificate);
+		CertificateValues cv(tmpcert);
 		result = cv.copyFieldValues(keys,error);
 		__secapiresult=0;
 	}
@@ -1055,6 +919,7 @@ CFDictionaryRef SecCertificateCopyValues(SecCertificateRef certificate, CFArrayR
 	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
 	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
 	catch (...) { __secapiresult=errSecInternalComponent; }
+	if (tmpcert) { CFRelease(tmpcert); }
 	return result;
 }
 
@@ -1095,7 +960,7 @@ CFDataRef SecCertificateCopySerialNumber(SecCertificateRef certificate, CFErrorR
 	return result;
 }
 
-/* OS X only: __OSX_AVAILABLE_STARTING(__MAC_10_7, __IPHONE_NA) */
+/* OS X only: __OSX_AVAILABLE_BUT_DEPRECATED(__MAC_10_7, __MAC_10_12_4, __IPHONE_NA, __IPHONE_NA) */
 CFDataRef SecCertificateCopyNormalizedIssuerContent(SecCertificateRef certificate, CFErrorRef *error)
 {
 	CFDataRef result = NULL;
@@ -1113,7 +978,7 @@ CFDataRef SecCertificateCopyNormalizedIssuerContent(SecCertificateRef certificat
 	return result;
 }
 
-/* OS X only: __OSX_AVAILABLE_STARTING(__MAC_10_7, __IPHONE_NA) */
+/* OS X only: __OSX_AVAILABLE_BUT_DEPRECATED(__MAC_10_7, __MAC_10_12_4, __IPHONE_NA, __IPHONE_NA) */
 CFDataRef SecCertificateCopyNormalizedSubjectContent(SecCertificateRef certificate, CFErrorRef *error)
 {
 	CFDataRef result = NULL;
@@ -1131,65 +996,6 @@ CFDataRef SecCertificateCopyNormalizedSubjectContent(SecCertificateRef certifica
 	return result;
 }
 
-#if !SECTRUST_OSX
-CFDataRef SecCertificateCopyIssuerSequence(SecCertificateRef certificate)
-{
-	CFDataRef result = NULL;
-	OSStatus __secapiresult;
-	try
-	{
-		CertificateValues cv(certificate);
-		result = cv.copyIssuerSequence(NULL);
-		__secapiresult=0;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-	return result;
-}
-#endif
-
-#if !SECTRUST_OSX
-CFDataRef SecCertificateCopySubjectSequence(SecCertificateRef certificate)
-{
-	CFDataRef result = NULL;
-	OSStatus __secapiresult;
-	try
-	{
-		CertificateValues cv(certificate);
-		result = cv.copySubjectSequence(NULL);
-		__secapiresult=0;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-	return result;
-}
-#endif
-
-#if !SECTRUST_OSX
-bool SecCertificateIsValid(SecCertificateRef certificate, CFAbsoluteTime verifyTime)
-{
-	bool result = NULL;
-	OSStatus __secapiresult;
-	try
-	{
-		CFErrorRef error = NULL;
-		CertificateValues cv(certificate);
-		result = cv.isValid(verifyTime, &error);
-		if (error) CFRelease(error);
-		__secapiresult=0;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-	return result;
-}
-#endif
-
 /* OS X only: __OSX_AVAILABLE_BUT_DEPRECATED(__MAC_10_7, __MAC_10_9, __IPHONE_NA, __IPHONE_NA) */
 bool SecCertificateIsValidX(SecCertificateRef certificate, CFAbsoluteTime verifyTime)
 {
@@ -1198,341 +1004,3 @@ bool SecCertificateIsValidX(SecCertificateRef certificate, CFAbsoluteTime verify
      */
 	return SecCertificateIsValid(certificate, verifyTime);
 }
-
-#if !SECTRUST_OSX
-CFAbsoluteTime SecCertificateNotValidBefore(SecCertificateRef certificate)
-{
-	CFAbsoluteTime result = 0;
-	OSStatus __secapiresult;
-	try
-	{
-		CFErrorRef error = NULL;
-		CertificateValues cv(certificate);
-		result = cv.notValidBefore(&error);
-		if (error) CFRelease(error);
-		__secapiresult=0;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-	return result;
-}
-#endif
-
-#if !SECTRUST_OSX
-CFAbsoluteTime SecCertificateNotValidAfter(SecCertificateRef certificate)
-{
-	CFAbsoluteTime result = 0;
-	OSStatus __secapiresult;
-	try
-	{
-		CFErrorRef error = NULL;
-		CertificateValues cv(certificate);
-		result = cv.notValidAfter(&error);
-		if (error) CFRelease(error);
-		__secapiresult=0;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-	return result;
-}
-#endif
-
-#if !SECTRUST_OSX
-/* new in 10.8 */
-SecCertificateRef SecCertificateCreateWithBytes(CFAllocatorRef allocator,
-    const UInt8 *bytes, CFIndex length)
-{
-	SecCertificateRef certificate = NULL;
-	OSStatus __secapiresult;
-	try {
-		CSSM_DATA cssmCertData = { (CSSM_SIZE)length, (uint8 *)bytes };
-
-		//NOTE: there isn't yet a Certificate constructor which accepts a CFAllocatorRef
-		SecPointer<Certificate> certificatePtr(new Certificate(cssmCertData, CSSM_CERT_X_509v3, CSSM_CERT_ENCODING_DER));
-		certificate = certificatePtr->handle();
-
-		__secapiresult=errSecSuccess;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-	return certificate;
-}
-#endif
-
-#if !SECTRUST_OSX
-/* new in 10.8 */
-CFIndex SecCertificateGetLength(SecCertificateRef certificate)
-{
-	CFIndex length = 0;
-	OSStatus __secapiresult;
-	try {
-		CssmData output = Certificate::required(certificate)->data();
-		length = (CFIndex)output.length();
-		__secapiresult=errSecSuccess;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-	return length;
-}
-#endif
-
-#if !SECTRUST_OSX
-/* new in 10.8 */
-const UInt8 *SecCertificateGetBytePtr(SecCertificateRef certificate)
-{
-	const UInt8 *bytes = NULL;
-	OSStatus __secapiresult;
-	try {
-		CssmData output = Certificate::required(certificate)->data();
-		bytes = (const UInt8 *)output.data();
-		__secapiresult=errSecSuccess;
-	}
-	catch (const MacOSError &err) { __secapiresult=err.osStatus(); }
-	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
-	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
-	catch (...) { __secapiresult=errSecInternalComponent; }
-	return bytes;
-}
-#endif
-
-#if !SECTRUST_OSX
-/* not exported */
-static CFArrayRef CopyEscrowCertificates(SecCertificateEscrowRootType escrowRootType, CFErrorRef *error)
-{
-	// Return array of CFDataRef certificates.
-    CFArrayRef result = NULL;
-	int iCnt;
-	int numRoots = 0;
-
-	// Get the hard coded set of production roots
-	// static struct RootRecord* kProductionEscrowRoots[] = {&kOldEscrowRootRecord, &kProductionEscrowRootRecord};
-
-	struct RootRecord** pEscrowRoots = NULL;
-	switch (escrowRootType) {
-		case kSecCertificateBaselineEscrowRoot:
-			numRoots = kNumberOfBaseLineEscrowRoots;
-			pEscrowRoots = kBaseLineEscrowRoots;
-			break;
-		case kSecCertificateProductionEscrowRoot:
-			numRoots = kNumberOfBaseLineEscrowRoots; //%%% currently, production == baseline on OS X
-			pEscrowRoots = kBaseLineEscrowRoots;
-			break;
-		case kSecCertificateBaselinePCSEscrowRoot:
-			numRoots = kNumberOfBaseLinePCSEscrowRoots;
-			pEscrowRoots = kBaseLinePCSEscrowRoots;
-			break;
-		case kSecCertificateProductionPCSEscrowRoot:
-			numRoots = kNumberOfBaseLinePCSEscrowRoots; //%%% currently, production == baseline on OS X
-			pEscrowRoots = kBaseLinePCSEscrowRoots;
-			break;
-		default:
-			break;
-	}
-
-	CFDataRef productionCerts[numRoots];
-	struct RootRecord* pRootRecord = NULL;
-
-	for (iCnt = 0; pEscrowRoots != NULL && iCnt < numRoots; iCnt++)
-	{
-		pRootRecord = pEscrowRoots[iCnt];
-		if (NULL != pRootRecord && pRootRecord->_length > 0 && NULL != pRootRecord->_bytes)
-		{
-			productionCerts[iCnt] = CFDataCreate(kCFAllocatorDefault, pRootRecord->_bytes, pRootRecord->_length);
-		}
-	}
-	result = CFArrayCreate(kCFAllocatorDefault, (const void **)productionCerts, numRoots, &kCFTypeArrayCallBacks);
-	for (iCnt = 0; iCnt < numRoots; iCnt++)
-	{
-		if (NULL != productionCerts[iCnt])
-		{
-			CFRelease(productionCerts[iCnt]);
-		}
-	}
-
-	return result;
-}
-#endif
-
-#if !SECTRUST_OSX
-/* new in 10.9 */
-CFArrayRef SecCertificateCopyEscrowRoots(SecCertificateEscrowRootType escrowRootType)
-{
-	CFArrayRef result = NULL;
-	int iCnt;
-	int numRoots = 0;
-	CFDataRef certData = NULL;
-
-	// The request is for the base line certificates.
-	// Use the hard coded data to generate the return array
-	if (kSecCertificateBaselineEscrowRoot == escrowRootType)
-	{
-		// Get the hard coded set of roots
-		numRoots = kNumberOfBaseLineEscrowRoots;
-	    SecCertificateRef baseLineCerts[numRoots];
-	    struct RootRecord* pRootRecord = NULL;
-
-	    for (iCnt = 0; iCnt < numRoots; iCnt++)
-	    {
-	        pRootRecord = kBaseLineEscrowRoots[iCnt];
-	        if (NULL != pRootRecord && pRootRecord->_length > 0 && NULL != pRootRecord->_bytes)
-	        {
-				certData = CFDataCreate(kCFAllocatorDefault, pRootRecord->_bytes, pRootRecord->_length);
-				if (NULL != certData)
-				{
-					baseLineCerts[iCnt] = SecCertificateCreateWithData(kCFAllocatorDefault, certData);
-					CFRelease(certData);
-				}
-	        }
-	    }
-		result = CFArrayCreate(kCFAllocatorDefault, (const void **)baseLineCerts, numRoots, &kCFTypeArrayCallBacks);
-		for (iCnt = 0; iCnt < numRoots; iCnt++)
-		{
-			if (NULL != baseLineCerts[iCnt])
-			{
-				CFRelease(baseLineCerts[iCnt]);
-			}
-		}
-	}
-	// The request is for the current certificates.
-	else
-	{
-		CFErrorRef error = NULL;
-		CFArrayRef cert_datas = CopyEscrowCertificates(escrowRootType, &error);
-		if (NULL != error || NULL == cert_datas || 0 == (numRoots = (int)CFArrayGetCount(cert_datas)))
-		{
-			if (NULL != error)
-			{
-				CFRelease(error);
-			}
-
-			if (NULL != cert_datas)
-			{
-				CFRelease(cert_datas);
-			}
-			return result;
-		}
-
-		SecCertificateRef assetCerts[numRoots];
-		for (iCnt = 0; iCnt < numRoots; iCnt++)
-		{
-			certData = (CFDataRef)CFArrayGetValueAtIndex(cert_datas, iCnt);
-			if (NULL != certData)
-			{
-				SecCertificateRef aCertRef = SecCertificateCreateWithData(kCFAllocatorDefault, certData);
-				assetCerts[iCnt] = aCertRef;
-			}
-			else
-			{
-				assetCerts[iCnt] = NULL;
-			}
-		}
-
-		if (numRoots > 0)
-		{
-			result = CFArrayCreate(kCFAllocatorDefault, (const void **)assetCerts, numRoots, &kCFTypeArrayCallBacks);
-			for (iCnt = 0; iCnt < numRoots; iCnt++)
-			{
-				if (NULL != assetCerts[iCnt])
-				{
-					CFRelease(assetCerts[iCnt]);
-				}
-			}
-		}
-		CFRelease(cert_datas);
-	}
-
-    return result;
-}
-#endif
-
-#if !SECTRUST_OSX
-/* new in 10.11 */
-SecSignatureHashAlgorithm SecCertificateGetSignatureHashAlgorithm(SecCertificateRef certificate)
-{
-	SecSignatureHashAlgorithm result = kSecSignatureHashAlgorithmUnknown;
-	CSSM_X509_ALGORITHM_IDENTIFIER_PTR algId = NULL;
-	CSSM_DATA_PTR fieldValue = NULL;
-	CSSM_OID_PTR algOID = NULL;
-    const CSSM_OID *sigAlgOID = &CSSMOID_X509V1SignatureAlgorithm;
-	OSStatus status;
-
-	status = SecCertificateCopyFirstFieldValue(certificate, sigAlgOID, &fieldValue);
-	if (status || !fieldValue)  {
-		return result;
-	}
-	algId = (CSSM_X509_ALGORITHM_IDENTIFIER_PTR)fieldValue->Data;
-	algOID = (algId) ? &algId->algorithm : NULL;
-
-	while (algOID) {
-		if (!algOID->Data || !algOID->Length) {
-			break;
-		}
-		/* classify the signature algorithm OID into one of our known types */
-		if (cuCompareCssmData(algOID, &CSSMOID_ECDSA_WithSHA512) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA512WithRSA) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA512)) {
-			result = kSecSignatureHashAlgorithmSHA512;
-			break;
-		}
-		if (cuCompareCssmData(algOID, &CSSMOID_ECDSA_WithSHA384) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA384WithRSA) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA384)) {
-			result = kSecSignatureHashAlgorithmSHA384;
-			break;
-		}
-		if (cuCompareCssmData(algOID, &CSSMOID_ECDSA_WithSHA256) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA256WithRSA) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA256)) {
-			result = kSecSignatureHashAlgorithmSHA256;
-			break;
-		}
-		if (cuCompareCssmData(algOID, &CSSMOID_ECDSA_WithSHA224) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA224WithRSA) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA224)) {
-			result = kSecSignatureHashAlgorithmSHA224;
-			break;
-		}
-		if (cuCompareCssmData(algOID, &CSSMOID_ECDSA_WithSHA1) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA1WithRSA) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA1WithDSA) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA1WithDSA_CMS) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA1WithDSA_JDK) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA1WithRSA_OIW) ||
-			cuCompareCssmData(algOID, &CSSMOID_APPLE_FEE_SHA1) ||
-			cuCompareCssmData(algOID, &CSSMOID_SHA1)) {
-			result = kSecSignatureHashAlgorithmSHA1;
-			break;
-		}
-		if (cuCompareCssmData(algOID, &CSSMOID_MD5WithRSA) ||
-			cuCompareCssmData(algOID, &CSSMOID_APPLE_FEE_MD5) ||
-			cuCompareCssmData(algOID, &CSSMOID_MD5)) {
-			result = kSecSignatureHashAlgorithmMD5;
-			break;
-		}
-		if (cuCompareCssmData(algOID, &CSSMOID_MD4WithRSA) ||
-			cuCompareCssmData(algOID, &CSSMOID_MD4)) {
-			result = kSecSignatureHashAlgorithmMD4;
-			break;
-		}
-		if (cuCompareCssmData(algOID, &CSSMOID_MD2WithRSA) ||
-			cuCompareCssmData(algOID, &CSSMOID_MD2)) {
-			result = kSecSignatureHashAlgorithmMD2;
-			break;
-		}
-		break;
-	}
-
-	(void)SecCertificateReleaseFirstFieldValue(certificate, sigAlgOID, fieldValue);
-
-	return result;
-}
-#endif
-

@@ -127,19 +127,20 @@ static void cmsDecoderFinalize(
 	if(cmsDecoder->decoder != NULL) {
 		/*
 		 * Normally this gets freed in SecCmsDecoderFinish - this is
-		 * an error case.
-		 * FIXME: SecCmsDecoderDestroy() appears to destroy the
-		 * cmsMsg too! Plus there's a comment there re: a leak...
+		 * an error case. Unlike Finish, this calls SecCmsMessageDestroy.
 		 */
 		SecCmsDecoderDestroy(cmsDecoder->decoder);
+		cmsDecoder->cmsMsg = NULL;
 	}
 	CFRELEASE(cmsDecoder->detachedContent);
 	CFRELEASE(cmsDecoder->keychainOrArray);
 	if(cmsDecoder->cmsMsg != NULL) {
 		SecCmsMessageDestroy(cmsDecoder->cmsMsg);
+		cmsDecoder->cmsMsg = NULL;
 	}
 	if(cmsDecoder->arena != NULL) {
 		SecArenaPoolFree(cmsDecoder->arena, false);
+		cmsDecoder->arena = NULL;
 	}
 }
 
@@ -999,3 +1000,47 @@ OSStatus CMSDecoderCopySignerTimestampCertificates(
     xit:
         return status;
     }
+
+/*
+ * Obtain the Hash Agility attribute value of signer 'signerIndex'
+ * of a CMS message, if present.
+ *
+ * Returns errSecParam if the CMS message was not signed or if signerIndex
+ * is greater than the number of signers of the message minus one.
+ *
+ * This cannot be called until after CMSDecoderFinalizeMessage() is called.
+ */
+OSStatus CMSDecoderCopySignerAppleCodesigningHashAgility(
+    CMSDecoderRef		cmsDecoder,
+    size_t				signerIndex,            /* usually 0 */
+    CFDataRef  CF_RETURNS_RETAINED *hashAgilityAttrValue)			/* RETURNED */
+{
+    OSStatus status = errSecParam;
+    SecCmsMessageRef cmsg;
+    SecCmsSignedDataRef signedData = NULL;
+    int numContentInfos = 0;
+    CFDataRef returnedValue = NULL;
+
+    require(cmsDecoder && hashAgilityAttrValue, xit);
+    require_noerr(CMSDecoderGetCmsMessage(cmsDecoder, &cmsg), xit);
+    numContentInfos = SecCmsMessageContentLevelCount(cmsg);
+    for (int dex = 0; !signedData && dex < numContentInfos; dex++)
+    {
+        SecCmsContentInfoRef ci = SecCmsMessageContentLevel(cmsg, dex);
+        SECOidTag tag = SecCmsContentInfoGetContentTypeTag(ci);
+        if (tag == SEC_OID_PKCS7_SIGNED_DATA)
+            if ((signedData = SecCmsSignedDataRef(SecCmsContentInfoGetContent(ci))))
+                if (SecCmsSignerInfoRef signerInfo = SecCmsSignedDataGetSignerInfo(signedData, (int)signerIndex))
+                {
+                    status = SecCmsSignerInfoGetAppleCodesigningHashAgility(signerInfo, &returnedValue);
+                    break;
+                }
+    }
+xit:
+    if (status == errSecSuccess && returnedValue) {
+        *hashAgilityAttrValue = (CFDataRef) CFRetain(returnedValue);
+    } else {
+        *hashAgilityAttrValue = NULL;
+    }
+    return status;
+}

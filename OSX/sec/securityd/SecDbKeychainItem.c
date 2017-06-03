@@ -34,6 +34,7 @@
 #include <CommonCrypto/CommonCryptorSPI.h>
 #include <Security/SecBasePriv.h>
 #include <Security/SecItem.h>
+#include <Security/SecItemPriv.h>
 #include <Security/SecItemInternal.h>
 #include <Security/SecRandom.h>
 #include <Security/SecAccessControl.h>
@@ -48,6 +49,7 @@
 #include <coreauthd_spi.h>
 #include <libaks_acl_cf_keys.h>
 #include <securityd/spi.h>
+
 #endif /* USE_KEYSTORE */
 
 pthread_key_t CURRENT_CONNECTION_KEY;
@@ -59,8 +61,8 @@ static keyclass_t kc_parse_keyclass(CFTypeRef value, CFErrorRef *error);
 static CFTypeRef kc_encode_keyclass(keyclass_t keyclass);
 static CFDataRef kc_copy_protection_data(SecAccessControlRef access_control);
 static CFTypeRef kc_copy_protection_from(const uint8_t *der, const uint8_t *der_end);
-static CFMutableDictionaryRef s3dl_item_v2_decode(CFDataRef plain, CFErrorRef *error);
-static CFMutableDictionaryRef s3dl_item_v3_decode(CFDataRef plain, CFErrorRef *error);
+static CF_RETURNS_RETAINED CFMutableDictionaryRef s3dl_item_v2_decode(CFDataRef plain, CFErrorRef *error);
+static CF_RETURNS_RETAINED CFMutableDictionaryRef s3dl_item_v3_decode(CFDataRef plain, CFErrorRef *error);
 #if USE_KEYSTORE
 static CFDataRef kc_create_auth_data(SecAccessControlRef access_control, CFDictionaryRef auth_attributes);
 static bool kc_attribs_key_encrypted_data_from_blob(keybag_handle_t keybag, const SecDbClass *class, const void *blob_data, size_t blob_data_len, SecAccessControlRef access_control, uint32_t version,
@@ -89,13 +91,21 @@ static const uint8_t* der_decode_set_with_repair(CFAllocatorRef allocator, CFOpt
                                                  const uint8_t* (^repairBlock)(CFAllocatorRef allocator, CFOptionFlags mutability, CFPropertyListRef* pl, CFErrorRef *error,
                                                                                const uint8_t* der, const uint8_t *der_end));
 
+const uint32_t kUseDefaultIVMask =  1<<31;
+const int16_t  kIVSizeAESGCM = 12;
+
+// echo "keychainblobstaticiv" | openssl dgst -sha256 | cut -c1-24 | xargs -I {} echo "0x{}" | xxd -r | xxd -p  -i
+static const uint8_t gcmIV[kIVSizeAESGCM] = {
+    0x1e, 0xa0, 0x5c, 0xa9, 0x98, 0x2e, 0x87, 0xdc, 0xf1, 0x45, 0xe8, 0x24
+};
+
 /* Given plainText create and return a CFDataRef containing:
  BULK_KEY = RandomKey()
  version || keyclass|ACL || KeyStore_WRAP(keyclass, BULK_KEY) ||
  AES(BULK_KEY, NULL_IV, plainText || padding)
  */
 bool ks_encrypt_data(keybag_handle_t keybag, SecAccessControlRef access_control, CFDataRef acm_context,
-                     CFDictionaryRef attributes, CFDictionaryRef authenticated_attributes, CFDataRef *pBlob, CFErrorRef *error) {
+                     CFDictionaryRef attributes, CFDictionaryRef authenticated_attributes, CFDataRef *pBlob, bool useDefaultIV, CFErrorRef *error) {
     CFMutableDataRef blob = NULL;
     CFDataRef ac_data = NULL;
     bool ok = true;
@@ -108,14 +118,19 @@ bool ks_encrypt_data(keybag_handle_t keybag, SecAccessControlRef access_control,
     CFMutableDataRef bulkKeyWrapped = CFDataCreateMutable(NULL, 0);
     CFDataSetLength(bulkKeyWrapped, bulkKeySize + maxKeyWrapOverHead);
     uint32_t key_wrapped_size;
-    
+    size_t ivLen = 0;
+    const uint8_t *iv = NULL;
+    const uint8_t *aad = NULL;  // Additional Authenticated Data
+    ptrdiff_t aadLen = 0;
+
 #if USE_KEYSTORE
     CFDataRef auth_data = NULL;
 #endif
 
     /* If access_control specifies only protection and no ACL, use legacy blob format version 3,
-     which has better support for sync/backup.  Otherwise, force new format v6. */
-    const uint32_t version = SecAccessControlGetConstraints(access_control) ? 6 : 3;
+     which has better support for sync/backup.  Otherwise, force new format v6 unless useDefaultIV is set. */
+    bool hasACLConstraints = SecAccessControlGetConstraints(access_control);
+    const uint32_t version = (hasACLConstraints ? 6 : 3);
     CFDataRef plainText = NULL;
     if (version < 4) {
         CFMutableDictionaryRef attributes_dict = CFDictionaryCreateMutableCopy(NULL, 0, attributes);
@@ -124,7 +139,7 @@ bool ks_encrypt_data(keybag_handle_t keybag, SecAccessControlRef access_control,
                 CFDictionaryAddValue(attributes_dict, key, value);
             });
         }
-        
+
         if (attributes_dict) {
             // Drop the accc attribute for non v6 items during encode.
             CFDictionaryRemoveValue(attributes_dict, kSecAttrAccessControl);
@@ -143,7 +158,7 @@ bool ks_encrypt_data(keybag_handle_t keybag, SecAccessControlRef access_control,
                 CFDictionaryAddValue(attributes_dict, key, value);
             });
         }
-        
+
         if (attributes_dict) {
             plainText = CFPropertyListCreateDERData(kCFAllocatorDefault, attributes_dict, error);
             CFRelease(attributes_dict);
@@ -160,7 +175,7 @@ bool ks_encrypt_data(keybag_handle_t keybag, SecAccessControlRef access_control,
     size_t ptLen = CFDataGetLength(plainText);
     size_t ctLen = ptLen;
     size_t tagLen = 16;
-    keyclass_t actual_class;
+    keyclass_t actual_class = 0;
     
     if (SecRandomCopyBytes(kSecRandomDefault, bulkKeySize, bulkKey)) {
         ok = SecError(errSecAllocate, error, CFSTR("ks_encrypt_data: SecRandomCopyBytes failed"));
@@ -189,9 +204,9 @@ bool ks_encrypt_data(keybag_handle_t keybag, SecAccessControlRef access_control,
     key_wrapped_size = (uint32_t)CFDataGetLength(bulkKeyWrapped);
     UInt8 *cursor;
     size_t blobLen = sizeof(version);
-    uint32_t prot_length;
+    uint32_t prot_length = 0;
 
-    if (version == 3) {
+    if (!hasACLConstraints) {
         blobLen += sizeof(actual_class);
     } else {
         require_quiet(ac_data = kc_copy_protection_data(access_control), out);
@@ -204,11 +219,11 @@ bool ks_encrypt_data(keybag_handle_t keybag, SecAccessControlRef access_control,
     CFDataSetLength(blob, blobLen);
     cursor = CFDataGetMutableBytePtr(blob);
 
-    *((uint32_t *)cursor) = version;
+    *((uint32_t *)cursor) = useDefaultIV ? (version | kUseDefaultIVMask) : version;
     cursor += sizeof(version);
 
     //secerror("class: %d actual class: %d", keyclass, actual_class);
-    if (version == 3) {
+    if (!hasACLConstraints) {
         *((keyclass_t *)cursor) = actual_class;
         cursor += sizeof(keyclass);
     } else {
@@ -222,14 +237,22 @@ bool ks_encrypt_data(keybag_handle_t keybag, SecAccessControlRef access_control,
     *((uint32_t *)cursor) = key_wrapped_size;
     cursor += sizeof(key_wrapped_size);
 
+    if (useDefaultIV) {
+        iv = gcmIV;
+        ivLen = kIVSizeAESGCM;
+        // AAD is (version || ac_data || key_wrapped_size)
+        aad = CFDataGetMutableBytePtr(blob);
+        aadLen = cursor - aad;
+    }
+
     memcpy(cursor, CFDataGetBytePtr(bulkKeyWrapped), key_wrapped_size);
     cursor += key_wrapped_size;
 
     /* Encrypt the plainText with the bulkKey. */
     CCCryptorStatus ccerr = CCCryptorGCM(kCCEncrypt, kCCAlgorithmAES128,
                                          bulkKey, bulkKeySize,
-                                         NULL, 0,  /* iv */
-                                         NULL, 0,  /* auth data */
+                                         iv, ivLen,     /* iv */
+                                         aad, aadLen,   /* auth data */
                                          CFDataGetBytePtr(plainText), ptLen,
                                          cursor,
                                          cursor + ctLen, &tagLen);
@@ -271,10 +294,19 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
     CFDataSetLength(bulkKey, 32); /* Use 256 bit AES key for bulkKey. */
     bool ok = true;
     SecAccessControlRef access_control = NULL;
+
+    if (attributes_p)
+        *attributes_p = NULL;
+    if (version_p)
+        *version_p = 0;
     
     CFMutableDataRef plainText = NULL;
     CFMutableDictionaryRef attributes = NULL;
     uint32_t version = 0;
+    size_t ivLen = 0;
+    const uint8_t *iv = NULL;
+    const uint8_t *aad = NULL;  // Additional Authenticated Data
+    ptrdiff_t aadLen = 0;
 
 #if USE_KEYSTORE
     CFMutableDictionaryRef authenticated_attributes = NULL;
@@ -296,32 +328,55 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
     size_t blobLen = CFDataGetLength(blob);
     const uint8_t *cursor = CFDataGetBytePtr(blob);
     keyclass_t keyclass;
-    uint32_t wrapped_key_size;
 
-    /* Check for underflow, ensuring we have at least one full AES block left. */
-    if (blobLen < sizeof(version) + sizeof(keyclass) +
-        CFDataGetLength(bulkKey) + v0KeyWrapOverHead + 16) {
-        ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: Check for underflow"));
+    if (blobLen < sizeof(version)) {
+        ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: Check for underflow (length)"));
         goto out;
     }
 
     version = *((uint32_t *)cursor);
+    if (version & kUseDefaultIVMask) {
+        version &= ~kUseDefaultIVMask;
+        iv = gcmIV;
+        ivLen = kIVSizeAESGCM;
+    }
+
     cursor += sizeof(version);
+    blobLen -= sizeof(version);
 
-    size_t minimum_blob_len = sizeof(version) + 16;
-    size_t ctLen = blobLen - sizeof(version);
+    bool hasProtectionData = (version >= 4);
 
-    if (version >= 4) {
+    if (hasProtectionData) {
         /* Deserialize SecAccessControl object from the blob. */
-        uint32_t prot_length = *((uint32_t *)cursor);
+        uint32_t prot_length;
+
+        /*
+         * Parse proto length
+         */
+
+        if (blobLen < sizeof(prot_length)) {
+            ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: Check for underflow (prot_length)"));
+            goto out;
+        }
+
+        prot_length = *((uint32_t *)cursor);
         cursor += sizeof(prot_length);
+        blobLen -= sizeof(prot_length);
+
+        /*
+         * Parse proto itself
+         */
+
+        if (blobLen < prot_length) {
+            ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: Check for underflow (prot)"));
+            goto out;
+        }
 
         CFTypeRef protection = kc_copy_protection_from(cursor, cursor + prot_length);
         if (!protection) {
             ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: invalid ACL"));
             goto out;
-        }
-        else {
+        } else {
             access_control = SecAccessControlCreate(NULL, NULL);
             require_quiet(access_control, out);
             ok = SecAccessControlSetProtection(access_control, protection, NULL);
@@ -333,19 +388,24 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
         }
         
         cursor += prot_length;
+        blobLen -= prot_length;
 
-        minimum_blob_len += sizeof(prot_length) + prot_length;
-        ctLen -= sizeof(prot_length) + prot_length;
-
-        /* Get numeric value of keyclass from the access_control. */
+        /*
+         * Get numeric value of keyclass from the access_control.
+         */
         keyclass = kc_parse_keyclass(SecAccessControlGetProtection(access_control), error);
         if (!keyclass) {
             ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: invalid ACL"));
             goto out;
         }
     } else {
+        if (blobLen < sizeof(keyclass)) {
+            ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: Check for underflow (keyclass)"));
+            goto out;
+        }
+
         keyclass = *((keyclass_t *)cursor);
-	//secerror("class: %d keyclass: %d", keyclass, keyclass & key_class_last);
+
 #if USE_KEYSTORE
         CFTypeRef protection = kc_encode_keyclass(keyclass & key_class_last); // mask out generation
 #else
@@ -358,12 +418,12 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
                              ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: SecAccessControlSetProtection failed")));
 
         cursor += sizeof(keyclass);
-
-        minimum_blob_len += sizeof(keyclass);
-        ctLen -= sizeof(keyclass);
+        blobLen -= sizeof(keyclass);
     }
 
     size_t tagLen = 0;
+    uint32_t wrapped_key_size = 0;
+
     switch (version) {
         case 0:
             wrapped_key_size = (uint32_t)CFDataGetLength(bulkKey) + v0KeyWrapOverHead;
@@ -377,30 +437,46 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
         case 5:
         case 6:
             tagLen = 16;
-            minimum_blob_len -= 16; // Remove PKCS7 padding block requirement
-            ctLen -= tagLen;        // Remove tagLen from ctLen
             /* DROPTHROUGH */
         case 1:
+            if (blobLen < sizeof(wrapped_key_size)) {
+                ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: Check for underflow (wrapped_key_size)"));
+                goto out;
+            }
             wrapped_key_size = *((uint32_t *)cursor);
+
             cursor += sizeof(wrapped_key_size);
-            minimum_blob_len += sizeof(wrapped_key_size);
-            ctLen -= sizeof(wrapped_key_size);
+            blobLen -= sizeof(wrapped_key_size);
+
             break;
         default:
             ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: invalid version %d"), version);
             goto out;
     }
 
-    /* Validate key wrap length against total length */
-    require(blobLen - minimum_blob_len - tagLen >= wrapped_key_size, out);
-    ctLen -= wrapped_key_size;
-    if (version < 2 && (ctLen & 0xF) != 0) {
-        ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: invalid version"));
+    if (blobLen < tagLen + wrapped_key_size) {
+        ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: Check for underflow (wrapped_key/taglen)"));
         goto out;
     }
 
+    size_t ctLen = blobLen - tagLen - wrapped_key_size;
+
+    /*
+     * Pre-version 2 have some additial constraints since it use AES in CBC mode
+     */
+    if (version < 2) {
+        if (ctLen < kCCBlockSizeAES128) {
+            ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: Check for underflow (CBC check)"));
+            goto out;
+        }
+        if ((ctLen & 0xF) != 0) {
+            ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: invalid length on CBC data"));
+            goto out;
+        }
+    }
+
 #if USE_KEYSTORE
-    if (version >= 4) {
+    if (hasProtectionData) {
         if (caller_access_groups) {
             caller_access_groups_data = kc_copy_access_groups_data(caller_access_groups, error);
             require_quiet(ok = (caller_access_groups_data != NULL), out);
@@ -414,6 +490,9 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
             require_quiet(ok = ks_delete_acl(ref_key, ed_data, acm_context, caller_access_groups_data, access_control, error), out);
             attributes = CFRetainSafe(authenticated_attributes);
             goto out;
+        } else {
+            ok = SecError(errSecInternal, error, CFSTR("ks_decrypt_data: invalid operation"));
+            goto out;
         }
     } else
 #endif
@@ -421,6 +500,12 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
         /* Now unwrap the bulk key using a key in the keybag. */
         require_quiet(ok = ks_crypt(cryptoOp, keybag,
             keyclass, wrapped_key_size, cursor, NULL, bulkKey, error), out);
+    }
+
+    if (iv) {
+        // AAD is (version || ... [|| key_wrapped_size ])
+        aad = CFDataGetBytePtr(blob);
+        aadLen = cursor - aad;
     }
 
     cursor += wrapped_key_size;
@@ -438,8 +523,8 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
         uint8_t tag[tagLen];
         ccerr = CCCryptorGCM(kCCDecrypt, kCCAlgorithmAES128,
                              CFDataGetBytePtr(bulkKey), CFDataGetLength(bulkKey),
-                             NULL, 0,  /* iv */
-                             NULL, 0,  /* auth data */
+                             iv, ivLen,     /* iv */
+                             aad, aadLen,   /* auth data */
                              cursor, ctLen,
                              CFDataGetMutableBytePtr(plainText),
                              tag, &tagLen);
@@ -455,7 +540,7 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
             goto out;
         }
         cursor += ctLen;
-        if (memcmp(tag, cursor, tagLen)) {
+        if (timingsafe_bcmp(tag, cursor, tagLen)) {
             ok = SecError(errSecDecode, error, CFSTR("ks_decrypt_data: CCCryptorGCM computed tag not same as tag in blob"));
             goto out;
         }
@@ -495,26 +580,26 @@ bool ks_decrypt_data(keybag_handle_t keybag, CFTypeRef cryptoOp, SecAccessContro
 
 out:
     memset(CFDataGetMutableBytePtr(bulkKey), 0, CFDataGetLength(bulkKey));
-    CFReleaseSafe(bulkKey);
-    CFReleaseSafe(plainText);
+    CFReleaseNull(bulkKey);
+    CFReleaseNull(plainText);
     
     // Always copy access control data (if present), because if we fail it may indicate why.
     if (paccess_control)
         *paccess_control = access_control;
     else
-        CFReleaseSafe(access_control);
+        CFReleaseNull(access_control);
     
     if (ok) {
         if (attributes_p)
-            *attributes_p = CFRetainSafe(attributes);
+            CFRetainAssign(*attributes_p, attributes);
         if (version_p)
             *version_p = version;
 	}
-    CFReleaseSafe(attributes);
+    CFReleaseNull(attributes);
 #if USE_KEYSTORE
-    CFReleaseSafe(authenticated_attributes);
-    CFReleaseSafe(caller_access_groups_data);
-    CFReleaseSafe(ed_data);
+    CFReleaseNull(authenticated_attributes);
+    CFReleaseNull(caller_access_groups_data);
+    CFReleaseNull(ed_data);
     if (ref_key) aks_ref_key_free(&ref_key);
 #endif
     return ok;
@@ -527,13 +612,13 @@ static keyclass_t kc_parse_keyclass(CFTypeRef value, CFErrorRef *error) {
         return key_class_ak;
     } else if (CFEqual(value, kSecAttrAccessibleAfterFirstUnlock)) {
         return key_class_ck;
-    } else if (CFEqual(value, kSecAttrAccessibleAlways)) {
+    } else if (CFEqual(value, kSecAttrAccessibleAlwaysPrivate)) {
         return key_class_dk;
     } else if (CFEqual(value, kSecAttrAccessibleWhenUnlockedThisDeviceOnly)) {
         return key_class_aku;
     } else if (CFEqual(value, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)) {
         return key_class_cku;
-    } else if (CFEqual(value, kSecAttrAccessibleAlwaysThisDeviceOnly)) {
+    } else if (CFEqual(value, kSecAttrAccessibleAlwaysThisDeviceOnlyPrivate)) {
         return key_class_dku;
     } else if (CFEqual(value, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly)) {
         return key_class_akpu;
@@ -550,13 +635,13 @@ static CFTypeRef kc_encode_keyclass(keyclass_t keyclass) {
         case key_class_ck:
             return kSecAttrAccessibleAfterFirstUnlock;
         case key_class_dk:
-            return kSecAttrAccessibleAlways;
+            return kSecAttrAccessibleAlwaysPrivate;
         case key_class_aku:
             return kSecAttrAccessibleWhenUnlockedThisDeviceOnly;
         case key_class_cku:
             return kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
         case key_class_dku:
-            return kSecAttrAccessibleAlwaysThisDeviceOnly;
+            return kSecAttrAccessibleAlwaysThisDeviceOnlyPrivate;
         case key_class_akpu:
             return kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly;
         default:
@@ -568,11 +653,12 @@ static CFTypeRef kc_encode_keyclass(keyclass_t keyclass) {
 static bool kc_attribs_key_encrypted_data_from_blob(keybag_handle_t keybag, const SecDbClass *class, const void *blob_data, size_t blob_data_len, SecAccessControlRef access_control, uint32_t version,
                                              CFMutableDictionaryRef *authenticated_attributes, aks_ref_key_t *ref_key, CFDataRef *encrypted_data, CFErrorRef *error)
 {
-    bool ok = false;
+    CFMutableDictionaryRef acl = NULL;
     CFDictionaryRef blob_dict = NULL;
+    aks_ref_key_t tmp_ref_key = NULL;
     CFDataRef key_data = NULL;
     CFDataRef ed = NULL;
-    aks_ref_key_t tmp_ref_key = NULL;
+    bool ok = false;
 
     der_decode_plist(NULL, kCFPropertyListImmutable, (CFPropertyListRef*)&blob_dict, NULL, blob_data, blob_data + blob_data_len);
     require_action_quiet(blob_dict, out, SecError(errSecDecode, error, CFSTR("kc_attribs_key_encrypted_data_from_blob: failed to decode 'blob data'")));
@@ -584,7 +670,6 @@ static bool kc_attribs_key_encrypted_data_from_blob(keybag_handle_t keybag, cons
     require_action_quiet(ed, out, SecError(errSecDecode, error, CFSTR("kc_attribs_key_encrypted_data_from_blob: failed to decode 'encrypted data'")));
     require_action_quiet(key_data, out, SecError(errSecDecode, error, CFSTR("kc_attribs_key_encrypted_data_from_blob: failed to decode 'key data'")));
 
-    CFMutableDictionaryRef acl = NULL;
     const void *external_data = NULL;
     size_t external_data_len = 0;
     require_quiet(external_data = ks_ref_key_get_external_data(keybag, key_data, &tmp_ref_key, &external_data_len, error), out);
@@ -607,10 +692,14 @@ static bool kc_attribs_key_encrypted_data_from_blob(keybag_handle_t keybag, cons
 
     if (acl) {
         /* v4 data format used wrong ACL placement, for backward compatibility we have to support both formats */
-        if (version == 4)
+        if (version == 4) {
             SecAccessControlSetConstraints(access_control, acl);
-        else
-            SecAccessControlSetConstraints(access_control, CFDictionaryGetValue(acl, kAKSKeyAcl));
+        } else {
+            CFDictionaryRef constraints = CFDictionaryGetValue(acl, kAKSKeyAcl);
+            require_action_quiet(isDictionary(constraints), out,
+                                 SecError(errSecDecode, error, CFSTR("kc_attribs_key_encrypted_data_from_blob: acl missing")));
+            SecAccessControlSetConstraints(access_control, constraints);
+        }
 
         /* v4/v5 data format usualy does not contain kAKSKeyOpEncrypt, so add kAKSKeyOpEncrypt if is missing */
         if (version < 6) {
@@ -619,7 +708,6 @@ static bool kc_attribs_key_encrypted_data_from_blob(keybag_handle_t keybag, cons
                 SecAccessControlAddConstraintForOperation(access_control, kAKSKeyOpEncrypt, kCFBooleanTrue, NULL);
         }
 
-        CFRelease(acl);
     }
 
     if (encrypted_data)
@@ -638,7 +726,9 @@ out:
     CFReleaseSafe(blob_dict);
     CFReleaseSafe(key_data);
     CFReleaseSafe(ed);
-    
+    CFReleaseSafe(acl);
+
+
     return ok;
 }
 
@@ -791,7 +881,7 @@ static bool SecDbItemImportMigrate(SecDbItemRef item, CFErrorRef *error) {
 
     if (!isString(agrp) || !isString(accessible))
         return ok;
-    if (SecDbItemGetClass(item) == &genp_class && CFEqual(accessible, kSecAttrAccessibleAlways)) {
+    if (SecDbItemGetClass(item) == &genp_class && CFEqual(accessible, kSecAttrAccessibleAlwaysPrivate)) {
         CFStringRef svce = SecDbItemGetCachedValueWithName(item, kSecAttrService);
         if (!isString(svce)) return ok;
         if (CFEqual(agrp, CFSTR("apple"))) {
@@ -810,7 +900,7 @@ static bool SecDbItemImportMigrate(SecDbItemRef item, CFErrorRef *error) {
                 }
             }
         }
-    } else if (SecDbItemGetClass(item) == &inet_class && CFEqual(accessible, kSecAttrAccessibleAlways)) {
+    } else if (SecDbItemGetClass(item) == &inet_class && CFEqual(accessible, kSecAttrAccessibleAlwaysPrivate)) {
         if (CFEqual(agrp, CFSTR("PrintKitAccessGroup"))) {
             ok = SecDbItemSetValueWithName(item, kSecAttrAccessible, kSecAttrAccessibleWhenUnlocked, error);
         } else if (CFEqual(agrp, CFSTR("apple"))) {
@@ -981,7 +1071,7 @@ CFTypeRef SecDbKeychainItemCopyEncryptedData(SecDbItemRef item, const SecDbAttr 
     if (attributes || auth_attributes) {
         SecAccessControlRef access_control = SecDbItemCopyAccessControl(item, error);
         if (access_control) {
-            if (ks_encrypt_data(item->keybag, access_control, item->credHandle, attributes, auth_attributes, &edata, error)) {
+            if (ks_encrypt_data(item->keybag, access_control, item->credHandle, attributes, auth_attributes, &edata, true, error)) {
                 item->_edataState = kSecDbItemEncrypting;
             } else if (!error || !*error || CFErrorGetCode(*error) != errSecAuthNeeded || !CFEqualSafe(CFErrorGetDomain(*error), kSecErrorDomain) ) {
                 seccritical("ks_encrypt_data (db): failed: %@", error ? *error : (CFErrorRef)CFSTR(""));

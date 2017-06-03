@@ -52,7 +52,13 @@
 
 #include <AssertMacros.h>
 
-CFStringRef kSOSErrorDomain = CFSTR("com.apple.security.sos.error");
+const CFStringRef kSecIDSErrorDomain = CFSTR("com.apple.security.ids.error");
+const CFStringRef kIDSOperationType = CFSTR("IDSMessageOperation");
+const CFStringRef kIDSMessageToSendKey = CFSTR("MessageToSendKey");
+const CFStringRef kIDSMessageUniqueID = CFSTR("MessageID");
+const CFStringRef kIDSMessageRecipientPeerID = CFSTR("RecipientPeerID");
+const CFStringRef kIDSMessageRecipientDeviceID = CFSTR("RecipientDeviceID");
+const CFStringRef kIDSMessageUsesAckModel = CFSTR("UsesAckModel");
 
 bool SOSErrorCreate(CFIndex errorCode, CFErrorRef *error, CFDictionaryRef formatOptions, CFStringRef format, ...) {
     if (!errorCode) return true;
@@ -67,7 +73,7 @@ bool SOSErrorCreate(CFIndex errorCode, CFErrorRef *error, CFDictionaryRef format
 
 bool SOSCreateError(CFIndex errorCode, CFStringRef descriptionString, CFErrorRef previousError, CFErrorRef *newError) {
     SOSCreateErrorWithFormat(errorCode, previousError, newError, NULL, CFSTR("%@"), descriptionString);
-    return true;
+    return false;
 }
 
 bool SOSCreateErrorWithFormat(CFIndex errorCode, CFErrorRef previousError, CFErrorRef *newError,
@@ -81,8 +87,7 @@ bool SOSCreateErrorWithFormat(CFIndex errorCode, CFErrorRef previousError, CFErr
 
 bool SOSCreateErrorWithFormatAndArguments(CFIndex errorCode, CFErrorRef previousError, CFErrorRef *newError,
                                           CFDictionaryRef formatOptions, CFStringRef format, va_list args) {
-    SecCFCreateErrorWithFormatAndArguments(errorCode, kSOSErrorDomain, previousError, newError, formatOptions, format, args);
-    return true;
+    return SecCFCreateErrorWithFormatAndArguments(errorCode, kSOSErrorDomain, previousError, newError, formatOptions, format, args);
 }
 
 
@@ -167,31 +172,48 @@ CFStringRef SOSItemsChangedCopyDescription(CFDictionaryRef changes, bool is_send
     return string;
 }
 
-CFStringRef SOSCopyIDOfKey(SecKeyRef key, CFErrorRef *error)
-{
-    const struct ccdigest_info * di = ccsha1_di();
-    CFDataRef publicBytes = NULL;
-    CFStringRef result = NULL;
 
+CFStringRef SOSCopyIDOfDataBuffer(CFDataRef data, CFErrorRef *error) {
+    const struct ccdigest_info * di = ccsha1_di();
     uint8_t digest[di->output_size];
     char encoded[2 * di->output_size]; // Big enough for base64 encoding.
-
-    require_quiet(SecError(SecKeyCopyPublicBytes(key, &publicBytes), error, CFSTR("Failed to export public bytes %@"), key), fail);
     
-    ccdigest(di, CFDataGetLength(publicBytes), CFDataGetBytePtr(publicBytes), digest);
-
+    ccdigest(di, CFDataGetLength(data), CFDataGetBytePtr(data), digest);
+    
     size_t length = SecBase64Encode(digest, sizeof(digest), encoded, sizeof(encoded));
     assert(length && length < sizeof(encoded));
     if (length > 26)
-      length = 26;
+        length = 26;
     encoded[length] = 0;
-    CFReleaseNull(publicBytes);
     return CFStringCreateWithCString(kCFAllocatorDefault, encoded, kCFStringEncodingASCII);
+}
 
+CFStringRef SOSCopyIDOfDataBufferWithLength(CFDataRef data, CFIndex len, CFErrorRef *error) {
+    CFStringRef retval = NULL;
+    CFStringRef tmp = SOSCopyIDOfDataBuffer(data, error);
+    if(tmp) retval = CFStringCreateWithSubstring(kCFAllocatorDefault, tmp, CFRangeMake(0, len));
+    CFReleaseNull(tmp);
+    return retval;
+}
+
+CFStringRef SOSCopyIDOfKey(SecKeyRef key, CFErrorRef *error) {
+    CFDataRef publicBytes = NULL;
+    CFStringRef result = NULL;
+    require_quiet(SecError(SecKeyCopyPublicBytes(key, &publicBytes), error, CFSTR("Failed to export public bytes %@"), key), fail);
+    result = SOSCopyIDOfDataBuffer(publicBytes, error);
 fail:
     CFReleaseNull(publicBytes);
     return result;
 }
+
+CFStringRef SOSCopyIDOfKeyWithLength(SecKeyRef key, CFIndex len, CFErrorRef *error) {
+    CFStringRef retval = NULL;
+    CFStringRef tmp = SOSCopyIDOfKey(key, error);
+    if(tmp) retval = CFStringCreateWithSubstring(kCFAllocatorDefault, tmp, CFRangeMake(0, len));
+    CFReleaseNull(tmp);
+    return retval;
+}
+
 
 CFGiblisGetSingleton(ccec_const_cp_t, SOSGetBackupKeyCurveParameters, sBackupKeyCurveParameters, ^{
     *sBackupKeyCurveParameters = ccec_cp_256();
@@ -205,7 +227,6 @@ CFGiblisGetSingleton(ccec_const_cp_t, SOSGetBackupKeyCurveParameters, sBackupKey
 //
 const int kBackupKeyIterations = 20;
 const uint8_t sBackupKeySalt[] = { 0 };
-const int kBackupKeyMaxBytes = 256;
 
 bool SOSPerformWithDeviceBackupFullKey(ccec_const_cp_t cp, CFDataRef entropy, CFErrorRef *error, void (^operation)(ccec_full_ctx_t fullKey))
 {
@@ -229,6 +250,7 @@ bool SOSGenerateDeviceBackupFullKey(ccec_full_ctx_t generatedKey, ccec_const_cp_
     bool result = false;
     int cc_result = 0;
     struct ccrng_pbkdf2_prng_state pbkdf2_prng;
+    const int kBackupKeyMaxBytes = 1024; // This may be a function of the cp but will be updated when we use a formally deterministic key generation.
 
     cc_result = ccrng_pbkdf2_prng_init(&pbkdf2_prng, kBackupKeyMaxBytes,
                                        CFDataGetLength(entropy), CFDataGetBytePtr(entropy),
@@ -278,3 +300,19 @@ CFDataRef SOSDateCreate(void) {
     return CFDataCreate(NULL, buf, bufsiz);
 }
 
+
+CFDataRef CFDataCreateWithDER(CFAllocatorRef allocator, CFIndex size, uint8_t*(^operation)(size_t size, uint8_t *buffer)) {
+    __block CFMutableDataRef result = NULL;
+    if(!size) return NULL;
+    if((result = CFDataCreateMutableWithScratch(allocator, size)) == NULL) return NULL;
+    uint8_t *ptr = CFDataGetMutableBytePtr(result);
+    uint8_t *derptr = operation(size, ptr);
+    if(derptr == ptr) return result; // most probable case
+    if(!derptr || derptr < ptr) { // DER op failed  - or derptr ended up prior to allocated buffer
+        CFReleaseNull(result);
+    } else if(derptr > ptr) { // This is a possible case where we don't end up using the entire allocated buffer
+        size_t diff = derptr - ptr; // The unused space ends up being the beginning of the allocation
+        CFDataDeleteBytes(result, CFRangeMake(0, diff));
+    }
+    return result;
+}

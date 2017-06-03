@@ -23,7 +23,7 @@
  * SecImport.cpp - high-level facility for importing Sec layer objects.
  */
 
-#include "SecImportExport.h"
+#include <Security/SecImportExport.h>
 #include "SecExternalRep.h"
 #include "SecImportExportPem.h"
 #include "SecImportExportUtils.h"
@@ -31,7 +31,7 @@
 #include <security_utilities/globalizer.h>
 #include <Security/SecBase.h>
 
-#define SecImpInferDbg(args...)	secdebug("SecImpInfer", ## args)
+#define SecImpInferDbg(args...)	secinfo("SecImpInfer", ## args)
 
 using namespace Security;
 using namespace KeychainCore;

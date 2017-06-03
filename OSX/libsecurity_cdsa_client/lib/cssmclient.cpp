@@ -30,7 +30,7 @@
 // and thus don't need to be interlocked explicitly.
 //
 #include <security_cdsa_client/cssmclient.h>
-#include <syslog.h>
+#include <utilities/debugging.h>
 
 using namespace CssmClient;
 
@@ -80,7 +80,7 @@ try
     if (!isIdle())
     {
         int i = mChildCount;
-        syslog(LOG_ALERT, "Object %p still has %d children at delete.\n", this, i);
+        secerror("Object %p still has %d children at delete.\n", this, i);
     }
 		
 	// release parent from her obligations (if we still have one)
@@ -89,7 +89,7 @@ try
 }
 catch(...)
 {
-	return;
+    return;	// Prevent re-throw of exception [function-try-block]
 }
 
 void
@@ -111,6 +111,7 @@ ObjectImpl::removeChild()
 Allocator &
 ObjectImpl::allocator() const
 {
+    StLock<Mutex> _(mAllocatorMutex);
 	if (mAllocator == NULL)
 	{
 		// fix allocator now
@@ -126,6 +127,7 @@ ObjectImpl::allocator() const
 void
 ObjectImpl::allocator(Allocator &alloc)
 {
+    StLock<Mutex> _(mAllocatorMutex);
 	assert(mAllocator == NULL);	// cannot redefine allocator once set
 	mAllocator = &alloc;
 }
@@ -269,13 +271,13 @@ void CssmImpl::StandardCssm::unsetCssm(CssmImpl *cssm)
         mCssm = NULL;
 }
 
-CssmImpl *CssmImpl::StandardCssm::get()
+Cssm CssmImpl::StandardCssm::get()
 {
     StLock<Mutex> _(*this);
     if (mCssm == NULL) {	// make the default instance
         mCssm = new CssmImpl(true);
     }
-    return mCssm;
+    return Cssm(mCssm);
 }
 
 CssmImpl::StandardCssm::~StandardCssm()
@@ -383,7 +385,7 @@ void ModuleEvents::fault(uint32 subService, CSSM_SERVICE_TYPE type) { }
 void
 ModuleImpl::appNotifyCallback(CSSM_API_ModuleEventHandler appNotifyCallback, void *appNotifyCallbackCtx)
 {
-	secdebug("callback","In ModuleImpl::appNotifyCallback, appNotifyCallback=%p, appNotifyCallbackCtx=%p",
+	secinfo("callback","In ModuleImpl::appNotifyCallback, appNotifyCallback=%p, appNotifyCallbackCtx=%p",
 		appNotifyCallback, appNotifyCallbackCtx);
 	if (mActive)
 		Error::throwMe(Error::objectBusy);
@@ -407,7 +409,7 @@ ModuleImpl::activate()
         {
             session()->init();
             // @@@ install handler here (use central dispatch with override)
-            secdebug("callback","In ModuleImpl::activate, mAppNotifyCallback=%p, mAppNotifyCallbackCtx=%p",
+            secinfo("callback","In ModuleImpl::activate, mAppNotifyCallback=%p, mAppNotifyCallbackCtx=%p",
                 mAppNotifyCallback, mAppNotifyCallbackCtx);
             check(CSSM_ModuleLoad(&guid(), CSSM_KEY_HIERARCHY_NONE, mAppNotifyCallback, mAppNotifyCallbackCtx));
             mActive = true;

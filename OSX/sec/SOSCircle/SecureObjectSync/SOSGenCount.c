@@ -9,6 +9,9 @@
 #include "SOSGenCount.h"
 #include <utilities/SecCFWrappers.h>
 #include <CoreFoundation/CFLocale.h>
+#include <utilities/der_plist.h>
+#include <utilities/der_plist_internal.h>
+
 
 static CFAbsoluteTime SOSGenerationCountGetDateBits(int64_t genValue) {
     return (uint32_t) ((((uint64_t) genValue) >> 32) << 1);
@@ -87,15 +90,53 @@ SOSGenCountRef SOSGenerationCopy(SOSGenCountRef gen) {
     return CFNumberCreate(NULL, kCFNumberSInt64Type, &value);
 }
 
-bool SOSGenerationIsOlder(SOSGenCountRef current, SOSGenCountRef proposed) {
-    return CFNumberCompare(current, proposed, NULL) == kCFCompareGreaterThan;
+// Is current older than proposed?
+bool SOSGenerationIsOlder(SOSGenCountRef older, SOSGenCountRef newer) {
+    switch(CFNumberCompare(older, newer, NULL)) {
+        case kCFCompareLessThan:  return true;
+        case kCFCompareEqualTo: return false;
+        case kCFCompareGreaterThan:  return false;
+    }
+    return false;
 }
+
+// Is current older than proposed?
+static bool SOSGenerationIsOlderOrEqual(SOSGenCountRef older, SOSGenCountRef newer) {
+    switch(CFNumberCompare(older, newer, NULL)) {
+        case kCFCompareLessThan:  return true;
+        case kCFCompareEqualTo: return true;
+        case kCFCompareGreaterThan:  return false;
+    }
+    return false;
+}
+
 
 SOSGenCountRef SOSGenerationCreateWithBaseline(SOSGenCountRef reference) {
     SOSGenCountRef retval = SOSGenerationCreate();
-    if(!SOSGenerationIsOlder(retval, reference)) {
+    if(SOSGenerationIsOlderOrEqual(retval, reference)) {
         CFReleaseNull(retval);
         retval = SOSGenerationIncrementAndCreate(reference);
     }
     return retval;
 }
+
+
+SOSGenCountRef SOSGenCountCreateFromDER(CFAllocatorRef allocator, CFErrorRef* error,
+                                        const uint8_t** der_p, const uint8_t *der_end) {
+    SOSGenCountRef retval = NULL;
+    *der_p = der_decode_number(allocator, 0, &retval, error, *der_p, der_end);
+    if(retval == NULL)
+        retval = SOSGenerationCreate();
+    return retval;
+}
+
+size_t SOSGenCountGetDEREncodedSize(SOSGenCountRef gencount, CFErrorRef *error) {
+    return der_sizeof_number(gencount, error);
+}
+
+uint8_t *SOSGenCountEncodeToDER(SOSGenCountRef gencount, CFErrorRef* error, const uint8_t* der, uint8_t* der_end) {
+    return der_encode_number(gencount, error, der, der_end);
+}
+
+
+

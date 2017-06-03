@@ -26,11 +26,11 @@
 #include <security_utilities/logging.h>
 #include <security_utilities/debugging.h>
 #include <opensslUtils/opensslUtils.h>
-#include <openssl/bn.h>
-#include <openssl/dh.h>
-#include <openssl/err.h>
+#include <openssl/bn_legacy.h>
+#include <openssl/dh_legacy.h>
+#include <openssl/opensslerr.h>
 
-#define dhMiscDebug(args...)	secdebug("dhMisc", ## args)
+#define dhMiscDebug(args...)	secinfo("dhMisc", ## args)
 
 /* 
  * Given a Context:

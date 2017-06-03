@@ -28,8 +28,8 @@
 #include <RSA_DSA_csp.h>
 #include "AppleCSPKeys.h"
 #include <Security/osKeyTemplates.h>
-#include <openssl/rsa.h>
-#include <openssl/dsa.h>
+#include <openssl/rsa_legacy.h>
+#include <openssl/dsa_legacy.h>
 #include <security_cdsa_utilities/context.h>
 #include <security_asn1/SecNssCoder.h>
 
@@ -102,6 +102,9 @@ public:
 		const Context 	&context,
 		CssmKey 		&pubKey,
 		CssmKey 		&privKey);
+
+    // declared in CSPFullPluginSession, but not implemented here
+    void generate(const Context &context, uint32, CssmData &params, uint32 &attrCount, Context::Attr * &attrs);
 
 	// this one is specified in, and called from, AppleKeyPairGenContext
 	void generate(

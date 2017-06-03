@@ -37,7 +37,7 @@
  * cmsutil -- A command to work with CMS data
  */
 
-#include "security.h"
+#include "security_tool.h"
 #include "keychain_utilities.h"
 #include "identity_find.h"
 
@@ -63,13 +63,15 @@
 #include <Security/SecIdentity.h>
 #include <Security/SecIdentitySearch.h>
 #include <CoreFoundation/CFString.h>
-#include <MacErrors.h>
+#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
 
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+
+#include "cmsutil.h"
 
 // SecPolicyCopy
 #include <Security/SecPolicyPriv.h>
@@ -327,10 +329,10 @@ static int nss_CMSArray_Count(void **array)
     return n;
 }
 
-typedef OSStatus(update_func)(void *cx, const char *data, unsigned int len);
+typedef OSStatus(update_func)(void *cx, const char *data, size_t len);
 
 static OSStatus do_update(update_func *update,
-			   void *cx, const unsigned char *data, int len)
+			   void *cx, const unsigned char *data, size_t len)
 {
     OSStatus rv = noErr;
     if (cms_update_single_byte)
@@ -900,7 +902,10 @@ static OSStatus get_enc_params(struct encryptOptionsStr *encryptOptions)
         envelopeOptions.options = encryptOptions->options;
         envelopeOptions.recipients = encryptOptions->recipients;
         env_cmsg = enveloped_data(&envelopeOptions);
-        SecCmsMessageEncode(env_cmsg, &dummyIn, tmparena, &dummyOut);
+        rv = SecCmsMessageEncode(env_cmsg, &dummyIn, tmparena, &dummyOut);
+        if (rv) {
+            goto loser;
+        }
         fwrite(dummyOut.Data, 1, dummyOut.Length,encryptOptions->envFile);
 
         SecArenaPoolFree(tmparena, false);
@@ -1059,7 +1064,7 @@ loser:
 
 typedef enum { UNKNOWN, DECODE, SIGN, ENCRYPT, ENVELOPE, CERTSONLY } Mode;
 
-int cms_util(int argc, char **argv)
+int cms_util(int argc, char * const *argv)
 {
     FILE *outFile;
     SecCmsMessageRef cmsg = NULL;

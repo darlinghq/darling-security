@@ -28,7 +28,9 @@
 
 #include <list>
 #include <security_utilities/globalizer.h>
-#include <auto_zone.h>
+#if( __cplusplus <= 201103L)
+#include <stdatomic.h>
+#endif
 
 SecPointerBase::SecPointerBase(const SecPointerBase& p)
 {
@@ -38,20 +40,6 @@ SecPointerBase::SecPointerBase(const SecPointerBase& p)
 	}
 	ptr = p.ptr;
 }
-
-
-
-
-static void CheckForRelease(SecCFObject* ptr)
-{
-	CFTypeRef tr = ptr->operator CFTypeRef();
-	CFIndex retainCount = CFGetRetainCount(tr);
-	if (retainCount == 1 || retainCount == -1)
-	{
-		ptr->aboutToDestruct();
-	}
-}
-
 
 
 SecPointerBase::SecPointerBase(SecCFObject *p)
@@ -69,7 +57,6 @@ SecPointerBase::~SecPointerBase()
 {
 	if (ptr)
 	{
-		CheckForRelease(ptr);
 		CFRelease(ptr->operator CFTypeRef());
 	}
 }
@@ -85,7 +72,6 @@ SecPointerBase& SecPointerBase::operator = (const SecPointerBase& p)
 	}
 	if (ptr)
 	{
-		CheckForRelease(ptr);
 		CFRelease(ptr->operator CFTypeRef());
 	}
 	ptr = p.ptr;
@@ -102,7 +88,6 @@ void SecPointerBase::assign(SecCFObject * p)
 	}
 	if (ptr)
 	{
-		CheckForRelease(ptr);
 		CFRelease(ptr->operator CFTypeRef());
 	}
 	ptr = p;
@@ -114,7 +99,6 @@ void SecPointerBase::copy(SecCFObject * p)
 {
 	if (ptr)
 	{
-		CheckForRelease(ptr);
 		CFRelease(ptr->operator CFTypeRef());
 	}
 	
@@ -153,14 +137,10 @@ SecCFObject::allocate(size_t size, const CFClass &cfclass) throw(std::bad_alloc)
 	if (p == NULL)
 		throw std::bad_alloc();
 
-	((SecRuntimeBase*) p)->isNew = true;
+	atomic_flag_clear(&((SecRuntimeBase*) p)->isOld);
 
 	void *q = ((u_int8_t*) p) + kAlignedRuntimeSize;
 
-	if (SECURITY_DEBUG_SEC_CREATE_ENABLED()) {
-		const CFRuntimeClass *rtc = _CFRuntimeGetClassWithTypeID(cfclass.typeID);
-		SECURITY_DEBUG_SEC_CREATE(q, rtc ? (char *)rtc->className : NULL, (unsigned int)cfclass.typeID);
-	}
 	return q;
 }
 
@@ -168,11 +148,7 @@ void
 SecCFObject::operator delete(void *object) throw()
 {
 	CFTypeRef cfType = reinterpret_cast<CFTypeRef>(reinterpret_cast<const uint8_t *>(object) - kAlignedRuntimeSize);
-    if (CF_IS_COLLECTABLE(cfType))
-    {
-        return;
-    }
-    
+
     CFAllocatorRef allocator = CFGetAllocator(cfType);
     CFAllocatorDeallocate(allocator, (void*) cfType);
 }
@@ -212,7 +188,7 @@ uint32_t SecCFObject::updateRetainCount(intptr_t direction, uint32_t *oldCount)
 
 SecCFObject::~SecCFObject()
 {
-	SECURITY_DEBUG_SEC_DESTROY(this);
+	//SECURITY_DEBUG_SEC_DESTROY(this);
 }
 
 bool
@@ -257,7 +233,7 @@ SecCFObject::aboutToDestruct()
 
 
 Mutex*
-SecCFObject::getMutexForObject()
+SecCFObject::getMutexForObject() const
 {
 	return NULL; // we only worry about descendants of KeychainImpl and ItemImpl
 }

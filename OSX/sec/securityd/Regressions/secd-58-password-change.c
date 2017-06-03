@@ -63,7 +63,7 @@ static bool AssertCreds(SOSAccountRef account,CFStringRef acct_name, CFDataRef p
 static bool ResetToOffering(SOSAccountRef account) {
     CFErrorRef error = NULL;
     bool retval;
-    ok((retval = SOSAccountResetToOffering(account, &error)), "Reset to offering (%@)", error);
+    ok((retval = SOSAccountResetToOffering_wTxn(account, &error)), "Reset to offering (%@)", error);
     CFReleaseNull(error);
     return retval;
 }
@@ -71,7 +71,7 @@ static bool ResetToOffering(SOSAccountRef account) {
 static bool JoinCircle(SOSAccountRef account) {
     CFErrorRef error = NULL;
     bool retval;
-    ok((retval = SOSAccountJoinCircles(account, &error)), "Join Circle (%@)", error);
+    ok((retval = SOSAccountJoinCircles_wTxn(account, &error)), "Join Circle (%@)", error);
     CFReleaseNull(error);
     return retval;
 }
@@ -223,13 +223,7 @@ static void tests(void)
     CFReleaseNull(carol_account);
     CFReleaseNull(cfnewpassword);
     
-    SOSUnregisterAllTransportMessages();
-    SOSUnregisterAllTransportCircles();
-    SOSUnregisterAllTransportKeyParameters();
-    CFArrayRemoveAllValues(key_transports);
-    CFArrayRemoveAllValues(circle_transports);
-    CFArrayRemoveAllValues(message_transports);
-    
+    SOSTestCleanup();
 }
 
 int secd_58_password_change(int argc, char *const *argv)

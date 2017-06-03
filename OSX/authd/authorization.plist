@@ -206,6 +206,39 @@ See remaining rules for examples.
 			<key>timeout</key>
 			<integer>0</integer>
 		</dict>
+        <key>com.apple.Safari.allow-apple-events-to-run-javascript</key>
+        <dict>
+            <key>class</key>
+            <string>user</string>
+            <key>comment</key>
+            <string>This right is used by Safari to allow Apple Events to run JavaScript on web pages.</string>
+            <key>session-owner</key>
+            <true/>
+            <key>shared</key>
+            <false/>
+        </dict>
+        <key>com.apple.Safari.allow-unsigned-app-extensions</key>
+        <dict>
+            <key>class</key>
+            <string>user</string>
+            <key>comment</key>
+            <string>This right is used by Safari to allow unsigned extensions in the Develop Menu.</string>
+            <key>session-owner</key>
+            <true/>
+            <key>shared</key>
+            <false/>
+        </dict>
+        <key>com.apple.Safari.allow-javascript-in-smart-search-field</key>
+        <dict>
+            <key>class</key>
+            <string>user</string>
+            <key>comment</key>
+            <string>This right is used by Safari to allow JavaScript to be used in the Smart Search Field.</string>
+            <key>session-owner</key>
+            <true/>
+            <key>shared</key>
+            <false/>
+        </dict>
 		<key>com.apple.ServiceManagement.blesshelper</key>
 		<dict>
 			<key>allow-root</key>
@@ -232,8 +265,10 @@ See remaining rules for examples.
 			<key>rule</key>
 			<array>
 				<string>is-root</string>
-				<string>entitled-admin-or-authenticate-admin</string>
+				<string>entitled-admin-or-authenticate-admin-nonshared</string>
 			</array>
+			<key>version</key>
+			<integer>1</integer>
 		</dict>
 		<key>com.apple.SoftwareUpdate.modify-settings</key>
 		<dict>
@@ -360,6 +395,15 @@ See remaining rules for examples.
 				<string>builtin:generic-unlock</string>
 			</array>
 		</dict>
+		<key>com.apple.builtin.sc-kc-new-passphrase</key>
+		<dict>
+			<key>class</key>
+			<string>evaluate-mechanisms</string>
+			<key>mechanisms</key>
+			<array>
+				<string>builtin:generic-new-passphrase</string>
+			</array>
+		</dict>
 		<key>com.apple.container-repair</key>
 		<dict>
 			<key>class</key>
@@ -461,6 +505,22 @@ See remaining rules for examples.
 			<string>rule</string>
 			<key>rule</key>
 			<string>entitled-session-owner-or-authenticate-session-owner</string>
+		</dict>
+		<key>com.apple.ctk.pair</key>
+		<dict>
+			<key>class</key>
+			<string>rule</string>
+			<key>rule</key>
+			<string>kcunlock</string>
+		</dict>
+		<key>com.apple.ctkbind.admin</key>
+		<dict>
+			<key>class</key>
+			<string>user</string>
+			<key>group</key>
+			<string>admin</string>
+			<key>shared</key>
+			<false/>
 		</dict>
 		<key>com.apple.pf.rule</key>
 		<dict>
@@ -795,8 +855,9 @@ See remaining rules for examples.
 			<array>
 				<string>loginKC:queryCreate</string>
 				<string>loginKC:showPasswordUI</string>
-				<string>authinternal</string>
 			</array>
+			<key>version</key>
+			<integer>1</integer>
 			<key>session-owner</key>
 			<true/>
 			<key>shared</key>
@@ -837,10 +898,11 @@ See remaining rules for examples.
 				<string>HomeDirMechanism:login,privileged</string>
 				<string>HomeDirMechanism:status</string>
 				<string>MCXMechanism:login</string>
+				<string>CryptoTokenKit:login</string>
 				<string>loginwindow:done</string>
 			</array>
 			<key>version</key>
-			<integer>3</integer>
+			<integer>6</integer>
 		</dict>
 		<key>system.login.fus</key>
 		<dict>
@@ -1428,6 +1490,60 @@ See remaining rules for examples.
 				<string>authenticate-admin-30</string>
 			</array>
 		</dict>
+		<key>com.apple.security.syntheticinput</key>
+		<dict>
+		    <key>class</key>
+		    <string>rule</string>
+		    <key>rule</key>
+		    <string>authenticate-session-owner</string>
+		</dict>		
+		<key>com.apple.security.sudo</key>
+		<dict>
+			<key>class</key>
+			<string>rule</string>
+			<key>k-of-n</key>
+			<integer>2</integer>
+			<key>rule</key>
+			<array>
+				<string>entitled</string>
+				<string>authenticate-session-owner</string>
+			</array>
+		</dict>		
+		<key>system.localauthentication.ui</key>
+		<dict>
+			<key>class</key>
+			<string>evaluate-mechanisms</string>
+			<key>comment</key>
+			<string>Used by LocalAuthentication to display its UI.</string>
+			<key>mechanisms</key>
+			<array>
+				<string>LocalAuthentication:UI</string>
+			</array>
+		</dict>
+		<key>system.preferences.continuity</key>
+		<dict>
+			<key>class</key>
+			<string>rule</string>
+			<key>comment</key>
+			<string>Used by Password And Continuity PrefPane to request the user's password.</string>
+			<key>rule</key>
+			<array>
+				<string>authenticate-staff-extract-context</string>
+			</array>
+		</dict>
+		<key>com.apple.safaridriver.allow</key>
+		<dict>
+			<key>comment</key>
+			<string>This right is used by safaridriver to allow running it.</string>
+			<key>class</key>
+			<string>user</string>
+			<key>group</key>
+			<string>admin</string>
+			<key>allow-root</key>
+			<true/>
+			<key>shared</key>
+			<true/>
+		</dict>
 	</dict>
 	<key>rules</key>
 	<dict>
@@ -1480,6 +1596,20 @@ See remaining rules for examples.
 				<string>PKINITMechanism:auth,privileged</string>
 			</array>
 		</dict>
+		<key>kcunlock</key>
+		<dict>
+			<key>class</key>
+			<string>evaluate-mechanisms</string>
+			<key>extract-password</key>
+			<true/>
+			<key>mechanisms</key>
+			<array>
+				<string>builtin:unlock-keychain</string>
+				<string>builtin:kc-verify,privileged</string>
+			</array>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>		    
 		<key>authenticate-admin</key>
 		<dict>
 			<key>class</key>
@@ -1492,6 +1622,19 @@ See remaining rules for examples.
 			<true/>
 			<key>timeout</key>
 			<integer>0</integer>
+		</dict>
+		<key>authenticate-admin-nonshared</key>
+		<dict>
+			<key>class</key>
+			<string>user</string>
+			<key>comment</key>
+			<string>Authenticate as an administrator.</string>
+			<key>group</key>
+			<string>admin</string>
+			<key>timeout</key>
+			<integer>30</integer>
+			<key>version</key>
+			<integer>1</integer>
 		</dict>
 		<key>authenticate-admin-30</key>
 		<dict>
@@ -1517,12 +1660,16 @@ See remaining rules for examples.
 			<string>Authenticate as an administrator + allow password extraction.</string>
 			<key>extract-password</key>
 			<true/>
+			<key>password-only</key>
+			<true/>
 			<key>group</key>
 			<string>admin</string>
 			<key>require-apple-signed</key>
 			<true/>
 			<key>timeout</key>
 			<integer>0</integer>
+			<key>version</key>
+			<integer>1</integer>
 		</dict>
 		<key>authenticate-staff-extract</key>
 		<dict>
@@ -1532,12 +1679,28 @@ See remaining rules for examples.
 			<string>Authenticate as group staff + allow password to be extracted.</string>
 			<key>extract-password</key>
 			<true/>
+			<key>password-only</key>
+			<true/>
 			<key>group</key>
 			<string>staff</string>
 			<key>require-apple-signed</key>
 			<true/>
 			<key>timeout</key>
 			<integer>0</integer>
+			<key>version</key>
+			<integer>1</integer>
+		</dict>
+		<key>authenticate-staff-extract-context</key>
+		<dict>
+			<key>class</key>
+			<string>rule</string>
+			<key>k-of-n</key>
+			<integer>2</integer>
+			<key>rule</key>
+			<array>
+				<string>authenticate-staff-extract</string>
+				<string>localauthentication-context</string>
+			</array>
 		</dict>
 		<key>authenticate-admin-or-staff-extract</key>
 		<dict>
@@ -1647,6 +1810,30 @@ See remaining rules for examples.
 				<string>entitled</string>
 			</array>
 		</dict>
+		<key>entitled-admin-nonshared</key>
+		<dict>
+			<key>class</key>
+			<string>rule</string>
+			<key>k-of-n</key>
+			<integer>2</integer>
+			<key>rule</key>
+			<array>
+				<string>is-admin-nonshared</string>
+				<string>entitled</string>
+			</array>
+		</dict>
+		<key>entitled-admin-or-authenticate-admin-nonshared</key>
+		<dict>
+			<key>class</key>
+			<string>rule</string>
+			<key>k-of-n</key>
+			<integer>1</integer>
+			<key>rule</key>
+			<array>
+				<string>entitled-admin-nonshared</string>
+				<string>authenticate-admin-nonshared</string>
+			</array>
+		</dict>
 		<key>entitled-admin-or-authenticate-admin</key>
 		<dict>
 			<key>class</key>
@@ -1743,6 +1930,17 @@ See remaining rules for examples.
 			<string>admin</string>
 			<key>shared</key>
 			<true/>
+		</dict>
+		<key>is-admin-nonshared</key>
+		<dict>
+			<key>authenticate-user</key>
+			<false/>
+			<key>class</key>
+			<string>user</string>
+			<key>comment</key>
+			<string>Verify that the user asking for authorization is an administrator - nonshared right.</string>
+			<key>group</key>
+			<string>admin</string>
 		</dict>
 		<key>is-appstore</key>
 		<dict>
@@ -1884,6 +2082,17 @@ See remaining rules for examples.
 			<true/>
 			<key>shared</key>
 			<false/>
+		</dict>
+		<key>localauthentication-context</key>
+		<dict>
+			<key>class</key>
+			<string>evaluate-mechanisms</string>
+			<key>comment</key>
+			<string>Used by LocalAuthentication to pass externalized context.</string>
+			<key>mechanisms</key>
+			<array>
+				<string>LocalAuthentication:context</string>
+			</array>
 		</dict>
 	</dict>
 </dict>

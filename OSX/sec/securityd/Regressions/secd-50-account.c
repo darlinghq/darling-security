@@ -81,7 +81,7 @@ static void tests(void)
     CFReleaseNull(inflated);
     
     CFDictionaryRef new_gestalt = SOSCreatePeerGestaltFromName(CFSTR("New Device"));
-    ok(SOSAccountResetToOffering(account, &error), "Reset to Offering  (%@)", error);
+    ok(SOSAccountResetToOffering_wTxn(account, &error), "Reset to Offering  (%@)", error);
     CFReleaseNull(error);
     is(SOSAccountGetCircleStatus(account, &error), kSOSCCInCircle, "Was in Circle  (%@)", error);
     CFReleaseNull(error);
@@ -97,14 +97,7 @@ static void tests(void)
     SOSDataSourceFactoryRelease(test_factory);
     SOSDataSourceRelease(test_source, NULL);
         
-    SOSUnregisterAllTransportMessages();
-    SOSUnregisterAllTransportCircles();
-    SOSUnregisterAllTransportKeyParameters();
-    
-    CFArrayRemoveAllValues(key_transports);
-    CFArrayRemoveAllValues(circle_transports);
-    CFArrayRemoveAllValues(message_transports);
-    
+    SOSTestCleanup();
 }
 
 int secd_50_account(int argc, char *const *argv)

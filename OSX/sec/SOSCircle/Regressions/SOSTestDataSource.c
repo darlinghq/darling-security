@@ -27,6 +27,8 @@
 #include <corecrypto/ccder.h>
 #include <Security/SecureObjectSync/SOSDataSource.h>
 #include <Security/SecureObjectSync/SOSDigestVector.h>
+#include <Security/SecureObjectSync/SOSViews.h>
+
 #include <utilities/array_size.h>
 #include <utilities/der_plist.h>
 #include <utilities/SecCFError.h>
@@ -82,7 +84,7 @@ static SOSManifestRef dsCopyManifestWithViewNameSet(SOSDataSourceRef data_source
     return manifest;
 }
 
-static bool foreach_object(SOSDataSourceRef data_source, SOSManifestRef manifest, CFErrorRef *error, void (^handle_object)(CFDataRef key, SOSObjectRef object, bool *stop)) {
+static bool foreach_object(SOSDataSourceRef data_source, SOSTransactionRef txn, SOSManifestRef manifest, CFErrorRef *error, void (^handle_object)(CFDataRef key, SOSObjectRef object, bool *stop)) {
     struct SOSTestDataSource *ds = (struct SOSTestDataSource *)data_source;
     ds->co_count++;
     __block bool result = true;
@@ -146,6 +148,10 @@ static CFDataRef copyDigest(SOSObjectRef object, CFErrorRef *error) {
         CFRelease(der);
     }
     return digest;
+}
+
+static CFDateRef copyModDate(SOSObjectRef object, CFErrorRef *error) {
+    return CFRetainSafe(asDate(CFDictionaryGetValue((CFDictionaryRef) object, kSecAttrModificationDate), NULL));
 }
 
 static CFDataRef copyPrimaryKey(SOSObjectRef object, CFErrorRef *error) {
@@ -276,11 +282,13 @@ static CFStringRef dsGetName(SOSDataSourceRef ds) {
     return CFSTR("The sky is made of butterflies");
 }
 
-static void dsSetNotifyPhaseBlock(SOSDataSourceRef ds, dispatch_queue_t queue, SOSDataSourceNotifyBlock notifyBlock) {
-    ((SOSTestDataSourceRef)ds)->notifyBlock = Block_copy(notifyBlock);
+static void dsAddNotifyPhaseBlock(SOSDataSourceRef ds, SOSDataSourceNotifyBlock notifyBlock) {
+    SOSTestDataSourceRef tds = (SOSTestDataSourceRef)ds;
+    assert(tds->notifyBlock == NULL);
+    tds->notifyBlock = Block_copy(notifyBlock);
 }
 
-static CFDataRef dsCopyStateWithKey(SOSDataSourceRef ds, CFStringRef key, CFStringRef pdmn, CFErrorRef *error) {
+static CFDataRef dsCopyStateWithKey(SOSDataSourceRef ds, CFStringRef key, CFStringRef pdmn, SOSTransactionRef txn, CFErrorRef *error) {
     SOSTestDataSourceRef tds = (SOSTestDataSourceRef)ds;
     CFStringRef dbkey = CFStringCreateWithFormat(kCFAllocatorDefault, NULL, CFSTR("%@-%@"), pdmn, key);
     CFDataRef state = CFDictionaryGetValue(tds->statedb, dbkey);
@@ -293,7 +301,7 @@ static CFDataRef dsCopyItemDataWithKeys(SOSDataSourceRef data_source, CFDictiona
     return NULL;
 }
 
-static bool dsWith(SOSDataSourceRef ds, CFErrorRef *error, SOSDataSourceTransactionSource source, void(^transaction)(SOSTransactionRef txn, bool *commit)) {
+static bool dsWith(SOSDataSourceRef ds, CFErrorRef *error, SOSDataSourceTransactionSource source, bool onCommitQueue, void(^transaction)(SOSTransactionRef txn, bool *commit)) {
     SOSTestDataSourceRef tds = (SOSTestDataSourceRef)ds;
     bool commit = true;
     transaction((SOSTransactionRef)ds, &commit);
@@ -304,7 +312,13 @@ static bool dsWith(SOSDataSourceRef ds, CFErrorRef *error, SOSDataSourceTransact
     return true;
 }
 
-static bool dsSetStateWithKey(SOSDataSourceRef ds, SOSTransactionRef txn, CFStringRef pdmn, CFStringRef key, CFDataRef state, CFErrorRef *error) {
+static bool dsReadWith(SOSDataSourceRef ds, CFErrorRef *error, SOSDataSourceTransactionSource source, void(^perform)(SOSTransactionRef txn)) {
+    SOSTestDataSourceRef tds = (SOSTestDataSourceRef)ds;
+    perform((SOSTransactionRef)tds);
+    return true;
+}
+
+static bool dsSetStateWithKey(SOSDataSourceRef ds, SOSTransactionRef txn, CFStringRef key, CFStringRef pdmn, CFDataRef state, CFErrorRef *error) {
     SOSTestDataSourceRef tds = (SOSTestDataSourceRef)ds;
     CFStringRef dbkey = CFStringCreateWithFormat(kCFAllocatorDefault, NULL, CFSTR("%@-%@"), pdmn, key);
     CFDictionarySetValue(tds->statedb, dbkey, state);
@@ -329,7 +343,7 @@ SOSDataSourceRef SOSTestDataSourceCreate(void) {
 
     ds->ds.engine = NULL;
     ds->ds.dsGetName = dsGetName;
-    ds->ds.dsSetNotifyPhaseBlock = dsSetNotifyPhaseBlock;
+    ds->ds.dsAddNotifyPhaseBlock = dsAddNotifyPhaseBlock;
     ds->ds.dsCopyManifestWithViewNameSet = dsCopyManifestWithViewNameSet;
     ds->ds.dsForEachObject = foreach_object;
     ds->ds.dsCopyStateWithKey = dsCopyStateWithKey;
@@ -337,13 +351,14 @@ SOSDataSourceRef SOSTestDataSourceCreate(void) {
 
     ds->ds.dsWith = dsWith;
     ds->ds.dsRelease = dispose;
+    ds->ds.dsReadWith = dsReadWith;
 
     ds->ds.dsMergeObject = mergeObject;
     ds->ds.dsSetStateWithKey = dsSetStateWithKey;
     ds->ds.dsRestoreObject = dsRestoreObject;
 
     ds->ds.objectCopyDigest = copyDigest;
-    ds->ds.objectCopyPrimaryKey = copyPrimaryKey;
+    ds->ds.objectCopyModDate = copyModDate;
     ds->ds.objectCreateWithPropertyList = createWithPropertyList;
     ds->ds.objectCopyPropertyList = copyPropertyList;
     ds->ds.objectCopyBackup = objectCopyBackup;
@@ -498,6 +513,44 @@ SOSObjectRef SOSDataSourceCreateGenericItem(SOSDataSourceRef ds, CFStringRef acc
     return SOSDataSourceCreateGenericItemWithData(ds, account, service, false, NULL);
 }
 
+SOSObjectRef SOSDataSourceCreateV0EngineStateWithData(SOSDataSourceRef ds, CFDataRef engineStateData) {
+    /*
+     MANGO-iPhone:~ mobile$ security item class=genp,acct=engine-state
+     acct       : engine-state
+     agrp       : com.apple.security.sos
+     cdat       : 2016-04-18 20:40:33 +0000
+     mdat       : 2016-04-18 20:40:33 +0000
+     musr       : //
+     pdmn       : dk
+     svce       : SOSDataSource-ak
+     sync       : 0
+     tomb       : 0
+     */
+    CFAbsoluteTime timestamp = 3700000;
+    CFDateRef now = CFDateCreate(kCFAllocatorDefault, timestamp);
+    CFDictionaryRef item = CFDictionaryCreateForCFTypes(kCFAllocatorDefault,
+                                                        kSecClass,                  kSecClassGenericPassword,
+                                                        kSecAttrSynchronizable,     kCFBooleanFalse,
+                                                        kSecAttrTombstone,          kCFBooleanFalse,
+                                                        kSecAttrAccount,            CFSTR("engine-state"),
+                                                        kSecAttrService,            CFSTR("SOSDataSource-ak"),
+                                                        kSecAttrCreationDate,       now,
+                                                        kSecAttrModificationDate,   now,
+                                                        kSecAttrAccessGroup,        CFSTR("com.apple.security.sos"),
+                                                        kSecAttrAccessible,         kSecAttrAccessibleAlwaysPrivate,
+                                                        engineStateData ?  kSecValueData : NULL, engineStateData,
+                                                        NULL);
+    CFReleaseSafe(now);
+    CFErrorRef localError = NULL;
+    SOSObjectRef object = ds->objectCreateWithPropertyList(item, &localError);
+    if (!object) {
+        secerror("createWithPropertyList: %@ failed: %@", item, localError);
+        CFRelease(localError);
+    }
+    CFRelease(item);
+    return object;
+}
+
 SOSObjectRef SOSDataSourceCopyObject(SOSDataSourceRef ds, SOSObjectRef match, CFErrorRef *error)
 {
     __block SOSObjectRef result = NULL;
@@ -508,7 +561,7 @@ SOSObjectRef SOSDataSourceCopyObject(SOSDataSourceRef ds, SOSObjectRef match, CF
     require(digest, exit);
     manifest = SOSManifestCreateWithData(digest, error);
 
-    SOSDataSourceForEachObject(ds, manifest, error, ^void (CFDataRef key, SOSObjectRef object, bool *stop) {
+    SOSDataSourceForEachObject(ds, NULL, manifest, error, ^void (CFDataRef key, SOSObjectRef object, bool *stop) {
         if (object == NULL) {
             if (error && !*error) {
                 SecCFCreateErrorWithFormat(kSOSDataSourceObjectNotFoundError, sSOSDataSourceErrorDomain, NULL, error, 0, CFSTR("key %@ not in database"), key);

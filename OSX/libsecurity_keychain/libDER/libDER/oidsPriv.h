@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005-2009,2011-2015 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2005-2009,2011-2016 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -33,17 +33,17 @@
 #include <libDER/oids.h>
 #include <stdbool.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+__BEGIN_DECLS
 
 /* Apple Oids */
 extern const DERItem
     oidAppleSecureBootCertSpec,
+    oidAppleSecureBootTicketCertSpec,
+    oidAppleImg4ManifestCertSpec,
     oidAppleProvisioningProfile,
     oidAppleApplicationSigning,
     oidAppleTVOSApplicationSigningProd,
-    oidAppleTVOSApplicationSigningTest,
+    oidAppleTVOSApplicationSigningProdQA,
     oidAppleInstallerPackagingSigningExternal,
     oidAppleExtendedKeyUsageCodeSigning,
     oidAppleExtendedKeyUsageCodeSigningDev,
@@ -56,7 +56,7 @@ extern const DERItem
     oidAppleIntmMarkerAppleID2,
     oidApplePushServiceClient,
     oidApplePolicyMobileStore,
-    oidApplePolicyTestMobileStore,
+    oidApplePolicyMobileStoreProdQA,
     oidApplePolicyEscrowService,
     oidAppleCertExtensionAppleIDRecordValidationSigning,
     oidAppleCertExtOSXProvisioningProfileSigning,
@@ -64,26 +64,36 @@ extern const DERItem
     oidAppleIntmMarkerAppleSystemIntgG3,
     oidAppleCertExtAppleSMPEncryption,
     oidAppleCertExtAppleServerAuthentication,
-    oidAppleCertExtAppleServerAuthenticationIDSTest,
+    oidAppleCertExtAppleServerAuthenticationIDSProdQA,
     oidAppleCertExtAppleServerAuthenticationIDSProd,
-    oidAppleCertExtAppleServerAuthenticationAPNTest,
+    oidAppleCertExtAppleServerAuthenticationAPNProdQA,
     oidAppleCertExtAppleServerAuthenticationAPNProd,
     oidAppleCertExtAppleServerAuthenticationGS,
-    oidAppleCertExtAppleServerAuthenticationPPQTest,
+    oidAppleCertExtAppleServerAuthenticationPPQProdQA,
     oidAppleCertExtAppleServerAuthenticationPPQProd,
     oidAppleIntmMarkerAppleServerAuthentication,
     oidAppleCertExtApplePPQSigningProd,
-    oidAppleCertExtApplePPQSigningTest,
+    oidAppleCertExtApplePPQSigningProdQA,
     oidAppleCertExtATVAppSigningProd,
-    oidAppleCertExtATVAppSigningTest,
+    oidAppleCertExtATVAppSigningProdQA,
     oidAppleCertExtATVVPNProfileSigning,
-    oidAppleCertExtCryptoServicesExtEncryption;
+    oidAppleCertExtCryptoServicesExtEncryption,
+    oidAppleCertExtAST2DiagnosticsServerAuthProdQA,
+    oidAppleCertExtAST2DiagnosticsServerAuthProd,
+    oidAppleCertExtEscrowProxyServerAuthProdQA,
+    oidAppleCertExtEscrowProxyServerAuthProd,
+    oidAppleCertExtFMiPServerAuthProdQA,
+    oidAppleCertExtFMiPServerAuthProd,
+    oidAppleCertExtHomeKitServerAuth,
+    oidAppleIntmMarkerAppleHomeKitServerCA,
+    oidAppleCertExtAppleServerAuthenticationMMCSProdQA,
+    oidAppleCertExtAppleServerAuthenticationMMCSProd,
+    oidAppleCertExtAppleServerAuthenticationiCloudSetupProdQA,
+    oidAppleCertExtAppleServerAuthenticationiCloudSetupProd;
 
     /* Compare two decoded OIDs.  Returns true iff they are equivalent. */
     bool DEROidCompare(const DERItem *oid1, const DERItem *oid2);
 
-#ifdef __cplusplus
-}
-#endif
+__END_DECLS
 
 #endif	/* _LIB_DER_UTILS_H_ */

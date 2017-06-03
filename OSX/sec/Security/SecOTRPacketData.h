@@ -39,8 +39,6 @@
 
 #include <AssertMacros.h>
 
-#include <MacTypes.h>
-
 __BEGIN_DECLS
 
 static CC_NONNULL((1,2))
@@ -351,8 +349,8 @@ static inline CFMutableDataRef CFDataCreateMutableFromOTRDATA(CFAllocatorRef all
     CFDataAppendBytes(result, *bytesPtr, (CFIndex)sizeInStream);
     
     *bytesPtr += sizeInStream;
-    *sizePtr += sizeInStream;
-    
+    *sizePtr -= sizeInStream;
+
 exit:
     return result;
 }

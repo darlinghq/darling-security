@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2014 Apple Inc.  All Rights Reserved.
+ * Copyright (c) 2014-2016 Apple Inc.  All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 
@@ -45,6 +45,7 @@
 
 #if TARGET_OS_IPHONE
 #include <SpringBoardServices/SpringBoardServices.h>
+#include <MobileCoreServices/LSApplicationProxy.h>
 #endif
 
 #if TARGET_OS_IPHONE && !TARGET_OS_NANO
@@ -88,23 +89,6 @@ typedef WBSAutoFillDataClasses (*WBUAutoFillGetEnabledDataClasses_f)(void);
 #include <xpc/private.h>
 #include <xpc/connection_private.h>
 #include <AssertMacros.h>
-
-
-// Local function declarations
-CFStringRef SWCAGetOperationDescription(enum SWCAXPCOperation op);
-bool SWCAIsAutofillEnabled(void);
-
-bool swca_confirm_add(CFDictionaryRef attributes, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error);
-bool swca_confirm_copy(CFDictionaryRef attributes, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error);
-bool swca_confirm_update(CFDictionaryRef attributes, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error);
-bool swca_confirm_delete(CFDictionaryRef attributes, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error);
-bool swca_select_item(CFArrayRef items, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error);
-
-CFOptionFlags swca_handle_request(enum SWCAXPCOperation operation, CFStringRef client, CFArrayRef domains);
-bool swca_process_response(CFOptionFlags response, CFTypeRef *result);
-
-static CFArrayRef gActiveArray = NULL;
-static CFDictionaryRef gActiveItem = NULL;
 
 #if TARGET_IPHONE_SIMULATOR
 #define CHECK_ENTITLEMENTS 0
@@ -164,8 +148,10 @@ enum {
 @property(retain) NSString *path;
 @property(retain) NSBundle *bundle;
 @end
+
 @implementation Client
 @end
+
 static Client *identify_client(pid_t pid)
 {
 	Client *client = [[Client alloc] init];
@@ -177,8 +163,7 @@ static Client *identify_client(pid_t pid)
 
 #if TARGET_OS_IPHONE
 	if (proc_pidpath(pid, path_buf, sizeof(path_buf)) <= 0) {
-		asl_log(NULL, NULL, ASL_LEVEL_NOTICE, "Refusing client without path (pid %d)", pid);
-		[client release];
+		secnotice("swcagent", "Refusing client without path (pid %d)", pid);
 		return nil;
 	}
 #else
@@ -193,20 +178,18 @@ static Client *identify_client(pid_t pid)
 
 	if (!(client.path = [NSString stringWithUTF8String:path_buf]) ||
 	    !(path_url = [NSURL fileURLWithPath:client.path])) {
-		asl_log(NULL, NULL, ASL_LEVEL_NOTICE, "Refusing client without path (pid %d)", pid);
-		[client release];
+		secnotice("swcagent", "Refusing client without path (pid %d)", pid);
 		return nil;
 	}
 
 	NSURL *bundle_url;
-	if ((bundle_url = (NSURL *)_CFBundleCopyBundleURLForExecutableURL((__bridge CFURLRef)path_url)) &&
+	if ((bundle_url = CFBridgingRelease(_CFBundleCopyBundleURLForExecutableURL((__bridge CFURLRef)path_url))) &&
 	    (client.bundle = [NSBundle bundleWithURL:bundle_url]) &&
 	    (client.client = [client.bundle bundleIdentifier])) {
 		client.client_type = CLIENT_TYPE_BUNDLE_IDENTIFIER;
 		CFStringRef client_name_cf = NULL;
 #if TARGET_OS_IPHONE
-		client_name_cf = SBSCopyLocalizedApplicationNameForDisplayIdentifier((__bridge CFStringRef)client.client);
-		client.client_name = (NSString *)client_name_cf;
+		client.client_name = [[LSApplicationProxy applicationProxyForIdentifier:client.client] localizedNameForContext:nil];
 #else
 		if (!LSCopyDisplayNameForURL((__bridge CFURLRef)bundle_url, &client_name_cf))
 			client.client_name = (__bridge_transfer NSString *)client_name_cf;
@@ -215,16 +198,14 @@ static Client *identify_client(pid_t pid)
 			CFRelease(client_name_cf);
 	} else {
 #if TARGET_OS_IPHONE
-		asl_log(NULL, NULL, ASL_LEVEL_NOTICE, "Refusing client without bundle identifier (%s)", path_buf);
-		[client release];
-		[bundle_url release];
+		secnotice("swcagent", "Refusing client without bundle identifier (%s)", path_buf);
 		return nil;
 #else
 		client.client_type = CLIENT_TYPE_EXECUTABLE_PATH;
 		CFBooleanRef is_app = NULL;
 		CFStringRef client_name_cf;
 		if (bundle_url &&
-		    CFURLCopyResourcePropertyForKey((__bridge CFURLRef)bundle_url, _kCFURLIsApplicationKey, &is_app, NULL) &&
+		    CFURLCopyResourcePropertyForKey((__bridge CFURLRef)bundle_url, kCFURLIsApplicationKey, &is_app, NULL) &&
 		    is_app == kCFBooleanTrue) {
 			if ((client.client = [bundle_url path]) &&
 			    !LSCopyDisplayNameForURL((__bridge CFURLRef)bundle_url, &client_name_cf))
@@ -239,8 +220,7 @@ static Client *identify_client(pid_t pid)
 #endif
 	}
 
-	[bundle_url release];
-	return client;
+    return client;
 }
 
 struct __SecTask {
@@ -255,7 +235,7 @@ struct __SecTask {
     CFDictionaryRef entitlements;
 };
 
-static CFStringRef SecTaskCopyLocalizedDescription(SecTaskRef task)
+static Client* SecTaskCopyClient(SecTaskRef task)
 {
     // SecTaskCopyDebugDescription is not sufficient to get the localized client name
     pid_t pid;
@@ -265,11 +245,8 @@ static CFStringRef SecTaskCopyLocalizedDescription(SecTaskRef task)
         pid = task->pid_self;
     }
     Client *client = identify_client(pid);
-    CFStringRef clientTaskName = (__bridge CFStringRef)client.client_name;
-    CFRetainSafe(clientTaskName);
-    [client release];
 
-    return clientTaskName;
+    return client;
 }
 
 static CFArrayRef SecTaskCopyAccessGroups(SecTaskRef task) {
@@ -282,7 +259,13 @@ static CFArrayRef SecTaskCopyAccessGroups(SecTaskRef task) {
     return groups;
 }
 
-CFStringRef SWCAGetOperationDescription(enum SWCAXPCOperation op)
+// Local function declarations
+
+static CFArrayRef gActiveArray = NULL;
+static CFDictionaryRef gActiveItem = NULL;
+
+
+static CFStringRef SWCAGetOperationDescription(enum SWCAXPCOperation op)
 {
     switch (op) {
         case swca_add_request_id:
@@ -332,7 +315,7 @@ static OSStatus _SecWBUEnsuredInitialized(void)
 }
 #endif
 
-bool SWCAIsAutofillEnabled(void)
+static bool SWCAIsAutofillEnabled(void)
 {
 #if TARGET_IPHONE_SIMULATOR
     // Assume the setting's on in the simulator: <rdar://problem/17057358> WBUAutoFillGetEnabledDataClasses call failing in the Simulator
@@ -348,7 +331,7 @@ bool SWCAIsAutofillEnabled(void)
 #endif
 }
 
-CFOptionFlags swca_handle_request(enum SWCAXPCOperation operation, CFStringRef client, CFArrayRef domains)
+static CFOptionFlags swca_handle_request(enum SWCAXPCOperation operation, Client* client, CFArrayRef domains)
 {
     CFUserNotificationRef notification = NULL;
     NSMutableDictionary *notification_dictionary = NULL;
@@ -425,16 +408,17 @@ check_database:
     other_button_key = @"SWC_DENY";
     info_message_key = @"SWC_INFO_MESSAGE";
 
-    notification_dictionary[(__bridge NSString *)kCFUserNotificationAlertHeaderKey] = [NSString stringWithFormat:request_format, client, domain];
+    notification_dictionary[(__bridge NSString *)kCFUserNotificationAlertHeaderKey] = [NSString stringWithFormat:request_format, client.client_name, domain];
     notification_dictionary[(__bridge NSString *)kCFUserNotificationAlertMessageKey] = NSLocalizedStringFromTableInBundle(info_message_key, swc_table, security_bundle, nil);
     notification_dictionary[(__bridge NSString *)kCFUserNotificationDefaultButtonTitleKey] = NSLocalizedStringFromTableInBundle(default_button_key, swc_table, security_bundle, nil);
     notification_dictionary[(__bridge NSString *)kCFUserNotificationAlternateButtonTitleKey] = NSLocalizedStringFromTableInBundle(alternate_button_key, swc_table, security_bundle, nil);
-    
+
     if (other_button_key) {
     // notification_dictionary[(__bridge NSString *)kCFUserNotificationOtherButtonTitleKey] = NSLocalizedStringFromTableInBundle(other_button_key, swc_table, security_bundle, nil);
     }
     notification_dictionary[(__bridge NSString *)kCFUserNotificationLocalizationURLKey] = [security_bundle bundleURL];
-    
+    notification_dictionary[(__bridge NSString *)SBUserNotificationAllowedApplicationsKey] = client.client;
+
 	SInt32 error;
 	if (!(notification = CFUserNotificationCreate(NULL, 0, kCFUserNotificationStopAlertLevel | kCFUserNotificationNoDefaultButtonFlag, &error, (__bridge CFDictionaryRef)notification_dictionary)) ||
 	    error)
@@ -450,7 +434,7 @@ out:
     return response;
 }
 
-bool swca_process_response(CFOptionFlags response, CFTypeRef *result)
+static bool swca_process_response(CFOptionFlags response, CFTypeRef *result)
 {
     int32_t value = (int32_t)(response & 0x3);
     CFNumberRef number = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &value);
@@ -458,39 +442,39 @@ bool swca_process_response(CFOptionFlags response, CFTypeRef *result)
     return (NULL != number);
 }
 
-bool swca_confirm_add(CFDictionaryRef attributes, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
+static bool swca_confirm_add(CFDictionaryRef attributes, Client* client, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
 {
     CFStringRef domain = (CFStringRef) CFDictionaryGetValue(attributes, kSecAttrServer);
     CFArrayRef domains = CFArrayCreate(kCFAllocatorDefault, (const void **)&domain, 1, &kCFTypeArrayCallBacks);
-    CFOptionFlags response = swca_handle_request(swca_add_request_id, clientTaskName, domains);
+    CFOptionFlags response = swca_handle_request(swca_add_request_id, client, domains);
     return swca_process_response(response, result);
 }
 
-bool swca_confirm_copy(CFDictionaryRef attributes, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
+static bool swca_confirm_copy(CFDictionaryRef attributes, Client* client, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
 {
     CFStringRef domain = (CFStringRef) CFDictionaryGetValue(attributes, kSecAttrServer);
     CFArrayRef domains = CFArrayCreate(kCFAllocatorDefault, (const void **)&domain, 1, &kCFTypeArrayCallBacks);
-    CFOptionFlags response = swca_handle_request(swca_copy_request_id, clientTaskName, domains);
+    CFOptionFlags response = swca_handle_request(swca_copy_request_id, client, domains);
     return swca_process_response(response, result);
 }
 
-bool swca_confirm_update(CFDictionaryRef attributes, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
+static bool swca_confirm_update(CFDictionaryRef attributes, Client* client, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
 {
     CFStringRef domain = (CFStringRef) CFDictionaryGetValue(attributes, kSecAttrServer);
     CFArrayRef domains = CFArrayCreate(kCFAllocatorDefault, (const void **)&domain, 1, &kCFTypeArrayCallBacks);
-    CFOptionFlags response = swca_handle_request(swca_update_request_id, clientTaskName, domains);
+    CFOptionFlags response = swca_handle_request(swca_update_request_id, client, domains);
     return swca_process_response(response, result);
 }
 
-bool swca_confirm_delete(CFDictionaryRef attributes, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
+static bool swca_confirm_delete(CFDictionaryRef attributes, Client* client, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
 {
     CFStringRef domain = (CFStringRef) CFDictionaryGetValue(attributes, kSecAttrServer);
     CFArrayRef domains = CFArrayCreate(kCFAllocatorDefault, (const void **)&domain, 1, &kCFTypeArrayCallBacks);
-    CFOptionFlags response = swca_handle_request(swca_delete_request_id, clientTaskName, domains);
+    CFOptionFlags response = swca_handle_request(swca_delete_request_id, client, domains);
     return swca_process_response(response, result);
 }
 
-bool swca_select_item(CFArrayRef items, CFStringRef clientTaskName, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
+static bool swca_select_item(CFArrayRef items, Client* client, CFArrayRef accessGroups, CFTypeRef *result, CFErrorRef *error)
 {
     CFUserNotificationRef notification = NULL;
     NSMutableDictionary *notification_dictionary = NULL;
@@ -545,20 +529,21 @@ entry:
     default_button_key = @"SWC_ALLOW_USE";
     alternate_button_key = @"SWC_CANCEL";
     info_message_key = @"SWC_INFO_MESSAGE";
-    
-    notification_dictionary[(__bridge NSString *)kCFUserNotificationAlertHeaderKey] = [NSString stringWithFormat: request_title_format, clientTaskName];
+
+    notification_dictionary[(__bridge NSString *)kCFUserNotificationAlertHeaderKey] = [NSString stringWithFormat: request_title_format, client.client_name];
     notification_dictionary[(__bridge NSString *)kCFUserNotificationAlertMessageKey] = NSLocalizedStringFromTableInBundle(info_message_key, swc_table, security_bundle, nil);
     notification_dictionary[(__bridge NSString *)kCFUserNotificationDefaultButtonTitleKey] = NSLocalizedStringFromTableInBundle(default_button_key, swc_table, security_bundle, nil);
     notification_dictionary[(__bridge NSString *)kCFUserNotificationAlternateButtonTitleKey] = NSLocalizedStringFromTableInBundle(alternate_button_key, swc_table, security_bundle, nil);
 
     notification_dictionary[(__bridge NSString *)kCFUserNotificationLocalizationURLKey] = [security_bundle bundleURL];
     notification_dictionary[(__bridge NSString *)kCFUserNotificationAlertTopMostKey] = [NSNumber numberWithBool:YES];
-    
+
     // additional keys for remote view controller
     notification_dictionary[(__bridge NSString *)SBUserNotificationDismissOnLock] = [NSNumber numberWithBool:YES];
     notification_dictionary[(__bridge NSString *)SBUserNotificationDontDismissOnUnlock] = [NSNumber numberWithBool:YES];
     notification_dictionary[(__bridge NSString *)SBUserNotificationRemoteServiceBundleIdentifierKey] = @"com.apple.SharedWebCredentialViewService";
     notification_dictionary[(__bridge NSString *)SBUserNotificationRemoteViewControllerClassNameKey] = @"SWCViewController";
+    notification_dictionary[(__bridge NSString *)SBUserNotificationAllowedApplicationsKey] = client.client;
 
     SInt32 err;
     if (!(notification = CFUserNotificationCreate(NULL, 0, 0, &err, (__bridge CFDictionaryRef)notification_dictionary)) ||
@@ -591,7 +576,7 @@ static void swca_xpc_dictionary_handler(const xpc_connection_t connection, xpc_o
     xpc_object_t xpcError = NULL;
     xpc_object_t replyMessage = NULL;
     SecTaskRef clientTask = NULL;
-    CFStringRef clientTaskName = NULL;
+    Client* client = NULL;
     CFArrayRef accessGroups = NULL;
 
     secdebug("swcagent_xpc", "entering");
@@ -634,7 +619,7 @@ static void swca_xpc_dictionary_handler(const xpc_connection_t connection, xpc_o
             // identify original client
             clientTask = SecTaskCreateWithAuditToken(kCFAllocatorDefault, auditToken);
             accessGroups = SecTaskCopyAccessGroups(clientTask);
-            clientTaskName = SecTaskCopyLocalizedDescription(clientTask);
+            client = SecTaskCopyClient(clientTask);
 #if CHECK_ENTITLEMENTS
             // check for presence of original client's shared credential entitlement
             hasEntitlement = (clientTask && SecTaskGetBooleanValueForEntitlement(clientTask, kSecEntitlementAssociatedDomains));
@@ -657,7 +642,7 @@ static void swca_xpc_dictionary_handler(const xpc_connection_t connection, xpc_o
                 if (query) {
                     CFTypeRef result = NULL;
                     // confirm that we can add this item
-                    if (swca_confirm_add(query, clientTaskName, accessGroups, &result, &error) && result) {
+                    if (swca_confirm_add(query, client, accessGroups, &result, &error) && result) {
                         SecXPCDictionarySetPList(replyMessage, kSecXPCKeyResult, result, &error);
                         CFRelease(result);
                     }
@@ -672,7 +657,7 @@ static void swca_xpc_dictionary_handler(const xpc_connection_t connection, xpc_o
                 if (query) {
                     CFTypeRef result = NULL;
                     // confirm that we can copy this item
-                    if (swca_confirm_copy(query, clientTaskName, accessGroups, &result, &error) && result) {
+                    if (swca_confirm_copy(query, client, accessGroups, &result, &error) && result) {
                         SecXPCDictionarySetPList(replyMessage, kSecXPCKeyResult, result, &error);
                         CFRelease(result);
                     }
@@ -687,7 +672,7 @@ static void swca_xpc_dictionary_handler(const xpc_connection_t connection, xpc_o
                 if (query) {
                     CFTypeRef result = NULL;
                     // confirm that we can copy this item
-                    if (swca_confirm_update(query, clientTaskName, accessGroups, &result, &error) && result) {
+                    if (swca_confirm_update(query, client, accessGroups, &result, &error) && result) {
                         SecXPCDictionarySetPList(replyMessage, kSecXPCKeyResult, result, &error);
                         CFRelease(result);
                     }
@@ -702,7 +687,7 @@ static void swca_xpc_dictionary_handler(const xpc_connection_t connection, xpc_o
                 if (query) {
                     CFTypeRef result = NULL;
                     // confirm that we can copy this item
-                    if (swca_confirm_delete(query, clientTaskName, accessGroups, &result, &error) && result) {
+                    if (swca_confirm_delete(query, client, accessGroups, &result, &error) && result) {
                         SecXPCDictionarySetPList(replyMessage, kSecXPCKeyResult, result, &error);
                         CFRelease(result);
                     }
@@ -717,7 +702,7 @@ static void swca_xpc_dictionary_handler(const xpc_connection_t connection, xpc_o
                 if (items) {
                     CFTypeRef result = NULL;
                     // select a dictionary from an input array of dictionaries
-                    if (swca_select_item(items, clientTaskName, accessGroups, &result, &error) && result) {
+                    if (swca_select_item(items, client, accessGroups, &result, &error) && result) {
                         SecXPCDictionarySetPList(replyMessage, kSecXPCKeyResult, result, &error);
                         CFRelease(result);
                     }
@@ -777,43 +762,36 @@ static void swca_xpc_dictionary_handler(const xpc_connection_t connection, xpc_o
 
     if (replyMessage) {
         xpc_connection_send_message(connection, replyMessage);
-        xpc_release(replyMessage);
-    }
-    if (xpcError) {
-        xpc_release(xpcError);
     }
     CFReleaseSafe(error);
     CFReleaseSafe(accessGroups);
-    CFReleaseSafe(clientTaskName);
 }
+
+static xpc_connection_t swclistener = NULL;
 
 static void swca_xpc_init()
 {
     secdebug("swcagent_xpc", "start");
 
-    xpc_connection_t listener = xpc_connection_create_mach_service(kSWCAXPCServiceName, NULL, XPC_CONNECTION_MACH_SERVICE_LISTENER);
-    if (!listener) {
+    swclistener = xpc_connection_create_mach_service(kSWCAXPCServiceName, NULL, XPC_CONNECTION_MACH_SERVICE_LISTENER);
+    if (!swclistener) {
         seccritical("swcagent failed to register xpc listener, exiting");
         abort();
     }
 
-    xpc_connection_set_event_handler(listener, ^(xpc_object_t connection) {
+    xpc_connection_set_event_handler(swclistener, ^(xpc_object_t connection) {
         if (xpc_get_type(connection) == XPC_TYPE_CONNECTION) {
             xpc_connection_set_event_handler(connection, ^(xpc_object_t event) {
                 if (xpc_get_type(event) == XPC_TYPE_DICTIONARY) {
-                    xpc_retain(connection);
-                    xpc_retain(event);
                     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                         swca_xpc_dictionary_handler(connection, event);
-                        xpc_release(event);
-                        xpc_release(connection);
                     });
                 }
             });
             xpc_connection_resume(connection);
         }
     });
-    xpc_connection_resume(listener);
+    xpc_connection_resume(swclistener);
 }
 
 int main(int argc, char *argv[])
@@ -823,14 +801,12 @@ int main(int argc, char *argv[])
         if (wait4debugger && !strcasecmp("YES", wait4debugger)) {
             seccritical("SIGSTOPing self, awaiting debugger");
             kill(getpid(), SIGSTOP);
-            asl_log(NULL, NULL, ASL_LEVEL_CRIT,
-                    "Again, for good luck (or bad debuggers)");
+            seccritical("Again, for good luck (or bad debuggers)");
             kill(getpid(), SIGSTOP);
         }
         swca_xpc_init();
         dispatch_main();
     }
-    return 0;
 }
 
 /* vi:set ts=4 sw=4 et: */

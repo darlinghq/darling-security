@@ -48,7 +48,7 @@ Certificate::clForType(CSSM_CERT_TYPE type)
 }
 
 Certificate::Certificate(const CSSM_DATA &data, CSSM_CERT_TYPE type, CSSM_CERT_ENCODING encoding) :
-	ItemImpl(CSSM_DL_DB_RECORD_X509_CERTIFICATE, reinterpret_cast<SecKeychainAttributeList *>(NULL), UInt32(data.Length), reinterpret_cast<const void *>(data.Data)),
+	ItemImpl((SecItemClass) CSSM_DL_DB_RECORD_X509_CERTIFICATE, reinterpret_cast<SecKeychainAttributeList *>(NULL), UInt32(data.Length), reinterpret_cast<const void *>(data.Data)),
 	mHaveTypeAndEncoding(true),
 	mPopulated(false),
 	mType(type),
@@ -58,7 +58,8 @@ Certificate::Certificate(const CSSM_DATA &data, CSSM_CERT_TYPE type, CSSM_CERT_E
 	mV1SubjectPublicKeyCStructValue(NULL),
 	mV1SubjectNameCStructValue(NULL),
 	mV1IssuerNameCStructValue(NULL),
-	mSha1Hash(NULL),
+    mSha1Hash(NULL),
+    mSha256Hash(NULL),
 	mEncodingVerified(false)
 {
 	if (data.Length == 0 || data.Data == NULL)
@@ -75,7 +76,8 @@ Certificate::Certificate(const Keychain &keychain, const PrimaryKey &primaryKey,
 	mV1SubjectPublicKeyCStructValue(NULL),
 	mV1SubjectNameCStructValue(NULL),
 	mV1IssuerNameCStructValue(NULL),
-	mSha1Hash(NULL),
+    mSha1Hash(NULL),
+    mSha256Hash(NULL),
 	mEncodingVerified(false)
 {
 }
@@ -112,6 +114,7 @@ Certificate::Certificate(const Keychain &keychain, const PrimaryKey &primaryKey)
 	mV1SubjectNameCStructValue(NULL),
 	mV1IssuerNameCStructValue(NULL),
 	mSha1Hash(NULL),
+    mSha256Hash(NULL),
 	mEncodingVerified(false)
 {
 	// @@@ In this case we don't know the type...
@@ -129,6 +132,7 @@ Certificate::Certificate(Certificate &certificate) :
 	mV1SubjectNameCStructValue(NULL),
 	mV1IssuerNameCStructValue(NULL),
 	mSha1Hash(NULL),
+    mSha256Hash(NULL),
 	mEncodingVerified(false)
 {
 }
@@ -150,9 +154,12 @@ try
 
 	if (mSha1Hash)
 		CFRelease(mSha1Hash);
+    if (mSha256Hash)
+        CFRelease(mSha256Hash);
 }
 catch (...)
 {
+    return;	// Prevent re-throw of exception [function-try-block]
 }
 
 CSSM_HANDLE
@@ -425,8 +432,8 @@ findPrintableField(
 				if(memcmp(tvpPtr->type.Data, tvpType->Data, tvpType->Length)) {
 					/* If we don't have a match but the requested OID is CSSMOID_UserID,
 					 * look for a matching X.500 UserID OID: (0.9.2342.19200300.100.1.1)  */
-					const char cssm_userid_oid[] = { 0x09,0x49,0x86,0x49,0x1f,0x12,0x8c,0xe4,0x81,0x81 };
-					const char x500_userid_oid[] = { 0x09,0x92,0x26,0x89,0x93,0xF2,0x2C,0x64,0x01,0x01 };
+					const unsigned char cssm_userid_oid[] = { 0x09,0x49,0x86,0x49,0x1f,0x12,0x8c,0xe4,0x81,0x81 };
+					const unsigned char x500_userid_oid[] = { 0x09,0x92,0x26,0x89,0x93,0xF2,0x2C,0x64,0x01,0x01 };
 					if(!(tvpType->Length == sizeof(cssm_userid_oid) &&
 						!memcmp(tvpPtr->type.Data, x500_userid_oid, sizeof(x500_userid_oid)) &&
 						!memcmp(tvpType->Data, cssm_userid_oid, sizeof(cssm_userid_oid)))) {
@@ -735,10 +742,10 @@ Certificate::verifyEncoding(CSSM_DATA_PTR data)
 
 		if (mHaveTypeAndEncoding) {
 			if (mType < CSSM_CERT_X_509v1 || mType > CSSM_CERT_X_509v3) {
-				secdebug("Certificate", "verifyEncoding: certificate has custom type (%d)", (int)mType);
+				secinfo("Certificate", "verifyEncoding: certificate has custom type (%d)", (int)mType);
 			}
 			if (mEncoding < CSSM_CERT_ENCODING_BER || mEncoding > CSSM_CERT_ENCODING_DER) {
-				secdebug("Certificate", "verifyEncoding: certificate has custom encoding (%d)", (int)mEncoding);
+				secinfo("Certificate", "verifyEncoding: certificate has custom encoding (%d)", (int)mEncoding);
 			}
 		}
 
@@ -754,16 +761,16 @@ Certificate::verifyEncoding(CSSM_DATA_PTR data)
 			CSSM_SIZE tagLength = (CSSM_SIZE)((uintptr_t)derInfo.content.data - (uintptr_t)der.data);
 			CSSM_SIZE derLength = (CSSM_SIZE)derInfo.content.length + tagLength;
 			if (derLength != data->Length) {
-				secdebug("Certificate", "Certificate DER length is %d, but data length is %d",
+				secinfo("Certificate", "Certificate DER length is %d, but data length is %d",
 						(int)derLength, (int)data->Length);
 				// will adjust data size if DER length is positive, but smaller than actual length
 				if ((derLength > 0) && (derLength < data->Length)) {
 					verifiedLength = derLength;
-					secdebug("Certificate", "Will adjust certificate data length to %d",
+					secinfo("Certificate", "Will adjust certificate data length to %d",
 							(int)derLength);
 				}
 				else {
-					secdebug("Certificate", "Certificate encoding invalid (DER length is %d)",
+					secinfo("Certificate", "Certificate encoding invalid (DER length is %d)",
 							(int)derLength);
 					return false;
 				}
@@ -772,7 +779,7 @@ Certificate::verifyEncoding(CSSM_DATA_PTR data)
 		}
 		else {
 			// failure to decode provided data as DER sequence
-			secdebug("Certificate", "Certificate not in DER encoding (error %d)",
+			secinfo("Certificate", "Certificate not in DER encoding (error %d)",
 					(int)drtn);
 			return false;
 		}
@@ -781,7 +788,7 @@ Certificate::verifyEncoding(CSSM_DATA_PTR data)
 	if (verifiedLength > 0) {
 		// setData acquires the mMutex lock, so we call it while not holding the lock
 		setData((UInt32)verifiedLength, data->Data);
-		secdebug("Certificate", "Adjusted certificate data length to %d",
+		secinfo("Certificate", "Adjusted certificate data length to %d",
 				(int)verifiedLength);
 	}
 
@@ -791,24 +798,17 @@ Certificate::verifyEncoding(CSSM_DATA_PTR data)
 const CssmData &
 Certificate::data()
 {
-	CssmDataContainer *data = NULL;
-	bool hasKeychain = false;
-	bool verified = false;
-	{
-		StLock<Mutex>_(mMutex);
-		data = mData.get();
-		hasKeychain = (mKeychain != NULL);
-		verified = mEncodingVerified;
-	}
+    StLock<Mutex> _(mMutex);
+
+	CssmDataContainer *data = mData.get();
+	bool hasKeychain = (mKeychain != NULL);
+	bool verified = mEncodingVerified;
 
 	// If data has been set but not yet verified, verify it now.
 	if (!verified && data) {
 		// verifyEncoding might modify mData, so refresh the data container
 		verified = verifyEncoding(data);
-		{
-			StLock<Mutex>_(mMutex);
-			data = mData.get();
-		}
+		data = mData.get();
 	}
 
 	// If data isn't set at this point, try to read it from the db record
@@ -817,20 +817,16 @@ Certificate::data()
 	    // Make sure mUniqueId is set.
 		dbUniqueRecord();
 		CssmDataContainer _data;
-		{
-			StLock<Mutex>_(mMutex);
-			mData = NULL;
-			/* new data allocated by CSPDL, implicitly freed by CssmDataContainer */
-			mUniqueId->get(NULL, &_data);
-		}
+
+		mData = NULL;
+		/* new data allocated by CSPDL, implicitly freed by CssmDataContainer */
+		mUniqueId->get(NULL, &_data);
+
 		/* this saves a copy to be freed at destruction and to be passed to caller */
 		setData((UInt32)_data.length(), _data.data());
 		// verifyEncoding might modify mData, so refresh the data container
 		verified = verifyEncoding(&_data);
-		{
-			StLock<Mutex>_(mMutex);
-			data = mData.get();
-		}
+		data = mData.get();
 	}
 
 	// If the data hasn't been set we can't return it.
@@ -878,7 +874,7 @@ Certificate::encoding()
 	return mEncoding;
 }
 
-const CSSM_X509_ALGORITHM_IDENTIFIER_PTR
+CSSM_X509_ALGORITHM_IDENTIFIER_PTR
 Certificate::algorithmID()
 {
 	StLock<Mutex>_(mMutex);
@@ -911,6 +907,28 @@ Certificate::sha1Hash()
 	return mSha1Hash; /* object is owned by our instance; caller should NOT release it */
 }
 
+CFDataRef
+Certificate::sha256Hash()
+{
+    StLock<Mutex>_(mMutex);
+    if (!mSha256Hash) {
+        SecCertificateRef certRef = handle(false);
+        CFAllocatorRef allocRef = (certRef) ? CFGetAllocator(certRef) : NULL;
+        CSSM_DATA certData = data();
+        if (certData.Length == 0 || !certData.Data) {
+            MacOSError::throwMe(errSecDataNotAvailable);
+        }
+        const UInt8 *dataPtr = (const UInt8 *)certData.Data;
+        CFIndex dataLen = (CFIndex)certData.Length;
+        CFMutableDataRef digest = CFDataCreateMutable(allocRef, CC_SHA256_DIGEST_LENGTH);
+        CFDataSetLength(digest, CC_SHA256_DIGEST_LENGTH);
+        CCDigest(kCCDigestSHA256, dataPtr, dataLen, CFDataGetMutableBytePtr(digest));
+        mSha256Hash = digest;
+    }
+    return mSha256Hash; /* object is owned by our instance; caller should NOT release it */
+}
+
+
 CFStringRef
 Certificate::commonName()
 {
@@ -926,7 +944,7 @@ Certificate::distinguishedName(const CSSM_OID *sourceOid, const CSSM_OID *compon
 	CSSM_DATA_PTR fieldValue = copyFirstFieldValue(*sourceOid);
 	CSSM_X509_NAME_PTR x509Name = (CSSM_X509_NAME_PTR)fieldValue->Data;
 	const CSSM_DATA	*printValue = NULL;
-	CFStringBuiltInEncodings encoding;
+	CFStringBuiltInEncodings encoding = kCFStringEncodingUTF8;
 
 	if (fieldValue && fieldValue->Data)
 		printValue = findPrintableField(*x509Name, componentOid, true, &encoding);
@@ -1057,7 +1075,7 @@ Certificate::copyEmailAddresses()
 	return array;
 }
 
-const CSSM_X509_NAME_PTR
+CSSM_X509_NAME_PTR
 Certificate::subjectName()
 {
 	StLock<Mutex>_(mMutex);
@@ -1068,7 +1086,7 @@ Certificate::subjectName()
     return (const CSSM_X509_NAME_PTR)mV1SubjectNameCStructValue->Data;
 }
 
-const CSSM_X509_NAME_PTR
+CSSM_X509_NAME_PTR
 Certificate::issuerName()
 {
 	StLock<Mutex>_(mMutex);

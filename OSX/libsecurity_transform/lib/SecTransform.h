@@ -176,7 +176,7 @@ CF_EXPORT const CFStringRef kSecTransformAbortOriginatorKey;
 						
 */
 
-enum
+CF_ENUM(CFIndex)
 {
 	kSecTransformErrorAttributeNotFound = 1,
 	kSecTransformErrorInvalidOperation = 2,

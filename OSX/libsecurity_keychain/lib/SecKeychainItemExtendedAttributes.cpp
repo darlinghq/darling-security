@@ -21,6 +21,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
+#include <security_utilities/casts.h>
 #include "SecKeychainItemExtendedAttributes.h"
 #include "SecKeychainItemPriv.h"
 #include "ExtendedAttribute.h"
@@ -42,6 +43,8 @@ static CFTypeID SecKeychainItemExtendedAttributesGetTypeID(void)
 }
 #endif
 
+extern "C" Boolean SecKeyIsCDSAKey(SecKeyRef ref);
+
 /*
  * Determine if incoming itemRef can be considered for 
  * this mechanism; throw if not.
@@ -52,7 +55,7 @@ static void isItemRefCapable(
 	CFTypeID id = CFGetTypeID(itemRef);
 	if((id == gTypes().ItemImpl.typeID) ||
 	   (id == gTypes().Certificate.typeID) || 
-	   (id == gTypes().KeyItem.typeID)) {
+	   (id == SecKeyGetTypeID() && SecKeyIsCDSAKey((SecKeyRef)itemRef))) {
 		return;
 	}
 	else {
@@ -120,7 +123,7 @@ static bool lookupExtendedAttr(
 	StorageManager::KeychainList kcList;
 	kcList.push_back(inItem->keychain());
 	
-	KCCursor cursor(kcList, CSSM_DL_DB_RECORD_EXTENDED_ATTRIBUTE, &attrList);
+	KCCursor cursor(kcList, (SecItemClass) CSSM_DL_DB_RECORD_EXTENDED_ATTRIBUTE, &attrList);
 	try {
 		return cursor->next(foundItem);
 	}
@@ -140,9 +143,9 @@ OSStatus SecKeychainItemSetExtendedAttribute(
 	CFStringRef					attrName,
 	CFDataRef					attrValue)			/* NULL means delete the attribute */
 {
-#if SECTRUST_OSX
-#warning This needs to detect SecCertificateRef items, and when it does, SecKeychainItemDelete must be updated
-#endif
+    // <rdar://25635468>
+    //%%% This needs to detect SecCertificateRef items, and when it does, SecKeychainItemDelete must be updated
+
     BEGIN_SECAPI
 	
 	if((itemRef == NULL) || (attrName == NULL)) {
@@ -161,7 +164,7 @@ OSStatus SecKeychainItemSetExtendedAttribute(
 		return errSecSuccess;
 	}
 
-	CSSM_DATA attrCValue = {CFDataGetLength(attrValue), (uint8 *)CFDataGetBytePtr(attrValue)};
+	CSSM_DATA attrCValue = {int_cast<CFIndex, CSSM_SIZE>(CFDataGetLength(attrValue)), (uint8 *)CFDataGetBytePtr(attrValue)};
 	
 	if(haveMatch) {
 		/* update existing extended attribute record */
@@ -190,9 +193,9 @@ OSStatus SecKeychainItemCopyExtendedAttribute(
 	CFStringRef					attrName,
 	CFDataRef					*attrValue)		/* RETURNED */
 {
-#if SECTRUST_OSX
-#warning This needs to detect SecCertificateRef items
-#endif
+    // <rdar://25635468>
+    //%%% This needs to detect SecCertificateRef items
+
     BEGIN_SECAPI
 	
 	if((itemRef == NULL) || (attrName == NULL) || (attrValue == NULL)) {
@@ -231,9 +234,9 @@ OSStatus SecKeychainItemCopyAllExtendedAttributes(
 	CFArrayRef					*attrValues)		/* optional, RETURNED, each element is a 
 													 *   CFDataRef */
 {
-#if SECTRUST_OSX
-#warning This needs to detect SecCertificateRef items, and when it does, SecKeychainItemDelete must be updated
-#endif
+    // <rdar://25635468>
+    //%%% This needs to detect SecCertificateRef items, and when it does, SecKeychainItemDelete must be updated
+
     BEGIN_SECAPI
 	
 	if((itemRef == NULL) || (attrNames == NULL)) {
@@ -272,7 +275,7 @@ OSStatus SecKeychainItemCopyAllExtendedAttributes(
 	CFMutableArrayRef outValues = NULL;
 	OSStatus ourRtn = errSecSuccess;
 	
-	KCCursor cursor(kcList, CSSM_DL_DB_RECORD_EXTENDED_ATTRIBUTE, &attrList);
+	KCCursor cursor(kcList, (SecItemClass) CSSM_DL_DB_RECORD_EXTENDED_ATTRIBUTE, &attrList);
 	for(;;) {
 		bool gotOne = false;
 		Item foundItem;

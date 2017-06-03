@@ -25,23 +25,20 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/SecCertificate.h>
 #include <Security/SecCertificatePriv.h>
-#include <Security/SecCertificateInternal.h>
 #include <Security/SecItem.h>
 #include <Security/SecItemPriv.h>
 #include <Security/SecIdentityPriv.h>
 #include <Security/SecIdentity.h>
 #include <Security/SecPolicy.h>
 #include <Security/SecPolicyPriv.h>
-#include <Security/SecPolicyInternal.h>
+#include <Security/SecTrust.h>
+#include <Security/SecTrustPriv.h>
 #include <Security/SecCMS.h>
+#include <utilities/SecCFRelease.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "Security_regressions.h"
-
-#if TARGET_OS_IPHONE
-
-#define CFReleaseSafe(CF) { CFTypeRef _cf = (CF); if (_cf) {  CFRelease(_cf); } }
+#include "shared_regressions.h"
 
 static const UInt8 kSignedPList[] = {
 	0x30, 0x80, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02, 0xa0, 0x80, 0x30,
@@ -902,11 +899,12 @@ static void test_OTA_PKI()
 		NULL, "Get the Apple PKI Settings Root Certification Authority Cert Data");
 	
 	SecCertificateRef 	apple_pki_settings_root_certificate_authority_cert = NULL;
-	isnt(apple_pki_settings_root_certificate_authority_cert = SecCertificateCreateWithData(kCFAllocatorDefault, apple_pki_settings_root_certificate_authority_cert_data),
+	isnt(apple_pki_settings_root_certificate_authority_cert = SecCertificateCreateWithBytes(kCFAllocatorDefault,
+                                                                kApplePKISettingsRootCACert, sizeof(kApplePKISettingsRootCACert)),
 		NULL, "Get the Apple PKI Settings Root Certification Authority Cert");
     
 	CFArrayRef anchors = CFArrayCreate(kCFAllocatorDefault, (const void **)&apple_pki_settings_root_certificate_authority_cert, 1, &kCFTypeArrayCallBacks);
-	CFReleaseSafe(apple_pki_settings_root_certificate_authority_cert);
+	CFReleaseNull(apple_pki_settings_root_certificate_authority_cert);
 	apple_pki_settings_root_certificate_authority_cert = NULL;
 		
 	SecTrustSetAnchorCertificates(trustRef,  anchors);
@@ -985,7 +983,7 @@ static void test_OTA_PKI()
 	CFReleaseSafe(manifestRef);
 	CFReleaseSafe(base_manifest_data);
 	CFReleaseSafe(base_manifestRef);
-
+    CFReleaseSafe(anchors);
     CFReleaseSafe(apple_pki_settings_root_certificate_authority_cert_data);
 	
 }
@@ -1007,4 +1005,3 @@ int si_74_OTA_PKI_Signer(int argc, char *const *argv)
 	return 0;
 }
 
-#endif

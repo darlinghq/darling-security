@@ -37,6 +37,7 @@
  *
  * $Id: secasn1d.c,v 1.16 2004/05/13 15:29:13 dmitch Exp $
  */
+#include <limits.h>
 
 #include "secasn1.h"
 #include "secerr.h"
@@ -388,7 +389,7 @@ sec_asn1d_push_state (SEC_ASN1DecoderContext *cx,
 		      const SecAsn1Template *theTemplate,
 		      void *dest, PRBool new_depth)
 {
-    sec_asn1d_state *state, *new_state;
+    sec_asn1d_state *state, *new_state = NULL;
 
     state = cx->current;
 
@@ -432,6 +433,9 @@ loser:
     if (state != NULL) {
         PORT_ArenaRelease(cx->our_pool, state->our_mark);
         state->our_mark = NULL;
+    }
+    if (new_state != NULL) {
+        PORT_Free(new_state);
     }
     return NULL;
 }
@@ -1068,7 +1072,9 @@ sec_asn1d_check_and_subtract_length (unsigned long *remaining,
     PORT_Assert(cx);
     if (!remaining || !cx) {
         PORT_SetError (SEC_ERROR_INVALID_ARGS);
-        cx->status = decodeError;
+        if(cx) {
+            cx->status = decodeError;
+        }
         return PR_FALSE;
     }
     if (*remaining < consumed) {
@@ -1428,8 +1434,10 @@ regular_string_type:
 		    alloc_len += subitem->len;
 	    }
 
-	    item->Data = (unsigned char*)sec_asn1d_zalloc (poolp, alloc_len);
-	    if (item->Data == NULL) {
+        if (item) {
+            item->Data = (unsigned char*)sec_asn1d_zalloc (poolp, alloc_len);
+        }
+        if (item == NULL || item->Data == NULL) {
 		    dprintf("decodeError: prepare for contents zalloc\n");
 			state->top->status = decodeError;
 			break;
@@ -1733,8 +1741,41 @@ sec_asn1d_parse_leaf (sec_asn1d_state *state,
 				len--;
 			}
 		}
-		PORT_Memcpy (item->Data + item->Length, buf, len);
-		item->Length += len;
+		unsigned long offset = item->Length;
+		if (state->underlying_kind == SEC_ASN1_BIT_STRING) {
+			// The previous bit string must have no unused bits.
+			if (item->Length & 0x7) {
+				PORT_SetError (SEC_ERROR_BAD_DER);
+				state->top->status = decodeError;
+				return 0;
+			}
+			// If this is a bit string, the length is bits, not bytes.
+			offset = item->Length >> 3;
+		}
+		if (state->underlying_kind == SEC_ASN1_BIT_STRING) {
+			// Protect against overflow during the bytes-to-bits conversion.
+			if (len >= (ULONG_MAX >> 3) + 1) {
+				PORT_SetError (SEC_ERROR_BAD_DER);
+				state->top->status = decodeError;
+				return 0;
+			}
+			unsigned long len_in_bits = (len << 3) - state->bit_string_unused_bits;
+			// Protect against overflow when computing the total length in bits.
+			if (UINT_MAX - item->Length < len_in_bits) {
+				PORT_SetError (SEC_ERROR_BAD_DER);
+				state->top->status = decodeError;
+				return 0;
+			}
+			item->Length += len_in_bits;
+		} else {
+			if (UINT_MAX - item->Length < len) {
+				PORT_SetError (SEC_ERROR_BAD_DER);
+				state->top->status = decodeError;
+				return 0;
+			}
+			item->Length += len;
+		}
+		PORT_Memcpy (item->Data + offset, buf, len);
     }
     state->pending -= bufLen;
     if (state->pending == 0)
@@ -1808,13 +1849,6 @@ sec_asn1d_parse_more_bit_string (sec_asn1d_state *state,
     }
 
     len = sec_asn1d_parse_leaf (state, buf, len);
-    if (state->place == beforeEndOfContents && state->dest != NULL) {
-	SecAsn1Item *item;
-
-	item = (SecAsn1Item *)(state->dest);
-	if (item->Length)
-	    item->Length = (item->Length << 3) - state->bit_string_unused_bits;
-    }
 
     return len;
 }
@@ -2289,7 +2323,7 @@ sec_asn1d_concat_substrings (sec_asn1d_state *state)
 	     * All bit-string substrings except the last one should be
 	     * a clean multiple of 8 bits.
 	     */
-	    if (is_bit_string && (substring->next == NULL)
+	    if (is_bit_string && (substring->next != NULL)
 			      && (substring->len & 0x7)) {
 			dprintf("decodeError: sec_asn1d_concat_substrings align\n");	
 			PORT_SetError (SEC_ERROR_BAD_DER);

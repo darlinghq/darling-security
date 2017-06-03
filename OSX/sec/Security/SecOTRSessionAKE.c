@@ -32,6 +32,7 @@
 #include "SecOTRDHKey.h"
 
 #include <utilities/SecCFWrappers.h>
+#include <utilities/SecBuffer.h>
 
 #include <CoreFoundation/CFRuntime.h>
 #include <CoreFoundation/CFString.h>
@@ -44,10 +45,13 @@
 #include <corecrypto/cchmac.h>
 #include <corecrypto/ccsha2.h>
 
+#include <os/activity.h>
+
 #include <string.h>
 
 static void SecOTRInitMyDHKeys(SecOTRSessionRef session)
 {
+
     CFReleaseNull(session->_myKey);
     session->_myKey = SecOTRFullDHKCreate(kCFAllocatorDefault);
     CFReleaseNull(session->_myNextKey);
@@ -56,6 +60,8 @@ static void SecOTRInitMyDHKeys(SecOTRSessionRef session)
     session->_missedAck = true;
     session->_receivedAck = false;
     bzero(session->_keyCache, sizeof(session->_keyCache));
+
+    secnotice("otr", "%@ Reinitializing DH Keys, first: %@", session, session->_myKey);
 }
 
 OSStatus SecOTRSAppendStartPacket(SecOTRSessionRef session, CFMutableDataRef appendPacket)
@@ -68,23 +74,26 @@ OSStatus SecOTRSAppendStartPacket(SecOTRSessionRef session, CFMutableDataRef app
         // Generate r and x and calculate gx:
         SecOTRInitMyDHKeys(session);
 
-        CFMutableDataRef destinationMessage = NULL;
-        if (session->_textOutput) {
-            destinationMessage = CFDataCreateMutable(kCFAllocatorDefault, 0);
-        } else {
-            destinationMessage = CFRetainSafe(appendPacket);
-        }
-
+        CFMutableDataRef dhMessage = CFDataCreateMutable(kCFAllocatorDefault, 0);
 
         result = SecRandomCopyBytes(kSecRandomDefault, sizeof(session->_r), session->_r);
         if (result == errSecSuccess) {
-            SecOTRAppendDHMessage(session, destinationMessage);
-            if (session->_textOutput) {
-                SecOTRPrepareOutgoingBytes(destinationMessage, appendPacket);
-            }
+            SecOTRAppendDHMessage(session, dhMessage);
         }
-        CFReleaseSafe(destinationMessage);
+
+        CFDataPerformWithHexString(dhMessage, ^(CFStringRef messageString) {
+            secnotice("otr", "%@ Start packet: %@", session, messageString);
+        });
+
+        if (session->_textOutput) {
+            SecOTRPrepareOutgoingBytes(dhMessage, appendPacket);
+        } else {
+            CFDataAppend(appendPacket, dhMessage);
+        }
+
+        CFReleaseSafe(dhMessage);
     });
+
 
     return result;
 }
@@ -99,22 +108,24 @@ OSStatus SecOTRSAppendRestartPacket(SecOTRSessionRef session, CFMutableDataRef a
             result = errSecDecode;
             return;
         }
-        CFMutableDataRef destinationMessage;
-        if (session->_textOutput) {
-            destinationMessage = CFDataCreateMutable(kCFAllocatorDefault, 0);
-        } else {
-            destinationMessage = CFRetainSafe(appendPacket);
-        }
+        CFMutableDataRef dhMessage = CFDataCreateMutable(kCFAllocatorDefault, 0);
 
         session->_state = kAwaitingDHKey;
         CFReleaseNull(session->_receivedDHMessage);
         CFReleaseNull(session->_receivedDHKeyMessage);
         
-        SecOTRAppendDHMessage(session, destinationMessage);
+        SecOTRAppendDHMessage(session, dhMessage);
+
+        CFDataPerformWithHexString(dhMessage, ^(CFStringRef messageString) {
+            secnotice("otr", "%@ Restart packet: %@", session, messageString);
+        });
+
         if (session->_textOutput) {
-            SecOTRPrepareOutgoingBytes(destinationMessage, appendPacket);
+            SecOTRPrepareOutgoingBytes(dhMessage, appendPacket);
+        } else {
+            CFDataAppend(appendPacket, dhMessage);
         }
-        CFReleaseSafe(destinationMessage);
+        CFReleaseSafe(dhMessage);
     });
 
     return result;
@@ -160,9 +171,15 @@ static bool SecOTRMyGXHashIsBigger(SecOTRSessionRef session, CFDataRef dhCommitM
     
     require(myHash, fail);
     require(theirHash, fail);
-    
+
     mineIsBigger = 0 < memcmp(myHash, theirHash, CCSHA256_OUTPUT_SIZE);
     
+    BufferPerformWithHexString(myHash, CCSHA256_OUTPUT_SIZE, ^(CFStringRef myHashString) {
+        BufferPerformWithHexString(theirHash, CCSHA256_OUTPUT_SIZE, ^(CFStringRef theirHashString) {
+            secdebug("otr", "%@ %s gx is bigger, M:%@ T:%@", session, mineIsBigger ? "mine" : "their", myHashString, theirHashString);
+        });
+    });
+
 fail:
     CFReleaseNull(myDHCommitMessage);
     return mineIsBigger;
@@ -174,16 +191,20 @@ static OSStatus SecOTRSProcessDHMessage(SecOTRSessionRef session,
 {
     OSStatus result = errSecParam;
 
+    CFStringRef messageMessage = CFSTR("");
+
     switch (session->_state) {
         case kAwaitingDHKey:
             // Compare hash values.
             if (SecOTRMyGXHashIsBigger(session, incomingPacket)) {
                 // If we're bigger we resend to force them to deal.
+                messageMessage = CFSTR("Our GX is bigger, resending DH");
                 CFReleaseNull(session->_receivedDHMessage);
                 SecOTRAppendDHMessage(session, negotiationResponse);
                 result = errSecSuccess;
                 break;
             } // Else intentionally fall through to idle
+            messageMessage = CFSTR("Our GX is bigger, resending DH");
         case kAwaitingSignature:
         case kIdle:
         case kDone:
@@ -193,6 +214,8 @@ static OSStatus SecOTRSProcessDHMessage(SecOTRSessionRef session,
         case kAwaitingRevealSignature:
             SecOTRAppendDHKeyMessage(session, negotiationResponse);
 
+            if (messageMessage == 0)
+                messageMessage = CFSTR("Sending DHKey");
             // Keep the packet for use later.
             CFReleaseNull(session->_receivedDHMessage);
             session->_receivedDHMessage = CFDataCreateCopy(kCFAllocatorDefault, incomingPacket);
@@ -205,6 +228,13 @@ static OSStatus SecOTRSProcessDHMessage(SecOTRSessionRef session,
             break;
     }
 
+    if (result == errSecSuccess) {
+        CFDataPerformWithHexString(negotiationResponse, ^(CFStringRef responseString) {
+            secnotice("otr", "%@ %@: %@", session, messageMessage, responseString);
+        });
+    } else {
+        secnotice("otr", "%@ Process DH failed %d", session, (int)result);
+    }
     return result;
 }
 
@@ -242,7 +272,8 @@ static OSStatus SecOTRSProcessDHKeyMessage(SecOTRSessionRef session,
                                         CFMutableDataRef negotiationResponse)
 {
     OSStatus result = errSecUnimplemented;
-    
+    CFStringRef messageMessage = CFSTR("");
+
     result = SecOTRSExtractTheirPublicDHKey(session, incomingPacket);
     require_noerr(result, exit);
 
@@ -253,16 +284,22 @@ static OSStatus SecOTRSProcessDHKeyMessage(SecOTRSessionRef session,
             session->_state = kAwaitingSignature;
             session->_receivedDHKeyMessage = CFDataCreateCopy(kCFAllocatorDefault, incomingPacket);
             result = errSecSuccess;
+            messageMessage = CFSTR("Sending reveal signature");
             break;
         case kAwaitingSignature:
-            if (CFEqualSafe(incomingPacket, session->_receivedDHKeyMessage))
+            if (CFEqualSafe(incomingPacket, session->_receivedDHKeyMessage)) {
                 SecOTRAppendRevealSignatureMessage(session, negotiationResponse);
+                messageMessage = CFSTR("Resending reveal signature");
+            } else {
+                messageMessage = CFSTR("Ignoring new DHKey message");
+            }
             result = errSecSuccess;
             break;
         case kIdle:
         case kDone:
         case kAwaitingRevealSignature:
             result = errSecSuccess;
+            messageMessage = CFSTR("Ignoring DHKey message");
             break;
         default:
             result = errSecInteractionNotAllowed;
@@ -270,6 +307,14 @@ static OSStatus SecOTRSProcessDHKeyMessage(SecOTRSessionRef session,
     }
 
 exit:
+    if (result == errSecSuccess) {
+        CFDataPerformWithHexString(negotiationResponse, ^(CFStringRef responseString) {
+            secnotice("otr", "%@ %@: %@", session, messageMessage, responseString);
+        });
+    } else {
+        secnotice("otr", "%@ Process DH failed %d", session, (int)result);
+    }
+
     return result;
 }
 
@@ -360,113 +405,113 @@ static OSStatus SecVerifySignatureAndMac(SecOTRSessionRef session,
                                          const uint8_t **signatureAndMacBytes,
                                          size_t *signatureAndMacSize)
 {
-    OSStatus result = errSecDecode;
-    
-    uint8_t m1[kOTRAuthMACKeyBytes];
-    uint8_t m2[kOTRAuthMACKeyBytes];
-    uint8_t c[kOTRAuthKeyBytes];
-    
-    {
-        cc_unit s[kExponentiationUnits];
-        
-        SecPDHKeyGenerateS(session->_myKey, session->_theirKey, s);
-        // Derive M1, M2 and C, either prime or normal versions.
-        DeriveOTR256BitsFromS(usePrimes ? kM1Prime : kM1,
-                              kExponentiationUnits, s, sizeof(m1), m1);
-        DeriveOTR256BitsFromS(usePrimes ? kM2Prime : kM2,
-                              kExponentiationUnits, s, sizeof(m2), m2);
-        DeriveOTR128BitPairFromS(kCs,
-                                 kExponentiationUnits, s,
-                                 sizeof(c),usePrimes ? NULL : c,
-                                 sizeof(c), usePrimes ? c : NULL);
-        bzero(s, sizeof(s));
-    }
-    
-    cchmac_di_decl(ccsha256_di(), mBContext);
+    __block OSStatus result = errSecDecode;
 
-    cchmac_init(ccsha256_di(), mBContext, sizeof(m1), m1);
+    PerformWithBufferAndClear(kOTRAuthMACKeyBytes, ^(size_t m1_size, uint8_t *m1) {
+        PerformWithBufferAndClear(kOTRAuthMACKeyBytes, ^(size_t m2_size, uint8_t *m2) {
+            PerformWithBufferAndClear(kOTRAuthKeyBytes, ^(size_t c_size, uint8_t *c) {
+                {
+                    cc_unit s[kExponentiationUnits];
 
-    {
-        CFMutableDataRef toHash = CFDataCreateMutable(kCFAllocatorDefault, 0);
-        
-        SecPDHKAppendSerialization(session->_theirKey, toHash);
-        SecFDHKAppendPublicSerialization(session->_myKey, toHash);
-        
-        cchmac_update(ccsha256_di(), mBContext, (size_t)CFDataGetLength(toHash), CFDataGetBytePtr(toHash));
-        
-        CFReleaseNull(toHash);
-    }
-    
-    const uint8_t* encSigDataBlobStart = *signatureAndMacBytes;
-    
-    uint32_t xbSize = 0;
-    result = ReadLong(signatureAndMacBytes, signatureAndMacSize, &xbSize);
-    require_noerr(result, exit);
-    require_action(xbSize > 4, exit, result = errSecDecode);
-    require_action(xbSize <= *signatureAndMacSize, exit, result = errSecDecode);
-    
-    uint8_t signatureMac[CCSHA256_OUTPUT_SIZE];
-    cchmac(ccsha256_di(), sizeof(m2), m2, xbSize + 4, encSigDataBlobStart, signatureMac);
-    
-    require(xbSize + kSHA256HMAC160Bytes <= *signatureAndMacSize, exit);
-    const uint8_t *macStart = *signatureAndMacBytes + xbSize;
+                    SecPDHKeyGenerateS(session->_myKey, session->_theirKey, s);
+                    // Derive M1, M2 and C, either prime or normal versions.
+                    DeriveOTR256BitsFromS(usePrimes ? kM1Prime : kM1,
+                                          kExponentiationUnits, s, m1_size, m1);
+                    DeriveOTR256BitsFromS(usePrimes ? kM2Prime : kM2,
+                                          kExponentiationUnits, s, m2_size, m2);
+                    DeriveOTR128BitPairFromS(kCs,
+                                             kExponentiationUnits, s,
+                                             c_size,usePrimes ? NULL : c,
+                                             c_size, usePrimes ? c : NULL);
+                    bzero(s, sizeof(s));
+                }
 
-    // check the outer hmac
-    require_action(0 == memcmp(macStart, signatureMac, kSHA256HMAC160Bytes), exit, result = errSecDecode);
-           
+                const uint8_t* encSigDataBlobStart = *signatureAndMacBytes;
 
-    {
-        uint8_t xb[xbSize];
-        // Decrypt and copy the signature block
-        AES_CTR_IV0_Transform(sizeof(c), c, xbSize, *signatureAndMacBytes, xb);
+                uint32_t xbSize = 0;
+                result = ReadLong(signatureAndMacBytes, signatureAndMacSize, &xbSize);
+                require_noerr(result, exit);
+                require_action(xbSize > 4, exit, result = errSecDecode);
+                require_action(xbSize <= *signatureAndMacSize, exit, result = errSecDecode);
 
-        const uint8_t* signaturePacket = xb;
-        size_t signaturePacketSize = xbSize;
-        
-        uint16_t pubKeyType;
-        result = ReadShort(&signaturePacket, &signaturePacketSize, &pubKeyType);
-        require_noerr(result, exit);
-        require_action(pubKeyType == 0xF000, exit, result = errSecUnimplemented);
+                uint8_t signatureMac[CCSHA256_OUTPUT_SIZE];
+                cchmac(ccsha256_di(), m2_size, m2, xbSize + 4, encSigDataBlobStart, signatureMac);
 
-        uint32_t pubKeySize;
-        result = ReadLong(&signaturePacket, &signaturePacketSize, &pubKeySize);
-        require_noerr(result, exit);
-        require_action(pubKeySize <= signaturePacketSize, exit, result = errSecDecode);
-        require(((CFIndex)pubKeySize) >= 0, exit);
-        
-        // Add the signature and keyid to the hash.
-        // PUBKEY of our type is 2 bytes of type, 2 bytes of size and size bytes.
-        // Key ID is 4 bytes.
-        cchmac_update(ccsha256_di(), mBContext, 2 + 4 + pubKeySize + 4, xb);
-        
-        uint8_t mb[CCSHA256_OUTPUT_SIZE];
-        cchmac_final(ccsha256_di(), mBContext, mb);
+                require_action(xbSize + kSHA256HMAC160Bytes <= *signatureAndMacSize, exit, result = errSecDecode);
+                const uint8_t *macStart = *signatureAndMacBytes + xbSize;
 
-        // Make reference to the deflated key
-        require_action(SecOTRPIEqualToBytes(session->_them, signaturePacket, (CFIndex)pubKeySize), exit, result = errSecAuthFailed);
+                // check the outer hmac
+                require_action(0 == cc_cmp_safe(kSHA256HMAC160Bytes, macStart, signatureMac), exit, result = errSecDecode);
 
-        signaturePacket += pubKeySize;
-        signaturePacketSize -= pubKeySize;
-       
-        result = ReadLong(&signaturePacket, &signaturePacketSize, &session->_theirKeyID);
-        require_noerr(result, exit);
 
-        uint32_t sigSize;
-        result = ReadLong(&signaturePacket, &signaturePacketSize, &sigSize);
-        require_noerr(result, exit);
-        require_action(sigSize <= signaturePacketSize, exit, result = errSecDecode);
-        
-        bool bresult = SecOTRPIVerifySignature(session->_them, mb, sizeof(mb), signaturePacket, sigSize, NULL);
-        result = bresult ? errSecSuccess : errSecDecode;
-        require_noerr(result, exit);
-        
-    }
+                PerformWithBufferAndClear(xbSize, ^(size_t size, uint8_t *xb) {
+                    cchmac_di_decl(ccsha256_di(), mBContext);
 
-exit:
-    bzero(m1, sizeof(m1));
-    bzero(m2, sizeof(m2));
-    bzero(c, sizeof(c));
-    
+                    cchmac_init(ccsha256_di(), mBContext, m1_size, m1);
+
+                    {
+                        CFMutableDataRef toHash = CFDataCreateMutable(kCFAllocatorDefault, 0);
+
+                        SecPDHKAppendSerialization(session->_theirKey, toHash);
+                        SecFDHKAppendPublicSerialization(session->_myKey, toHash);
+
+                        cchmac_update(ccsha256_di(), mBContext, (size_t)CFDataGetLength(toHash), CFDataGetBytePtr(toHash));
+                        
+                        CFReleaseNull(toHash);
+                    }
+
+                    // Decrypt and copy the signature block
+                    AES_CTR_IV0_Transform(c_size, c, xbSize, *signatureAndMacBytes, xb);
+
+                    const uint8_t* signaturePacket = xb;
+                    size_t signaturePacketSize = xbSize;
+
+                    uint16_t pubKeyType;
+                    result = ReadShort(&signaturePacket, &signaturePacketSize, &pubKeyType);
+                    require_noerr(result, exit);
+                    require_action(pubKeyType == 0xF000, exit, result = errSecUnimplemented);
+
+                    uint32_t pubKeySize;
+                    result = ReadLong(&signaturePacket, &signaturePacketSize, &pubKeySize);
+                    require_noerr(result, exit);
+                    require_action(pubKeySize <= signaturePacketSize, exit, result = errSecDecode);
+                    require(((CFIndex)pubKeySize) >= 0, exit);
+
+                    // Add the signature and keyid to the hash.
+                    // PUBKEY of our type is 2 bytes of type, 2 bytes of size and size bytes.
+                    // Key ID is 4 bytes.
+                    cchmac_update(ccsha256_di(), mBContext, 2 + 4 + pubKeySize + 4, xb);
+
+                    uint8_t mb[CCSHA256_OUTPUT_SIZE];
+                    cchmac_final(ccsha256_di(), mBContext, mb);
+
+                    // Make reference to the deflated key
+                    require_action(SecOTRPIEqualToBytes(session->_them, signaturePacket, (CFIndex)pubKeySize), exit, result = errSecAuthFailed);
+                    
+                    signaturePacket += pubKeySize;
+                    signaturePacketSize -= pubKeySize;
+                    
+                    result = ReadLong(&signaturePacket, &signaturePacketSize, &session->_theirKeyID);
+                    require_noerr(result, exit);
+                    
+                    uint32_t sigSize;
+                    result = ReadLong(&signaturePacket, &signaturePacketSize, &sigSize);
+                    require_noerr(result, exit);
+                    require_action(sigSize <= signaturePacketSize, exit, result = errSecDecode);
+                    
+                    bool bresult = SecOTRPIVerifySignature(session->_them, mb, sizeof(mb), signaturePacket, sigSize, NULL);
+                    result = bresult ? errSecSuccess : errSecDecode;
+                    require_noerr(result, exit);
+                exit:
+                    ;
+                });
+            exit:
+                ;
+            });
+        });
+    });
+
+
     return result;
 }
 
@@ -491,7 +536,18 @@ static OSStatus SecOTRSProcessRevealSignatureMessage(SecOTRSessionRef session,
 
     session->_state = kDone;
     result = errSecSuccess;
+
+    CFDataPerformWithHexString(negotiationResponse, ^(CFStringRef responseString) {
+        secnotice("otr", "%@ Sending Signature message: %@", session, responseString);
+    });
+
 exit:
+
+    if (result != errSecSuccess) {
+        CFDataPerformWithHexString(incomingPacket, ^(CFStringRef incomingString) {
+            secnotice("otr", "%@ Failed to process reveal sig message (%d): %@", session, (int)result, incomingString);
+        });
+    }
     return result;
 }
 
@@ -530,49 +586,54 @@ OSStatus SecOTRSProcessPacket(SecOTRSessionRef session,
 
     require(CFDataGetLength(incomingPacket) > 0, fail);
     dispatch_sync(session->_queue, ^{
-        CFDataRef decodedBytes = SecOTRCopyIncomingBytes(incomingPacket);
+        os_activity_initiate("OTR Process Packet", OS_ACTIVITY_FLAG_DEFAULT, ^{
+            CFDataRef decodedBytes = SecOTRCopyIncomingBytes(incomingPacket);
 
-        const uint8_t* bytes = CFDataGetBytePtr(decodedBytes);
-        size_t size = CFDataGetLength(decodedBytes);
+            const uint8_t* bytes = CFDataGetBytePtr(decodedBytes);
+            size_t size = CFDataGetLength(decodedBytes);
 
-        OTRMessageType packetType = kInvalidMessage;
-        if (ReadHeader(&bytes, &size, &packetType))
-            packetType = kInvalidMessage;
+            OTRMessageType packetType = kInvalidMessage;
+            if (ReadHeader(&bytes, &size, &packetType))
+                packetType = kInvalidMessage;
 
-        CFMutableDataRef destinationMessage;
-        if (session->_textOutput) {
-            destinationMessage = CFDataCreateMutable(kCFAllocatorDefault, 0);
-        } else {
-            destinationMessage = CFRetainSafe(negotiationResponse);
-        }
+            CFMutableDataRef destinationMessage;
+            if (session->_textOutput) {
+                destinationMessage = CFDataCreateMutable(kCFAllocatorDefault, 0);
+            } else {
+                destinationMessage = CFRetainSafe(negotiationResponse);
+            }
 
-        switch (packetType) {
-            case kDHMessage:
-                result = SecOTRSProcessDHMessage(session, decodedBytes, destinationMessage);
-                break;
-            case kDHKeyMessage:
-                result = SecOTRSProcessDHKeyMessage(session, decodedBytes, destinationMessage);
-                break;
-            case kRevealSignatureMessage:
-                result = SecOTRSProcessRevealSignatureMessage(session, decodedBytes, destinationMessage);
-                break;
-            case kSignatureMessage:
-                result = SecOTRSProcessSignatureMessage(session, decodedBytes, destinationMessage);
-                break;
-            default:
-                result = errSecDecode;
-                break;
-        };
-        
-        if (result != errSecSuccess) {
-            secnotice("session", "Error %d processing packet type %d, session state %d, keyid %d, myKey %p, myNextKey %p, theirKeyId %d, theirKey %p, theirPreviousKey %p, bytes %@", (int)result, packetType, session->_state, session->_keyID, session->_myKey, session->_myNextKey, session->_theirKeyID, session->_theirKey, session->_theirPreviousKey, decodedBytes);
-        }
-        
-        if (session->_textOutput) {
-            SecOTRPrepareOutgoingBytes(destinationMessage, negotiationResponse);
-        }
-        CFReleaseSafe(destinationMessage);
-        CFReleaseSafe(decodedBytes);
+            switch (packetType) {
+                case kDHMessage:
+                    result = SecOTRSProcessDHMessage(session, decodedBytes, destinationMessage);
+                    break;
+                case kDHKeyMessage:
+                    result = SecOTRSProcessDHKeyMessage(session, decodedBytes, destinationMessage);
+                    break;
+                case kRevealSignatureMessage:
+                    result = SecOTRSProcessRevealSignatureMessage(session, decodedBytes, destinationMessage);
+                    break;
+                case kSignatureMessage:
+                    result = SecOTRSProcessSignatureMessage(session, decodedBytes, destinationMessage);
+                    break;
+                default:
+                    result = errSecDecode;
+                    break;
+            };
+
+            if (result != errSecSuccess) {
+                CFDataPerformWithHexString(decodedBytes, ^(CFStringRef bytesString) {
+                    secnotice("session", "%@ Error %d processing packet type %d, session state %d, keyid %d, myKey %p, myNextKey %p, theirKeyId %d, theirKey %p, theirPreviousKey %p, bytes %@", session, (int)result, packetType, session->_state, session->_keyID, session->_myKey, session->_myNextKey, session->_theirKeyID, session->_theirKey, session->_theirPreviousKey, bytesString);
+
+                });
+            }
+
+            if (session->_textOutput) {
+                SecOTRPrepareOutgoingBytes(destinationMessage, negotiationResponse);
+            }
+            CFReleaseSafe(destinationMessage);
+            CFReleaseSafe(decodedBytes);
+        });
     });
     
 fail:

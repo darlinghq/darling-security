@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2002-2009,2011-2014 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2002-2009,2011-2015 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 
@@ -65,7 +65,7 @@
 
 #ifdef	NDEBUG
 /* this actually compiles to nothing */
-#define trustDebug(args...)		secdebug("trust", ## args)
+#define trustDebug(args...)		secinfo("trust", ## args)
 #else
 #define trustDebug(args...)		printf(args)
 #endif
@@ -80,18 +80,18 @@ static const char *X509ANCHORS_SYSTEM_PATH = "/System/Library/Keychains/X509Anch
 //
 // Static functions
 //
-static CFArrayRef _allowedRootCertificatesForOidString(CFStringRef oidString);
+static CFArrayRef CF_RETURNS_RETAINED _allowedRootCertificatesForOidString(CFStringRef oidString);
 static CSSM_DATA_PTR _copyFieldDataForOid(CSSM_OID_PTR oid, CSSM_DATA_PTR cert, CSSM_CL_HANDLE clHandle);
-static CFStringRef _decimalStringForOid(CSSM_OID_PTR oid);
-static CFDictionaryRef _evCAOidDict();
+static CFStringRef CF_RETURNS_RETAINED _decimalStringForOid(CSSM_OID_PTR oid);
+static CFDictionaryRef CF_RETURNS_RETAINED _evCAOidDict();
 static void _freeFieldData(CSSM_DATA_PTR value, CSSM_OID_PTR oid, CSSM_CL_HANDLE clHandle);
-static CFStringRef _oidStringForCertificatePolicies(const CE_CertPolicies *certPolicies);
+static CFStringRef CF_RETURNS_RETAINED _oidStringForCertificatePolicies(const CE_CertPolicies *certPolicies);
 static SecCertificateRef _rootCertificateWithSubjectOfCertificate(SecCertificateRef certificate);
 static SecCertificateRef _rootCertificateWithSubjectKeyIDOfCertificate(SecCertificateRef certificate);
 
 // utility function to safely release (and clear) the given CFTypeRef variable.
 //
-static void SafeCFRelease(void *cfTypeRefPtr)
+static void SafeCFRelease(void * CF_CONSUMED cfTypeRefPtr)
 {
 	CFTypeRef *obj = (CFTypeRef *)cfTypeRefPtr;
 	if (obj && *obj) {
@@ -334,7 +334,7 @@ CFArrayRef potentialEVChainWithCertificates(CFArrayRef certificates)
     // intermediate from the returned certificate array.
 
 	CFIndex chainIndex, chainLen = (certificates) ? CFArrayGetCount(certificates) : 0;
-	secdebug("trusteval", "potentialEVChainWithCertificates: chainLen: %ld", chainLen);
+	secinfo("trusteval", "potentialEVChainWithCertificates: chainLen: %ld", chainLen);
     if (chainLen < 2) {
 		if (certificates) {
 			CFRetain(certificates);
@@ -346,24 +346,24 @@ CFArrayRef potentialEVChainWithCertificates(CFArrayRef certificates)
     for (chainIndex = 0; chainIndex < chainLen; chainIndex++) {
         SecCertificateRef aCert = (SecCertificateRef) CFArrayGetValueAtIndex(certificates, chainIndex);
         SecCertificateRef replacementCert = NULL;
-		secdebug("trusteval", "potentialEVChainWithCertificates: examining chainIndex: %ld", chainIndex);
+		secinfo("trusteval", "potentialEVChainWithCertificates: examining chainIndex: %ld", chainIndex);
         if (chainIndex > 0) {
             // if this is not the leaf, then look for a possible replacement root to end the chain
 			// Try lookup using Subject Key ID first
 			replacementCert = _rootCertificateWithSubjectKeyIDOfCertificate(aCert);
 			if (!replacementCert)
 			{
-				secdebug("trusteval", "  not found using SKID, try by subject");
+				secinfo("trusteval", "  not found using SKID, try by subject");
             replacementCert = _rootCertificateWithSubjectOfCertificate(aCert);
         }
         }
         if (!replacementCert) {
-			secdebug("trusteval", "  No replacement found using SKID or subject; keeping original intermediate");
+			secinfo("trusteval", "  No replacement found using SKID or subject; keeping original intermediate");
             CFArrayAppendValue(certArray, aCert);
         }
         SafeCFRelease(&replacementCert);
     }
-	secdebug("trusteval", "potentialEVChainWithCertificates: exit: new chainLen: %ld", CFArrayGetCount(certArray));
+	secinfo("trusteval", "potentialEVChainWithCertificates: exit: new chainLen: %ld", CFArrayGetCount(certArray));
 #if !defined(NDEBUG)
 	CFArrayApplyFunction(certArray, CFRangeMake(0, CFArrayGetCount(certArray)), showCertSKID, NULL);
 #endif
@@ -496,7 +496,7 @@ static void logSKID(const char *msg, const CssmData &subjectKeyID)
 			sprintf(bytes, "%02X", px[ix]);
 			strcat(buffer, bytes);
 		}
-		secdebug("trusteval", " SKID: %s",buffer);
+		secinfo("trusteval", " SKID: %s",buffer);
 	}
 }
 
@@ -554,7 +554,7 @@ static SecCertificateRef _rootCertificateWithSubjectKeyIDOfCertificate(SecCertif
 // for the given EV OID (a hex string); caller must release the array
 //
 static
-CFArrayRef _possibleRootCertificatesForOidString(CFStringRef oidString)
+CFArrayRef CF_RETURNS_RETAINED _possibleRootCertificatesForOidString(CFStringRef oidString)
 {
 	StLock<Mutex> _(SecTrustKeychainsGetMutex());
 
@@ -572,7 +572,7 @@ CFArrayRef _possibleRootCertificatesForOidString(CFStringRef oidString)
 
 	CFMutableArrayRef possibleRootCertificates = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
 	CFIndex hashCount = CFArrayGetCount(possibleCertificateHashes);
-	secdebug("evTrust", "_possibleRootCertificatesForOidString: %d possible hashes", (int)hashCount);
+	secinfo("evTrust", "_possibleRootCertificatesForOidString: %d possible hashes", (int)hashCount);
 
 	OSStatus status = errSecSuccess;
 	SecKeychainSearchRef searchRef = NULL;
@@ -648,19 +648,15 @@ CFArrayRef _allowedRootCertificatesForOidString(CFStringRef oidString)
 		CFIndex idx, count = CFArrayGetCount(possibleRootCertificates);
 		for (idx=0; idx<count; idx++) {
 			SecCertificateRef cert = (SecCertificateRef) CFArrayGetValueAtIndex(possibleRootCertificates, idx);
-#if SECTRUST_OSX
 			/* Need a unified SecCertificateRef instance to hand to SecTrustSettingsCertHashStrFromCert */
 			SecCertificateRef certRef = SecCertificateCreateFromItemImplInstance(cert);
-#else
-			SecCertificateRef certRef = (SecCertificateRef)((cert) ? CFRetain(cert) : NULL);
-#endif
 			CFStringRef hashStr = SecTrustSettingsCertHashStrFromCert(certRef);
 			if (hashStr) {
 				bool foundMatch = false;
 				bool foundAny = false;
 				CSSM_RETURN *errors = NULL;
 				uint32 errorCount = 0;
-				SecTrustSettingsDomain foundDomain = 0;
+				SecTrustSettingsDomain foundDomain = kSecTrustSettingsDomainUser;
 				SecTrustSettingsResult result = kSecTrustSettingsResultInvalid;
 				OSStatus status = SecTrustSettingsEvaluateCert(
 					hashStr,		/* certHashStr */
@@ -677,7 +673,7 @@ CFArrayRef _allowedRootCertificatesForOidString(CFStringRef oidString)
 					&foundAny);		/* foundAnyEntry */
 
 				if (status == errSecSuccess) {
-					secdebug("evTrust", "_allowedRootCertificatesForOidString: cert %lu has result %d from domain %d",
+					secinfo("evTrust", "_allowedRootCertificatesForOidString: cert %lu has result %d from domain %d",
 						idx, (int)result, (int)foundDomain);
 					// Root certificates must be trusted by the system (and not have
 					// any explicit trust overrides) to be allowed for EV use.
@@ -686,7 +682,7 @@ CFArrayRef _allowedRootCertificatesForOidString(CFStringRef oidString)
 						CFArrayAppendValue(allowedRootCertificates, cert);
 					}
 				} else {
-					secdebug("evTrust", "_allowedRootCertificatesForOidString: cert %lu SecTrustSettingsEvaluateCert error %d",
+					secinfo("evTrust", "_allowedRootCertificatesForOidString: cert %lu SecTrustSettingsEvaluateCert error %d",
 						idx, (int)status);
 				}
 				if (errors) {
@@ -916,7 +912,7 @@ CFArrayRef allowedEVRootsForLeafCertificate(CFArrayRef certificates)
     // Fetch the allowed root CA certificates for this OID, if any
     CFArrayRef allowedRoots = (oidString) ? _allowedRootCertificatesForOidString(oidString) : NULL;
 	CFIndex rootCount = (allowedRoots) ? CFArrayGetCount(allowedRoots) : 0;
-	secdebug("evTrust", "allowedEVRootsForLeafCertificate: found %d allowed roots", (int)rootCount);
+	secinfo("evTrust", "allowedEVRootsForLeafCertificate: found %d allowed roots", (int)rootCount);
 	SafeCFRelease(&oidString);
 	if (!allowedRoots || !rootCount) {
 		SafeCFRelease(&allowedRoots);
@@ -1021,7 +1017,7 @@ CFDictionaryRef extendedValidationResults(CFArrayRef certChain, SecTrustResultTy
 
 	// check leaf certificate for wildcard names
 	if (hasWildcardDNSName((SecCertificateRef) CFArrayGetValueAtIndex(certChain, 0))) {
-		trustDebug("has wildcard name (does not meet EV criteria)");
+		trustDebug("has wildcard name (does not meet EV criteria)\n");
 		return NULL;
 	}
 
@@ -1073,7 +1069,7 @@ CFDictionaryRef extendedValidationResults(CFArrayRef certChain, SecTrustResultTy
 			CFMutableDictionaryRef resultDict = CFDictionaryCreateMutable(NULL, 0,
 				&kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 			CFDictionaryAddValue(resultDict, kSecEVOrganizationName, organizationName);
-			trustDebug("[EV] extended validation succeeded");
+			trustDebug("[EV] extended validation succeeded\n");
 			SafeCFRelease(&organizationName);
 			return resultDict;
 		}
@@ -1123,10 +1119,10 @@ static CFDictionaryRef _evCAOidDict()
     static CFDictionaryRef s_evCAOidDict = NULL;
     if (s_evCAOidDict) {
 		CFRetain(s_evCAOidDict);
-		secdebug("evTrust", "_evCAOidDict: returning static instance (rc=%d)", (int)CFGetRetainCount(s_evCAOidDict));
+		secinfo("evTrust", "_evCAOidDict: returning static instance (rc=%d)", (int)CFGetRetainCount(s_evCAOidDict));
         return s_evCAOidDict;
 	}
-	secdebug("evTrust", "_evCAOidDict: initializing static instance");
+	secinfo("evTrust", "_evCAOidDict: initializing static instance");
 
 	s_evCAOidDict = dictionaryWithContentsOfPlistFile(EV_ROOTS_PLIST_SYSTEM_PATH);
 	if (!s_evCAOidDict)
@@ -1142,14 +1138,14 @@ static CFDictionaryRef _evCAOidDict()
 		CFDataRef hashData = CFDataCreate(NULL, hashBytes, sizeof(hashBytes));
 		CFIndex hashCount = CFArrayGetCount(hashes);
 		if (hashData && CFArrayContainsValue(hashes, CFRangeMake(0, hashCount), hashData)) {
-			secdebug("evTrust", "_evCAOidDict: added hardcoded hash value");
+			secinfo("evTrust", "_evCAOidDict: added hardcoded hash value");
 			CFArrayAppendValue(hashes, hashData);
 		}
 		SafeCFRelease(&hashData);
 	}
 #endif
 	CFRetain(s_evCAOidDict);
-	secdebug("evTrust", "_evCAOidDict: returning static instance (rc=%d)", (int)CFGetRetainCount(s_evCAOidDict));
+	secinfo("evTrust", "_evCAOidDict: returning static instance (rc=%d)", (int)CFGetRetainCount(s_evCAOidDict));
     return s_evCAOidDict;
 }
 
@@ -1190,7 +1186,7 @@ static CFStringRef _decimalStringForOid(CSSM_OID_PTR oid)
 	char *nameBuf = (char *)malloc(bufLen);
 	if (!CFStringGetCString(str, nameBuf, bufLen-1, kCFStringEncodingUTF8))
 		nameBuf[0]=0;
-	secdebug("evTrust", "_decimalStringForOid: \"%s\"", nameBuf);
+	secinfo("evTrust", "_decimalStringForOid: \"%s\"", nameBuf);
 	free(nameBuf);
 #endif
 
@@ -1207,7 +1203,7 @@ static void _freeFieldData(CSSM_DATA_PTR value, CSSM_OID_PTR oid, CSSM_CL_HANDLE
 
 static ModuleNexus<Mutex> gOidStringForCertificatePoliciesMutex;
 
-static CFStringRef _oidStringForCertificatePolicies(const CE_CertPolicies *certPolicies)
+static CFStringRef CF_RETURNS_RETAINED _oidStringForCertificatePolicies(const CE_CertPolicies *certPolicies)
 {
 	StLock<Mutex> _(gOidStringForCertificatePoliciesMutex());
 
@@ -1217,13 +1213,13 @@ static CFStringRef _oidStringForCertificatePolicies(const CE_CertPolicies *certP
     // in an intermediate CA.)
 
     if (!certPolicies) {
-		secdebug("evTrust", "oidStringForCertificatePolicies: missing certPolicies!");
+		secinfo("evTrust", "oidStringForCertificatePolicies: missing certPolicies!");
         return NULL;
 	}
 
 	CFDictionaryRef evOidDict = _evCAOidDict();
 	if (!evOidDict) {
-		secdebug("evTrust", "oidStringForCertificatePolicies: nil OID dictionary!");
+		secinfo("evTrust", "oidStringForCertificatePolicies: nil OID dictionary!");
 		return NULL;
 	}
 

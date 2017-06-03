@@ -78,7 +78,7 @@ typedef UInt32 SecuritySessionId;
     
     Note: -2 is reserved (see 4487137).  
 */
-enum {
+CF_ENUM(SecuritySessionId) {
     noSecuritySession                      = 0,     /* definitely not a valid SecuritySessionId */
     callerSecuritySession = ((SecuritySessionId)-1)     /* the Session I (the caller) am in */
 };
@@ -112,7 +112,7 @@ typedef CF_OPTIONS(UInt32, SessionCreationFlags) {
 	Error codes returned by AuthSession API.
     Note that the AuthSession APIs can also return Authorization API error codes.
 */
-enum {
+CF_ENUM(OSStatus) {
     errSessionSuccess                       = 0,      /* all is well */
     errSessionInvalidId                     = -60500, /* invalid session id specified */
     errSessionInvalidAttributes             = -60501, /* invalid set of requested attribute bits */

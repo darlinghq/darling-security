@@ -118,7 +118,7 @@ static void tests(void)
         ok(SOSAccountAssertUserCredentialsAndUpdate(carole_account,  cfaccount, cfpassword, &error), "carole credential setting (%@)", error);
         CFReleaseNull(error);
 
-        ok(SOSAccountResetToOffering(alice_account , &error), "Reset to offering (%@)", error);
+        ok(SOSAccountResetToOffering_wTxn(alice_account , &error), "Reset to offering (%@)", error);
         CFReleaseNull(error);
 
         return 2;
@@ -135,7 +135,7 @@ static void tests(void)
 
         return 2;
     }, ^{
-        ok(SOSAccountResetToOffering(bob_account , &error), "Reset to offering (%@)", error);
+        ok(SOSAccountResetToOffering_wTxn(bob_account , &error), "Reset to offering (%@)", error);
         CFReleaseNull(error);
 
         return 2;
@@ -171,12 +171,7 @@ static void tests(void)
     CFReleaseNull(alice_resurrected);
     CFReleaseNull(frozen_alice);
 
-    SOSUnregisterAllTransportMessages();
-    SOSUnregisterAllTransportCircles();
-    SOSUnregisterAllTransportKeyParameters();
-    CFArrayRemoveAllValues(key_transports);
-    CFArrayRemoveAllValues(circle_transports);
-    CFArrayRemoveAllValues(message_transports);
+    SOSTestCleanup();
 }
 
 int secd_65_account_retirement_reset(int argc, char *const *argv)

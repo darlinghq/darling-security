@@ -71,7 +71,7 @@ SOSCircleRef SOSCircleCreateFromDER(CFAllocatorRef allocator, CFErrorRef* error,
                          SOSCreateError(kSOSErrorIncompatibleCircle, CFSTR("Bad Circle Version"), NULL, error));
     
     *der_p = der_decode_string(allocator, 0, &cir->name, error, *der_p, sequence_end);
-    *der_p = der_decode_number(allocator, 0, &cir->generation, error, *der_p, sequence_end);
+    cir->generation = SOSGenCountCreateFromDER(kCFAllocatorDefault, error, der_p, sequence_end);
     
     cir->peers = SOSPeerInfoSetCreateFromArrayDER(allocator, &kSOSPeerSetCallbacks, error, der_p, sequence_end);
     cir->applicants = SOSPeerInfoSetCreateFromArrayDER(allocator, &kSOSPeerSetCallbacks, error, der_p, sequence_end);
@@ -104,7 +104,7 @@ size_t SOSCircleGetDEREncodedSize(SOSCircleRef cir, CFErrorRef *error) {
     
     require_quiet(accumulate_size(&total_payload, ccder_sizeof_uint64(kOnlyCompatibleVersion)),                        fail);
     require_quiet(accumulate_size(&total_payload, der_sizeof_string(cir->name, error)),                                fail);
-    require_quiet(accumulate_size(&total_payload, der_sizeof_number(cir->generation, error)),                          fail);
+    require_quiet(accumulate_size(&total_payload, SOSGenCountGetDEREncodedSize(cir->generation, error)),                          fail);
     require_quiet(accumulate_size(&total_payload, SOSPeerInfoSetGetDEREncodedArraySize(cir->peers, error)),            fail);
     require_quiet(accumulate_size(&total_payload, SOSPeerInfoSetGetDEREncodedArraySize(cir->applicants, error)),          fail);
     require_quiet(accumulate_size(&total_payload, SOSPeerInfoSetGetDEREncodedArraySize(cir->rejected_applicants, error)), fail);
@@ -123,7 +123,7 @@ uint8_t* SOSCircleEncodeToDER(SOSCircleRef cir, CFErrorRef* error, const uint8_t
     return ccder_encode_constructed_tl(CCDER_CONSTRUCTED_SEQUENCE, der_end, der,
                 ccder_encode_uint64(kOnlyCompatibleVersion, der,
                 der_encode_string(cir->name, error, der,
-                der_encode_number(cir->generation, error, der,
+                SOSGenCountEncodeToDER(cir->generation, error, der,
                 SOSPeerInfoSetEncodeToArrayDER(cir->peers, error, der,
                 SOSPeerInfoSetEncodeToArrayDER(cir->applicants, error, der,
                 SOSPeerInfoSetEncodeToArrayDER(cir->rejected_applicants, error, der,
@@ -160,11 +160,7 @@ fail:
 
 CFDataRef SOSCircleCopyEncodedData(SOSCircleRef circle, CFAllocatorRef allocator, CFErrorRef *error)
 {
-    size_t size = SOSCircleGetDEREncodedSize(circle, error);
-    if (size == 0)
-        return NULL;
-    uint8_t buffer[size];
-    uint8_t* start = SOSCircleEncodeToDER(circle, error, buffer, buffer + sizeof(buffer));
-    CFDataRef result = CFDataCreate(kCFAllocatorDefault, start, size);
-    return result;
+    return CFDataCreateWithDER(kCFAllocatorDefault, SOSCircleGetDEREncodedSize(circle, error), ^uint8_t*(size_t size, uint8_t *buffer) {
+        return SOSCircleEncodeToDER(circle, error, buffer, (uint8_t *) buffer + size);
+    });
 }

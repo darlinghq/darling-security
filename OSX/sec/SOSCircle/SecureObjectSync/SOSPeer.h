@@ -84,10 +84,6 @@ CFIndex SOSPeerGetVersion(SOSPeerRef peer);
 CFStringRef SOSPeerGetID(SOSPeerRef peer);
 bool SOSPeersEqual(SOSPeerRef peerA, SOSPeerRef peerB);
 
-// Coders
-SOSCoderRef SOSPeerGetCoder(SOSPeerRef peer, CFErrorRef *error);
-bool SOSPeerEnsureCoder(SOSPeerRef peer, SOSFullPeerInfoRef myPeerInfo, SOSPeerInfoRef peerInfo, CFErrorRef *error);
-
 uint64_t SOSPeerNextSequenceNumber(SOSPeerRef peer);
 uint64_t SOSPeerGetMessageVersion(SOSPeerRef peer);
 
@@ -102,6 +98,9 @@ void SOSPeerSetMustSendMessage(SOSPeerRef peer, bool must);
 
 bool SOSPeerSendObjects(SOSPeerRef peer);
 void SOSPeerSetSendObjects(SOSPeerRef peer, bool sendObjects);
+
+bool SOSPeerHasBeenInSync(SOSPeerRef peer);
+void SOSPeerSetHasBeenInSync(SOSPeerRef peer, bool hasBeenInSync);
 
 SOSManifestRef SOSPeerGetProposedManifest(SOSPeerRef peer);
 SOSManifestRef SOSPeerGetConfirmedManifest(SOSPeerRef peer);

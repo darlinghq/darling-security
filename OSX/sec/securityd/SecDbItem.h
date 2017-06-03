@@ -39,7 +39,6 @@
 #include <utilities/SecDb.h>
 #include <securityd/SecKeybagSupport.h>
 #include <Security/SecAccessControl.h>
-
 #include <Security/SecBasePriv.h>
 
 // MARK SecDbAttrKind, SecDbFlag
@@ -60,7 +59,8 @@ typedef enum {
     kSecDbTombAttr,
     kSecDbUTombAttr,
     kSecDbAccessAttr,
-    kSecDbAccessControlAttr
+    kSecDbAccessControlAttr,
+    kSecDbUUIDAttr,
 } SecDbAttrKind;
 
 enum {
@@ -78,6 +78,8 @@ enum {
     kSecDbDefaultEmptyFlag  = (1 << 11),    // default attr value is ""
     kSecDbNotNullFlag       = (1 << 12),    // attr value can't be null
     kSecDbInAuthenticatedDataFlag = (1 << 13), // attr is in authenticated data
+    kSecDbSyncPrimaryKeyV0  = (1 << 14),
+    kSecDbSyncPrimaryKeyV2  = (1 << 15),
 };
 
 #define SecVersionDbFlag(v) ((v & 0xFF) << 8)
@@ -106,7 +108,8 @@ typedef struct SecDbClass {
 } SecDbClass;
 
 typedef struct SecDbSchema {
-    int version;
+    int majorVersion;
+    int minorVersion;
     const SecDbClass *classes[];
 } SecDbSchema;
 
@@ -134,13 +137,9 @@ struct SecDbItem {
     const SecDbClass *class;
     keyclass_t keyclass;
     keybag_handle_t keybag;
-    //sqlite3_int64 _rowid;
-    //CFDataRef _primaryKey;
-    //CFDataRef _sha1;
-    //CFDataRef _edata;
     enum SecDbItemState _edataState;
     CFMutableDictionaryRef attributes;
-    CFTypeRef credHandle;
+    CFDataRef credHandle;
     CFTypeRef cryptoOp;
     CFArrayRef callerAccessGroups;
 };
@@ -168,6 +167,7 @@ void SecDbItemSetCallerAccessGroups(SecDbItemRef item, CFArrayRef caller_access_
 
 CFTypeRef SecDbItemGetCachedValueWithName(SecDbItemRef item, CFStringRef name);
 CFTypeRef SecDbItemGetValue(SecDbItemRef item, const SecDbAttr *desc, CFErrorRef *error);
+CFTypeRef SecDbItemGetValueKind(SecDbItemRef item, SecDbAttrKind desc, CFErrorRef *error);
 
 bool SecDbItemSetValue(SecDbItemRef item, const SecDbAttr *desc, CFTypeRef value, CFErrorRef *error);
 bool SecDbItemSetValues(SecDbItemRef item, CFDictionaryRef values, CFErrorRef *error);
@@ -175,6 +175,7 @@ bool SecDbItemSetValueWithName(SecDbItemRef item, CFStringRef name, CFTypeRef va
 
 sqlite3_int64 SecDbItemGetRowId(SecDbItemRef item, CFErrorRef *error);
 bool SecDbItemSetRowId(SecDbItemRef item, sqlite3_int64 rowid, CFErrorRef *error);
+bool SecDbItemClearRowId(SecDbItemRef item, CFErrorRef *error);
 
 bool SecDbItemIsSyncableOrCorrupted(SecDbItemRef item);
 bool SecDbItemIsSyncable(SecDbItemRef item);
@@ -239,11 +240,12 @@ CFTypeRef copyBlob(CFTypeRef obj);
 CFDataRef copySHA1(CFTypeRef obj);
 CFTypeRef copyNumber(CFTypeRef obj);
 CFDateRef copyDate(CFTypeRef obj);
+CFTypeRef copyUUID(CFTypeRef obj);
 
 // MARK: cFErrorPropagate which handles errSecAuthNeeded
 static inline
 bool SecErrorPropagate(CFErrorRef possibleError CF_CONSUMED, CFErrorRef *error) {
-    if (possibleError && error && *error && CFErrorGetCode(*error) == -25330)
+    if (possibleError && error && *error && CFErrorGetCode(*error) == errSecAuthNeeded)
         CFReleaseNull(*error);
     return CFErrorPropagate(possibleError, error);
 }

@@ -26,7 +26,6 @@
 #include <sys/sysctl.h>
 #include <syslog.h>
 #include <dispatch/dispatch.h>
-#include <stdio.h>
 
 void MyDispatchAsync(dispatch_queue_t queue, void(^block)(void))
 {

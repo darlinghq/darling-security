@@ -39,7 +39,6 @@
 #include <Security/SecCmsContentInfo.h>
 #include <Security/SecCmsDigestContext.h>
 #include <Security/SecCmsMessage.h>
-#include <MacTypes.h>
 
 #include "cmslocal.h"
 
@@ -381,9 +380,6 @@ static OSStatus
 nss_cms_after_end(SecCmsDecoderRef p7dcx)
 {
     OSStatus rv;
-    PLArenaPool *poolp;
-
-    poolp = p7dcx->cmsg->poolp;
 
     switch (p7dcx->type) {
     case SEC_OID_PKCS7_SIGNED_DATA:
@@ -646,6 +642,10 @@ loser:
 OSStatus
 SecCmsDecoderUpdate(SecCmsDecoderRef p7dcx, const void *buf, CFIndex len)
 {
+    if (!p7dcx) {
+        return errSecParam;
+    }
+
     if (p7dcx->dcx != NULL && p7dcx->error == 0) {	/* if error is set already, don't bother */
 	if (SEC_ASN1DecoderUpdate (p7dcx->dcx, buf, len) != SECSuccess) {
 	    p7dcx->error = PORT_GetError();
@@ -675,11 +675,17 @@ SecCmsDecoderUpdate(SecCmsDecoderRef p7dcx, const void *buf, CFIndex len)
 void
 SecCmsDecoderDestroy(SecCmsDecoderRef p7dcx)
 {
-    /* XXXX what about inner decoders? running digests? decryption? */
-    /* XXXX there's a leak here! */
-    SecCmsMessageDestroy(p7dcx->cmsg);
-    if (p7dcx->dcx)
+    /* SecCmsMessageDestroy frees inner decoders and digests. */
+    if (p7dcx->cmsg) {
+        SecCmsMessageDestroy(p7dcx->cmsg);
+    }
+    if (p7dcx->dcx) {
         (void)SEC_ASN1DecoderFinish(p7dcx->dcx);
+    }
+    /* Clear out references */
+    p7dcx->cmsg = NULL;
+    p7dcx->dcx = NULL;
+    p7dcx->childp7dcx = NULL;
     PORT_Free(p7dcx);
 }
 
@@ -697,7 +703,9 @@ SecCmsDecoderFinish(SecCmsDecoderRef p7dcx, SecCmsMessageRef *outMessage)
     if (p7dcx->dcx == NULL || SEC_ASN1DecoderFinish(p7dcx->dcx) != SECSuccess ||
 	nss_cms_after_end(p7dcx) != SECSuccess)
     {
-	SecCmsMessageDestroy(cmsg);	/* needs to get rid of pool if it's ours */
+        if (p7dcx->cmsg) {
+            SecCmsMessageDestroy(cmsg);	/* needs to get rid of pool if it's ours */
+        }
         result = PORT_GetError();
         goto loser;
     }
@@ -706,6 +714,10 @@ SecCmsDecoderFinish(SecCmsDecoderRef p7dcx, SecCmsMessageRef *outMessage)
     result = noErr;
 
 loser:
+    /* Clear out references */
+    p7dcx->cmsg = NULL;
+    p7dcx->dcx = NULL;
+    p7dcx->childp7dcx = NULL;
     PORT_Free(p7dcx);
     return result;
 }

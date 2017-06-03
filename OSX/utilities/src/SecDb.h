@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2012-2016 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -64,6 +64,7 @@ typedef CFOptionFlags SecDbTransactionPhase;
 enum SecDbTransactionSource {
     kSecDbSOSTransaction,        // A remotely initated transaction.
     kSecDbAPITransaction,        // A user initated transaction.
+    kSecDbInvalidTransaction,    // An invalid transaction source (used for initialization)
 };
 typedef CFOptionFlags SecDbTransactionSource;
 
@@ -94,14 +95,17 @@ typedef void (^SecDBNotifyBlock)(SecDbConnectionRef dbconn, SecDbTransactionPhas
 
 CFTypeID SecDbGetTypeID(void);
 
+// Database creation
+SecDbRef SecDbCreateWithOptions(CFStringRef dbName, mode_t mode, bool readWrite, bool allowRepair, bool useWAL, bool (^opened)(SecDbConnectionRef dbconn, bool didCreate, bool *callMeAgainForNextConnection, CFErrorRef *error));
+
 SecDbRef SecDbCreate(CFStringRef dbName, bool (^opened)(SecDbConnectionRef dbconn, bool didCreate, bool *callMeAgainForNextConnection, CFErrorRef *error));
 
-void SecDbSetNotifyPhaseBlock(SecDbRef db, dispatch_queue_t queue, SecDBNotifyBlock notifyPhase);
+void SecDbAddNotifyPhaseBlock(SecDbRef db, SecDBNotifyBlock notifyPhase);
 
 // Read only connections go to the end of the queue, writeable
 // connections go to the start of the queue.  Use SecDbPerformRead() and SecDbPerformWrite() if you
 // can to avoid leaks.
-SecDbConnectionRef SecDbConnectionAquire(SecDbRef db, bool readOnly, CFErrorRef *error);
+SecDbConnectionRef SecDbConnectionAcquire(SecDbRef db, bool readOnly, CFErrorRef *error);
 void SecDbConnectionRelease(SecDbConnectionRef dbconn);
 
 // Perform a database read operation,
@@ -134,6 +138,8 @@ sqlite3 *SecDbHandle(SecDbConnectionRef dbconn);
 // Do not call this unless you are SecDbItem!
 void SecDbRecordChange(SecDbConnectionRef dbconn, CFTypeRef deleted, CFTypeRef inserted);
 
+void SecDbPerformOnCommitQueue(SecDbConnectionRef dbconn, bool barrier, dispatch_block_t perform);
+
 // MARK: -
 // MARK: Bind helpers
 
@@ -157,10 +163,10 @@ sqlite3_stmt *SecDbPrepareV2(SecDbConnectionRef dbconn, const char *sql, size_t 
 sqlite3_stmt *SecDbCopyStmt(SecDbConnectionRef dbconn, CFStringRef sql, CFStringRef *tail, CFErrorRef *error);
 bool SecDbReleaseCachedStmt(SecDbConnectionRef dbconn, CFStringRef sql, sqlite3_stmt *stmt, CFErrorRef *error);
 bool SecDbWithSQL(SecDbConnectionRef dbconn, CFStringRef sql, CFErrorRef *error, bool(^perform)(sqlite3_stmt *stmt));
-bool SecDbForEach(sqlite3_stmt *stmt, CFErrorRef *error, bool(^row)(int row_index));
+bool SecDbForEach(SecDbConnectionRef dbconn, sqlite3_stmt *stmt, CFErrorRef *error, bool(^row)(int row_index));
 
 // Mark the database as corrupted.
-void SecDbCorrupt(SecDbConnectionRef dbconn);
+void SecDbCorrupt(SecDbConnectionRef dbconn, CFErrorRef error);
 
 __END_DECLS
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2004,2011,2013-2015 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2000-2004,2011,2013-2016 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -45,14 +45,14 @@ using namespace KeychainCore;
 //	END_API3(name, bad) // like END_API1, with API name as debug scope for printing function result
 //
 #define BEGIN_SECAPI \
-    OSStatus __secapiresult = errSecSuccess; \
+	OSStatus __secapiresult = errSecSuccess; \
 	try {
 #define END_SECAPI }\
 	catch (const MacOSError &err) { __secapiresult=err.osStatus(); } \
 	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); } \
 	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; } \
 	catch (...) { __secapiresult=errSecInternalComponent; } \
-    return __secapiresult;
+	return __secapiresult;
 #define END_SECAPI1(BAD_RETURN_VAL) \
 	} \
 	catch (...) \
@@ -61,30 +61,89 @@ using namespace KeychainCore;
 	} \
 	return __secapiresult;
 #define END_SECAPI1(BAD_RETURN_VAL) }\
-    catch (...) { __secapiresult=BAD_RETURN_VAL; } \
-    return __secapiresult;
+	catch (...) { __secapiresult=BAD_RETURN_VAL; } \
+	return __secapiresult;
 #define END_SECAPI0 }\
-    catch (...) { return; }
+	catch (...) { return; }
 
-#if SECTRUST_OSX
-#define BEGIN_SECCERTAPI \
-OSStatus __secapiresult=errSecSuccess; \
-SecCertificateRef __itemImplRef=(SecCertificateRef)SecCertificateCopyKeychainItem(certificate); \
-if (!__itemImplRef) { __itemImplRef=SecCertificateCreateItemImplInstance(certificate); } \
-try {
-#else
-#define BEGIN_SECCERTAPI \
-OSStatus __secapiresult=errSecSuccess; \
-SecCertificateRef __itemImplRef=(SecCertificateRef)((certificate)?CFRetain(certificate):NULL); \
-try {
-#endif
-#define END_SECCERTAPI }\
-catch (const MacOSError &err) { __secapiresult=err.osStatus(); } \
-catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); } \
-catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; } \
-catch (...) { __secapiresult=errSecInternalComponent; } \
-if (__itemImplRef) { CFRelease(__itemImplRef); } \
-return __secapiresult;
 
+//
+// BEGIN_SECKCITEMAPI
+// Note: this macro assumes an input parameter named "itemRef"
+//
+#define BEGIN_SECKCITEMAPI \
+	OSStatus __secapiresult=errSecSuccess; \
+	SecKeychainItemRef __itemImplRef=NULL; \
+	bool __is_certificate=(itemRef && (CFGetTypeID(itemRef) == SecCertificateGetTypeID())); \
+	if (__is_certificate) { \
+		if (SecCertificateIsItemImplInstance((SecCertificateRef)itemRef)) { \
+			__itemImplRef=(SecKeychainItemRef)CFRetain(itemRef); \
+		} else { \
+			__itemImplRef=(SecKeychainItemRef)SecCertificateCopyKeychainItem((SecCertificateRef)itemRef); \
+			if (!__itemImplRef) { \
+				__itemImplRef=(SecKeychainItemRef)SecCertificateCreateItemImplInstance((SecCertificateRef)itemRef); \
+				(void)SecCertificateSetKeychainItem((SecCertificateRef)itemRef,__itemImplRef); \
+			} \
+		} \
+	} else { \
+		__itemImplRef=(SecKeychainItemRef)((itemRef) ? CFRetain(itemRef) : NULL); \
+	} \
+	try {
+
+//
+// END_SECKCITEMAPI
+//
+#define END_SECKCITEMAPI } \
+	catch (const MacOSError &err) { __secapiresult=err.osStatus(); } \
+	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); } \
+	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; } \
+	catch (...) { __secapiresult=errSecInternalComponent; } \
+	if (__itemImplRef) { CFRelease(__itemImplRef); } \
+	return __secapiresult;
+
+
+//
+// BEGIN_SECCERTAPI
+// Note: this macro assumes an input parameter named "certificate"
+//
+#define BEGIN_SECCERTAPI \
+	OSStatus __secapiresult=errSecSuccess; \
+	SecCertificateRef __itemImplRef=NULL; \
+	if (SecCertificateIsItemImplInstance(certificate)) { __itemImplRef=(SecCertificateRef)CFRetain(certificate); } \
+	if (!__itemImplRef && certificate) { __itemImplRef=(SecCertificateRef)SecCertificateCopyKeychainItem(certificate); } \
+	if (!__itemImplRef && certificate) { __itemImplRef=SecCertificateCreateItemImplInstance(certificate); \
+		(void)SecCertificateSetKeychainItem(certificate,__itemImplRef); } \
+	try {
+
+//
+// END_SECCERTAPI
+//
+#define END_SECCERTAPI } \
+	catch (const MacOSError &err) { __secapiresult=err.osStatus(); } \
+	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); } \
+	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; } \
+	catch (...) { __secapiresult=errSecInternalComponent; } \
+	if (__itemImplRef) { CFRelease(__itemImplRef); } \
+	return __secapiresult;
+
+
+//
+// BEGIN_SECKEYAPI
+//
+#define BEGIN_SECKEYAPI(resultType, resultInit) \
+resultType result = resultInit; try {
+
+extern "C" bool SecError(OSStatus status, CFErrorRef *error, CFStringRef format, ...);
+
+#define END_SECKEYAPI }\
+catch (const MacOSError &err) { SecError(err.osStatus(), error, CFSTR("%s"), err.what()); result = NULL; } \
+catch (const CommonError &err) { \
+	if (err.osStatus() != CSSMERR_CSP_INVALID_DIGEST_ALGORITHM) { \
+    	OSStatus status = SecKeychainErrFromOSStatus(err.osStatus()); if (status == errSecInputLengthError) status = errSecParam; \
+    	SecError(status, error, CFSTR("%s"), err.what()); result = NULL; } \
+	} \
+catch (const std::bad_alloc &) { SecError(errSecAllocate, error, CFSTR("allocation failed")); result = NULL; } \
+catch (...) { SecError(errSecInternalComponent, error, CFSTR("internal error")); result = NULL; } \
+return result;
 
 #endif /* !_SECURITY_SECBRIDGE_H_ */

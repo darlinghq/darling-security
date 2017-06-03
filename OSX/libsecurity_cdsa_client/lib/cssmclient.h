@@ -103,6 +103,7 @@ protected:
 	bool mActive;					// loaded, attached, etc.
     RecursiveMutex mActivateMutex;
 	mutable Allocator *mAllocator; // allocator hierarchy (NULL => TBD)
+    mutable RecursiveMutex mAllocatorMutex; // protects allocator creation
 	
 	template <class Obj> Obj parent() const
 	{ assert(mParent); return Obj(static_cast<typename Obj::Impl *>(&(*mParent))); }
@@ -350,10 +351,12 @@ private:
         ~StandardCssm();
         void setCssm(CssmImpl *cssm);
         void unsetCssm(CssmImpl *cssm);
-        CssmImpl *get();
+        Cssm get();
         
     private:
-        CssmImpl *mCssm;
+        RefPointer<CssmImpl> mCssm; // 'Leaks' this object (in that it won't ever be deleted after creation), but
+                                    // there's no safe way to vend and re-create this object in a multi-threaded environment
+                                    // without an implementation of WeakRefPointer<>.
     };
     static ModuleNexus<StandardCssm> mStandard;
 };

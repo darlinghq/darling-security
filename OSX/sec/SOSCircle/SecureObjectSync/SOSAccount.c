@@ -8,6 +8,8 @@
  */
 
 #include "SOSAccountPriv.h"
+#include <Security/SecureObjectSync/SOSPeerInfo.h>
+#include <Security/SecureObjectSync/SOSPeerInfoV2.h>
 #include <Security/SecureObjectSync/SOSPeerInfoCollections.h>
 #include <Security/SecureObjectSync/SOSTransportCircle.h>
 #include <Security/SecureObjectSync/SOSTransportMessage.h>
@@ -16,29 +18,38 @@
 #include <Security/SecureObjectSync/SOSTransport.h>
 #include <Security/SecureObjectSync/SOSTransportKeyParameter.h>
 #include <Security/SecureObjectSync/SOSTransportKeyParameterKVS.h>
-#include <Security/SecureObjectSync/SOSEngine.h>
 #include <Security/SecureObjectSync/SOSPeerCoder.h>
 #include <Security/SecureObjectSync/SOSInternal.h>
 #include <Security/SecureObjectSync/SOSRing.h>
 #include <Security/SecureObjectSync/SOSRingUtils.h>
+#include <Security/SecureObjectSync/SOSRingRecovery.h>
 #include <Security/SecureObjectSync/SOSPeerInfoSecurityProperties.h>
-#include <Security/SecureObjectSync/SOSPeerInfoV2.h>
+#include <Security/SecureObjectSync/SOSAccountTransaction.h>
+#include <Security/SecureObjectSync/SOSAccountGhost.h>
+
 #include <Security/SecItemInternal.h>
 #include <SOSCircle/CKBridge/SOSCloudKeychainClient.h>
-#include <SOSCircle/Regressions/SOSRegressionUtilities.h>
+
+#include <utilities/SecCFWrappers.h>
+#include <utilities/SecCFError.h>
 
 CFGiblisWithCompareFor(SOSAccount);
 
 const CFStringRef SOSTransportMessageTypeIDS = CFSTR("IDS");
+const CFStringRef SOSTransportMessageTypeIDSV2 = CFSTR("IDS2.0");
 const CFStringRef SOSTransportMessageTypeKVS = CFSTR("KVS");
 const CFStringRef kSOSDSIDKey = CFSTR("AccountDSID");
 const CFStringRef kSOSEscrowRecord = CFSTR("EscrowRecord");
 const CFStringRef kSOSUnsyncedViewsKey = CFSTR("unsynced");
-
+const CFStringRef kSOSPendingEnableViewsToBeSetKey = CFSTR("pendingEnableViews");
+const CFStringRef kSOSPendingDisableViewsToBeSetKey = CFSTR("pendingDisableViews");
+const CFStringRef kSOSTestV2Settings = CFSTR("v2dictionary");
+const CFStringRef kSOSRecoveryKey = CFSTR("RecoveryKey");
+const CFStringRef kSOSRecoveryRing = CFSTR("RecoveryRing");
+const CFStringRef kSOSAccountUUID = CFSTR("UUID");
 
 #define DATE_LENGTH 25
 const CFStringRef kSOSAccountDebugScope = CFSTR("Scope");
-
 
 bool SOSAccountEnsureFactoryCircles(SOSAccountRef a)
 {
@@ -69,24 +80,24 @@ SOSAccountRef SOSAccountCreateBasic(CFAllocatorRef allocator,
 
     a->queue = dispatch_queue_create("Account Queue", DISPATCH_QUEUE_SERIAL);
 
-    a->notification_cleanups = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-
     a->gestalt = CFRetainSafe(gestalt);
 
     a->trusted_circle = NULL;
-    a->trusted_rings = CFDictionaryCreateMutableForCFTypes(allocator);
     a->backups = CFDictionaryCreateMutableForCFTypes(allocator);
     a->my_identity = NULL;
     a->retirees = CFSetCreateMutableForSOSPeerInfosByID(allocator);
 
     a->factory = factory; // We adopt the factory. kthanksbai.
+
+    a->isListeningForSync = false;
     
     a->_user_private = NULL;
     a->_password_tmp = NULL;
     a->user_private_timer = NULL;
+    a->lock_notification_token = NOTIFY_TOKEN_INVALID;
 
     a->change_blocks = CFArrayCreateMutableForCFTypes(allocator);
-
+    a->waitForInitialSync_blocks = NULL;
     a->departure_code = kSOSNeverAppliedToCircle;
 
     a->key_transport = (SOSTransportKeyParameterRef)SOSTransportKeyParameterKVSCreate(a, NULL);
@@ -94,9 +105,74 @@ SOSAccountRef SOSAccountCreateBasic(CFAllocatorRef allocator,
     a->kvs_message_transport = NULL;
     a->ids_message_transport = NULL;
     a->expansion = CFDictionaryCreateMutableForCFTypes(allocator);
+
+    SOSAccountAddRingDictionary(a);
+
+    a->saveBlock = NULL;
+    a->circle_rings_retirements_need_attention = false;
+    a->engine_peer_state_needs_repair = false;
+    a->key_interests_need_updating = false;
+    a->deviceID = NULL;
     
     return a;
 }
+
+//
+// MARK: Transactional
+//
+
+void SOSAccountWithTransaction_Locked(SOSAccountRef account, void (^action)(SOSAccountRef account, SOSAccountTransactionRef txn)) {
+    SOSAccountTransactionRef at = SOSAccountTransactionCreate(account);
+    action(account, at);
+    SOSAccountTransactionFinish(at);
+    CFReleaseNull(at);
+}
+
+
+
+void SOSAccountWithTransaction(SOSAccountRef account, bool sync, void (^action)(SOSAccountRef account, SOSAccountTransactionRef txn)) {
+    dispatch_block_t with_transaction =  ^{
+        SOSAccountWithTransaction_Locked(account, action);
+    };
+
+    if (sync) {
+        dispatch_sync(SOSAccountGetQueue(account), with_transaction);
+    } else {
+        dispatch_async(SOSAccountGetQueue(account), with_transaction);
+    }
+}
+
+void SOSAccountWithTransactionSync(SOSAccountRef account, void (^action)(SOSAccountRef account, SOSAccountTransactionRef txn)) {
+    SOSAccountWithTransaction(account, true, action);
+}
+
+void SOSAccountWithTransactionAsync(SOSAccountRef account, bool sync, void (^action)(SOSAccountRef account, SOSAccountTransactionRef txn)) {
+    SOSAccountWithTransaction(account, false, action);
+}
+
+//
+// MARK: Save Block
+//
+
+void SOSAccountSetSaveBlock(SOSAccountRef account, SOSAccountSaveBlock saveBlock) {
+    CFAssignRetained(account->saveBlock, Block_copy(saveBlock));
+}
+
+void SOSAccountFlattenToSaveBlock(SOSAccountRef account) {
+    if (account->saveBlock) {
+        CFErrorRef localError = NULL;
+        CFDataRef saveData = SOSAccountCopyEncodedData(account, kCFAllocatorDefault, &localError);
+        
+        (account->saveBlock)(saveData, localError);
+        
+        CFReleaseNull(saveData);
+        CFReleaseNull(localError);
+    }
+}
+
+//
+// MARK: Security Properties
+//
 
 SOSSecurityPropertyResultCode SOSAccountUpdateSecurityProperty(SOSAccountRef account, CFStringRef property, SOSSecurityPropertyActionCode actionCode, CFErrorRef *error) {
     SOSSecurityPropertyResultCode retval = kSOSCCGeneralSecurityPropertyError;
@@ -141,7 +217,7 @@ bool SOSAccountUpdateGestalt(SOSAccountRef account, CFDictionaryRef new_gestalt)
     if (account->trusted_circle && account->my_identity
         && SOSFullPeerInfoUpdateGestalt(account->my_identity, new_gestalt, NULL)) {
         SOSAccountModifyCircle(account, NULL, ^(SOSCircleRef circle_to_change) {
-            secnotice("circleChange", "dCalling SOSCircleUpdatePeerInfo for gestalt change");
+            secnotice("circleChange", "Calling SOSCircleUpdatePeerInfo for gestalt change");
             return SOSCircleUpdatePeerInfo(circle_to_change, SOSAccountGetMyPeerInfo(account));
         });
     }
@@ -150,12 +226,52 @@ bool SOSAccountUpdateGestalt(SOSAccountRef account, CFDictionaryRef new_gestalt)
     return true;
 }
 
-bool SOSAccountUpdateDSID(SOSAccountRef account, CFStringRef dsid){
+CFDictionaryRef SOSAccountCopyGestalt(SOSAccountRef account) {
+    return CFDictionaryCreateCopy(kCFAllocatorDefault, account->gestalt);
+}
+
+bool SOSAccountUpdateV2Dictionary(SOSAccountRef account, CFDictionaryRef newV2Dict) {
+    if(!newV2Dict) return true;
+    SOSAccountSetValue(account, kSOSTestV2Settings, newV2Dict, NULL);
+    if (account->trusted_circle && account->my_identity
+        && SOSFullPeerInfoUpdateV2Dictionary(account->my_identity, newV2Dict, NULL)) {
+        SOSAccountModifyCircle(account, NULL, ^(SOSCircleRef circle_to_change) {
+            secnotice("circleChange", "Calling SOSCircleUpdatePeerInfo for gestalt change");
+            return SOSCircleUpdatePeerInfo(circle_to_change, SOSAccountGetMyPeerInfo(account));
+        });
+    }
+    return true;
+}
+
+CFDictionaryRef SOSAccountCopyV2Dictionary(SOSAccountRef account) {
+    CFDictionaryRef v2dict = SOSAccountGetValue(account, kSOSTestV2Settings, NULL);
+    return CFDictionaryCreateCopy(kCFAllocatorDefault, v2dict);
+}
+
+static bool SOSAccountUpdateDSID(SOSAccountRef account, CFStringRef dsid){
     SOSAccountSetValue(account, kSOSDSIDKey, dsid, NULL);
     //send new DSID over account changed
     SOSTransportCircleSendOfficialDSID(account->circle_transport, dsid, NULL);
-    
     return true;
+}
+
+void SOSAccountAssertDSID(SOSAccountRef account, CFStringRef dsid) {
+    CFStringRef accountDSID = SOSAccountGetValue(account, kSOSDSIDKey, NULL);
+    if(accountDSID == NULL) {
+        secdebug("updates", "Setting dsid, current dsid is empty for this account: %@", dsid);
+
+        SOSAccountUpdateDSID(account, dsid);
+    } else if(CFStringCompare(dsid, accountDSID, 0) != kCFCompareEqualTo) {
+        secnotice("updates", "Changing DSID from: %@ to %@", accountDSID, dsid);
+
+        //DSID has changed, blast the account!
+        SOSAccountSetToNew(account);
+
+        //update DSID to the new DSID
+        SOSAccountUpdateDSID(account, dsid);
+    } else {
+        secnotice("updates", "Not Changing DSID: %@ to %@", accountDSID, dsid);
+    }
 }
 
 bool SOSAccountUpdateFullPeerInfo(SOSAccountRef account, CFSetRef minimumViews, CFSetRef excludedViews) {
@@ -171,9 +287,42 @@ bool SOSAccountUpdateFullPeerInfo(SOSAccountRef account, CFSetRef minimumViews, 
     return true;
 }
 
+void SOSAccountPendEnableViewSet(SOSAccountRef account, CFSetRef enabledViews)
+{
+    if(CFSetGetValue(enabledViews, kSOSViewKeychainV0) != NULL) secnotice("viewChange", "Warning, attempting to Add KeychainV0");
+
+    SOSAccountValueUnionWith(account, kSOSPendingEnableViewsToBeSetKey, enabledViews);
+    SOSAccountValueSubtractFrom(account, kSOSPendingDisableViewsToBeSetKey, enabledViews);
+}
+
+
+void SOSAccountPendDisableViewSet(SOSAccountRef account, CFSetRef disabledViews)
+{
+    SOSAccountValueUnionWith(account, kSOSPendingDisableViewsToBeSetKey, disabledViews);
+    SOSAccountValueSubtractFrom(account, kSOSPendingEnableViewsToBeSetKey, disabledViews);
+}
+
+static SOSViewResultCode SOSAccountVirtualV0Behavior(SOSAccountRef account, SOSViewActionCode actionCode) {
+    SOSViewResultCode retval = kSOSCCGeneralViewError;
+    // The V0 view switches on and off all on it's own, we allow people the delusion
+    // of control and status if it's what we're stuck at., otherwise error.
+    if (SOSAccountSyncingV0(account)) {
+        require_action_quiet(actionCode == kSOSCCViewDisable, errOut, CFSTR("Can't disable V0 view and it's on right now"));
+        retval = kSOSCCViewMember;
+    } else {
+        require_action_quiet(actionCode == kSOSCCViewEnable, errOut, CFSTR("Can't enable V0 and it's off right now"));
+        retval = kSOSCCViewNotMember;
+    }
+errOut:
+    return retval;
+}
+
+
 SOSViewResultCode SOSAccountUpdateView(SOSAccountRef account, CFStringRef viewname, SOSViewActionCode actionCode, CFErrorRef *error) {
     SOSViewResultCode retval = kSOSCCGeneralViewError;
     SOSViewResultCode currentStatus = kSOSCCGeneralViewError;
+    bool alreadyInSync = SOSAccountHasCompletedInitialSync(account);
+
     bool updateCircle = false;
     require_action_quiet(account->trusted_circle, errOut, SOSCreateError(kSOSErrorNoCircle, CFSTR("No Trusted Circle"), NULL, error));
     require_action_quiet(account->my_identity, errOut, SOSCreateError(kSOSErrorPeerNotFound, CFSTR("No Peer for Account"), NULL, error));
@@ -182,29 +331,38 @@ SOSViewResultCode SOSAccountUpdateView(SOSAccountRef account, CFStringRef viewna
     require_action_quiet((currentStatus == kSOSCCViewNotMember) || (currentStatus == kSOSCCViewMember), errOut, CFSTR("View Membership Not Actionable"));
 
     if (CFEqualSafe(viewname, kSOSViewKeychainV0)) {
-        // The V0 view switches on and off all on it's own, we allow people the delusion
-        // of control and status if it's what we're stuck at., otherwise error.
-        if (SOSAccountSyncingV0(account)) {
-            require_action_quiet(actionCode = kSOSCCViewDisable, errOut, CFSTR("Can't disable V0 view and it's on right now"));
-            retval = kSOSCCViewMember;
-        } else {
-            require_action_quiet(actionCode = kSOSCCViewEnable, errOut, CFSTR("Can't enable V0 and it's off right now"));
-            retval = kSOSCCViewNotMember;
-        }
+        retval = SOSAccountVirtualV0Behavior(account, actionCode);
     } else if (SOSAccountSyncingV0(account) && SOSViewsIsV0Subview(viewname)) {
         // Subviews of V0 syncing can't be turned off if V0 is on.
         require_action_quiet(actionCode = kSOSCCViewDisable, errOut, CFSTR("Have V0 peer can't disable"));
         retval = kSOSCCViewMember;
     } else {
+        CFMutableSetRef pendingSet = CFSetCreateMutableForCFTypes(kCFAllocatorDefault);
+        CFSetAddValue(pendingSet, viewname);
+
         if(actionCode == kSOSCCViewEnable && currentStatus == kSOSCCViewNotMember) {
-            retval = SOSFullPeerInfoUpdateViews(account->my_identity, actionCode, viewname, error);
-            if(retval == kSOSCCViewMember) updateCircle = true;
+            if(alreadyInSync) {
+                retval = SOSFullPeerInfoUpdateViews(account->my_identity, actionCode, viewname, error);
+                if(retval == kSOSCCViewMember) updateCircle = true;
+            } else {
+                SOSAccountPendEnableViewSet(account, pendingSet);
+                retval = kSOSCCViewMember;
+                updateCircle = false;
+            }
         } else if(actionCode == kSOSCCViewDisable && currentStatus == kSOSCCViewMember) {
-            retval = SOSFullPeerInfoUpdateViews(account->my_identity, actionCode, viewname, error);
-            if(retval == kSOSCCViewNotMember) updateCircle = true;
+            if(alreadyInSync) {
+                retval = SOSFullPeerInfoUpdateViews(account->my_identity, actionCode, viewname, error);
+                if(retval == kSOSCCViewNotMember) updateCircle = true;
+            } else {
+                SOSAccountPendDisableViewSet(account, pendingSet);
+                retval = kSOSCCViewNotMember;
+                updateCircle = false;
+            }
         } else {
             retval = currentStatus;
         }
+        
+        CFReleaseNull(pendingSet);
 
         if (updateCircle) {
             SOSAccountModifyCircle(account, NULL, ^(SOSCircleRef circle_to_change) {
@@ -223,7 +381,13 @@ SOSViewResultCode SOSAccountViewStatus(SOSAccountRef account, CFStringRef viewna
     require_action_quiet(account->trusted_circle, errOut, SOSCreateError(kSOSErrorNoCircle, CFSTR("No Trusted Circle"), NULL, error));
     require_action_quiet(account->my_identity, errOut, SOSCreateError(kSOSErrorPeerNotFound, CFSTR("No Peer for Account"), NULL, error));
 
-    retval = SOSFullPeerInfoViewStatus(account->my_identity, viewname, error);
+    if (SOSAccountValueSetContainsValue(account, kSOSPendingEnableViewsToBeSetKey, viewname)) {
+        retval = kSOSCCViewMember;
+    } else if (SOSAccountValueSetContainsValue(account, kSOSPendingDisableViewsToBeSetKey, viewname)) {
+        retval = kSOSCCViewNotMember;
+    } else {
+        retval = SOSFullPeerInfoViewStatus(account->my_identity, viewname, error);
+    }
 
     // If that doesn't say we're a member and this view is a V0 subview, and we're syncing V0 views we are a member
     if (retval != kSOSCCViewMember) {
@@ -247,49 +411,93 @@ errOut:
 
 static void dumpViewSet(CFStringRef label, CFSetRef views) {
     if(views) {
-        secnotice("circleChange", "%@ list: %@", label, views);
+        CFStringSetPerformWithDescription(views, ^(CFStringRef description) {
+            secnotice("circleChange", "%@ list: %@", label, description);
+        });
     } else {
         secnotice("circleChange", "No %@ list provided.", label);
     }
 }
 
-bool SOSAccountUpdateViewSets(SOSAccountRef account, CFSetRef enabledViews, CFSetRef disabledViews) {
+static bool SOSAccountScreenViewListForValidV0(SOSAccountRef account, CFMutableSetRef viewSet, SOSViewActionCode actionCode) {
+    bool retval = true;
+    if(viewSet && CFSetContainsValue(viewSet, kSOSViewKeychainV0)) {
+        retval = SOSAccountVirtualV0Behavior(account, actionCode) != kSOSCCGeneralViewError;
+        CFSetRemoveValue(viewSet, kSOSViewKeychainV0);
+    }
+    return retval;
+}
+
+bool SOSAccountUpdateViewSets(SOSAccountRef account, CFSetRef origEnabledViews, CFSetRef origDisabledViews) {
+    bool retval = false;
     bool updateCircle = false;
+    SOSPeerInfoRef  pi = NULL;
+    CFMutableSetRef enabledViews = NULL;
+    CFMutableSetRef disabledViews = NULL;
+    if(origEnabledViews) enabledViews = CFSetCreateMutableCopy(kCFAllocatorDefault, 0, origEnabledViews);
+    if(origDisabledViews) disabledViews = CFSetCreateMutableCopy(kCFAllocatorDefault, 0, origDisabledViews);
     dumpViewSet(CFSTR("Enabled"), enabledViews);
     dumpViewSet(CFSTR("Disabled"), disabledViews);
     
     require_action_quiet(account->trusted_circle, errOut, secnotice("views", "Attempt to set viewsets with no trusted circle"));
-    require_action_quiet(account->my_identity, errOut, secnotice("views", "Attempt to set viewsets with no fullPeerInfo"));
-    require_action_quiet(enabledViews || disabledViews, errOut, secnotice("views", "No work to do"));
     
-    // Copy my views
+    // Make sure we have a peerInfo capable of supporting views.
     SOSFullPeerInfoRef fpi = SOSAccountGetMyFullPeerInfo(account);
-    SOSPeerInfoRef  pi = SOSPeerInfoCreateCopy(kCFAllocatorDefault, SOSFullPeerInfoGetPeerInfo(fpi), NULL);
+    require_action_quiet(fpi, errOut, secnotice("views", "Attempt to set viewsets with no fullPeerInfo"));
+    require_action_quiet(enabledViews || disabledViews, errOut, secnotice("views", "No work to do"));
+
+    pi = SOSPeerInfoCreateCopy(kCFAllocatorDefault, SOSFullPeerInfoGetPeerInfo(fpi), NULL);
     
     require_action_quiet(pi, errOut, secnotice("views", "Couldn't copy PeerInfoRef"));
     
-    
     if(!SOSPeerInfoVersionIsCurrent(pi)) {
-        if(!SOSPeerInfoUpdateToV2(pi, NULL)) {
-            secnotice("views", "Unable to update peer to V2- can't update views");
-            return false;
-        }
+        CFErrorRef updateFailure = NULL;
+        require_action_quiet(SOSPeerInfoUpdateToV2(pi, &updateFailure), errOut,
+                             (secnotice("views", "Unable to update peer to V2- can't update views: %@", updateFailure), (void) CFReleaseNull(updateFailure)));
+        secnotice("V2update", "Updating PeerInfo to V2 within SOSAccountUpdateViewSets");
+        updateCircle = true;
     }
     
-    if(enabledViews) updateCircle = SOSViewSetEnable(pi, enabledViews);
-    if(disabledViews) updateCircle |= SOSViewSetDisable(pi, disabledViews);
+    CFStringSetPerformWithDescription(enabledViews, ^(CFStringRef description) {
+        secnotice("viewChange", "Enabling %@", description);
+    });
     
-    /* UPDATE FULLPEERINFO VIEWS */
+    CFStringSetPerformWithDescription(disabledViews, ^(CFStringRef description) {
+        secnotice("viewChange", "Disabling %@", description);
+    });
     
-    if (updateCircle && SOSFullPeerInfoUpdateToThisPeer(fpi, pi, NULL)) {
-        SOSAccountModifyCircle(account, NULL, ^(SOSCircleRef circle_to_change) {
-            secnotice("circleChange", "Calling SOSCircleUpdatePeerInfo for views change");
+    require_action_quiet(SOSAccountScreenViewListForValidV0(account, enabledViews, kSOSCCViewEnable), errOut, secnotice("viewChange", "Bad view change (enable) with kSOSViewKeychainV0"));
+    require_action_quiet(SOSAccountScreenViewListForValidV0(account, disabledViews, kSOSCCViewDisable), errOut, secnotice("viewChange", "Bad view change (disable) with kSOSViewKeychainV0"));
+
+    if(SOSAccountHasCompletedInitialSync(account)) {
+        if(enabledViews) updateCircle |= SOSViewSetEnable(pi, enabledViews);
+        if(disabledViews) updateCircle |= SOSViewSetDisable(pi, disabledViews);
+        retval = true;
+    } else {
+        //hold on to the views and enable them later
+        if(enabledViews) SOSAccountPendEnableViewSet(account, enabledViews);
+        if(disabledViews) SOSAccountPendDisableViewSet(account, disabledViews);
+        retval = true;
+    }
+    
+    if(updateCircle) {
+        /* UPDATE FULLPEERINFO VIEWS */
+        require_quiet(SOSFullPeerInfoUpdateToThisPeer(fpi, pi, NULL), errOut);
+        
+        require_quiet(SOSAccountModifyCircle(account, NULL, ^(SOSCircleRef circle_to_change) {
+            secnotice("circleChange", "Calling SOSCircleUpdatePeerInfo for views or peerInfo change");
             return SOSCircleUpdatePeerInfo(circle_to_change, SOSFullPeerInfoGetPeerInfo(account->my_identity));
-        });
+        }), errOut);
+        
+        // Make sure we update the engine
+        account->circle_rings_retirements_need_attention = true;
     }
-    
+
 errOut:
-    return updateCircle;
+    CFReleaseNull(enabledViews);
+    CFReleaseNull(disabledViews);
+    CFReleaseNull(pi);
+    return retval;
 }
 
 
@@ -300,8 +508,10 @@ SOSAccountRef SOSAccountCreate(CFAllocatorRef allocator,
 
     SOSAccountEnsureFactoryCircles(a);
 
-    SOSUpdateKeyInterest(a);
+    SOSAccountEnsureUUID(a);
 
+    a->key_interests_need_updating = true;
+    
     return a;
 }
 
@@ -312,7 +522,7 @@ static void SOSAccountDestroy(CFTypeRef aObj) {
     //    Don't free it.
     //   a->factory
 
-    SOSAccountCleanupNotificationForAllPeers(a);
+    SOSAccountCancelSyncChecking(a);
 
     SOSEngineRef engine = SOSDataSourceFactoryGetEngineForDataSourceName(a->factory, SOSCircleGetName(a->trusted_circle), NULL);
 
@@ -324,7 +534,6 @@ static void SOSAccountDestroy(CFTypeRef aObj) {
 
         CFReleaseNull(a->my_identity);
         CFReleaseNull(a->trusted_circle);
-        CFReleaseNull(a->trusted_rings);
         CFReleaseNull(a->backups);
         CFReleaseNull(a->retirees);
 
@@ -343,12 +552,14 @@ static void SOSAccountDestroy(CFTypeRef aObj) {
         CFReleaseNull(a->key_transport);
         CFReleaseNull(a->circle_transport);
         dispatch_release(a->queue);
-        CFReleaseNull(a->notification_cleanups);
 
         dispatch_release(a->user_private_timer);
         CFReleaseNull(a->change_blocks);
+        CFReleaseNull(a->waitForInitialSync_blocks);
         CFReleaseNull(a->expansion);
 
+        CFReleaseNull(a->saveBlock);
+        CFReleaseNull(a->deviceID);
     });
 }
 
@@ -440,7 +651,6 @@ void SOSAccountSetToNew(SOSAccountRef a) {
     
     CFReleaseNull(a->my_identity);
     CFReleaseNull(a->trusted_circle);
-    CFReleaseNull(a->trusted_rings);
     CFReleaseNull(a->backups);
     CFReleaseNull(a->retirees);
 
@@ -455,24 +665,35 @@ void SOSAccountSetToNew(SOSAccountRef a) {
     CFReleaseNull(a->kvs_message_transport);
     CFReleaseNull(a->ids_message_transport);
     CFReleaseNull(a->expansion);
+    CFReleaseNull(a->deviceID);
     
     /* remove all syncable items */
-    result = do_keychain_delete_aks_bags();
+    result = do_keychain_delete_aks_bags(); (void) result;
     secdebug("set to new", "result for deleting aks bags: %d", result);
 
-    result = do_keychain_delete_identities();
+    result = do_keychain_delete_identities(); (void) result;
     secdebug("set to new", "result for deleting identities: %d", result);
  
-    result = do_keychain_delete_lakitu();
+    result = do_keychain_delete_lakitu(); (void) result;
     secdebug("set to new", "result for deleting lakitu: %d", result);
     
-    result = do_keychain_delete_sbd();
+    result = do_keychain_delete_sbd(); (void) result;
     secdebug("set to new", "result for deleting sbd: %d", result);
 
     a->user_public_trusted = false;
     a->departure_code = kSOSNeverAppliedToCircle;
-    a->user_private_timer = 0;
-    a->lock_notification_token = 0;
+
+    if (a->user_private_timer) {
+        dispatch_source_cancel(a->user_private_timer);
+        dispatch_release(a->user_private_timer);
+        a->user_private_timer = NULL;
+        xpc_transaction_end();
+
+    }
+    if (a->lock_notification_token != NOTIFY_TOKEN_INVALID) {
+        notify_cancel(a->lock_notification_token);
+        a->lock_notification_token = NOTIFY_TOKEN_INVALID;
+    }
 
     // keeping gestalt;
     // keeping factory;
@@ -486,24 +707,46 @@ void SOSAccountSetToNew(SOSAccountRef a) {
     a->kvs_message_transport = NULL;
     a->ids_message_transport = NULL;
 
-    a->trusted_rings = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
     a->backups = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
 
     a->retirees = CFSetCreateMutableForSOSPeerInfosByID(kCFAllocatorDefault);
     a->expansion = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
+    SOSAccountAddRingDictionary(a);
 
     SOSAccountEnsureFactoryCircles(a); // Does rings too
 
-    SOSUpdateKeyInterest(a);
+    // By resetting our expansion dictionary we've reset our UUID, so we'll be notified properly
+    SOSAccountEnsureUUID(a);
+
+    a->key_interests_need_updating = true;
 }
 
+bool SOSAccountIsNew(SOSAccountRef account, CFErrorRef *error){
+    bool result = false;
+    require_quiet(account->user_public_trusted == false, exit);
+    require_quiet(account->departure_code == kSOSNeverAppliedToCircle, exit);
+    require_quiet(account->user_private_timer == NULL, exit);
+    require_quiet(account->lock_notification_token == NOTIFY_TOKEN_INVALID, exit);
+    require_quiet (CFDictionaryGetCount(account->backups) == 0, exit);
+    require_quiet(CFSetGetCount(account->retirees) == 0, exit);
+
+    result = true;
+exit:
+    return result;
+}
 
 static CFStringRef SOSAccountCopyFormatDescription(CFTypeRef aObj, CFDictionaryRef formatOptions) {
     SOSAccountRef a = (SOSAccountRef) aObj;
     
     CFStringRef gestaltDescription = CFDictionaryCopyCompactDescription(a->gestalt);
 
-    CFStringRef result = CFStringCreateWithFormat(NULL, NULL, CFSTR("<SOSAccount@%p: Gestalt: %@ Circle: %@ Me: %@>"), a, gestaltDescription, a->trusted_circle, a->my_identity);
+    CFStringRef result = CFStringCreateWithFormat(NULL, NULL, CFSTR("<SOSAccount@%p: %c%c%c%c%c G: %@ Me: %@ C: %@ >"), a,
+                                                  a->user_public ? 'P' : 'p',
+                                                  a->user_public_trusted ? 'T' : 't',
+                                                  a->isListeningForSync ? 'L' : 'l',
+                                                  SOSAccountHasCompletedInitialSync(a) ? 'C' : 'c',
+                                                  SOSAccountHasCompletedRequiredBackupSync(a) ? 'B' : 'b',
+                                                  gestaltDescription, a->my_identity, a->trusted_circle);
 
     CFReleaseNull(gestaltDescription);
 
@@ -528,7 +771,7 @@ static Boolean SOSAccountCompare(CFTypeRef lhs, CFTypeRef rhs)
 
     return CFEqualSafe(laccount->gestalt, raccount->gestalt)
         && CFEqualSafe(laccount->trusted_circle, raccount->trusted_circle)
-        && CFEqualSafe(laccount->trusted_rings, raccount->trusted_rings)
+        && CFEqualSafe(laccount->expansion, raccount->expansion)
         && CFEqualSafe(laccount->my_identity, raccount->my_identity);
 }
 
@@ -545,104 +788,7 @@ SOSFullPeerInfoRef SOSAccountCopyAccountIdentityPeerInfo(SOSAccountRef account, 
     return CFRetainSafe(account->my_identity);
 }
 
-static bool SOSAccountThisDeviceCanSyncWithCircle(SOSAccountRef account) {
-    bool ok = false;
-    __block CFErrorRef error = NULL;
 
-    if (!SOSAccountHasPublicKey(account, &error)) {
-        CFReleaseSafe(error);
-        return false;
-    }
-    
-    bool hasID = true;
-    
-    require_action_quiet(account->my_identity, xit,
-                         SOSCreateError(kSOSErrorBadFormat, CFSTR("Account identity not set"), NULL, &error));
-    
-    SOSTransportMessageIDSGetIDSDeviceID(account);
-    
-    require_action_quiet(account->trusted_circle, xit,
-                         SOSCreateError(kSOSErrorBadFormat, CFSTR("Account trusted circle not set"), NULL, &error));
-    
-    require_action_quiet(hasID, xit,
-                         SOSCreateError(kSOSErrorBadFormat, CFSTR("Missing IDS device ID"), NULL, &error));
-    ok = SOSCircleHasPeerWithID(account->trusted_circle,
-                                SOSPeerInfoGetPeerID(SOSFullPeerInfoGetPeerInfo(account->my_identity)), &error);
-xit:
-    if (!ok) {
-        secerror("sync with device failure: %@", error);
-    }
-    CFReleaseSafe(error);
-    return ok;
-}
-
-static bool SOSAccountIsThisPeerIDMe(SOSAccountRef account, CFStringRef peerID) {
-    SOSPeerInfoRef mypi = SOSFullPeerInfoGetPeerInfo(account->my_identity);
-    CFStringRef myPeerID = SOSPeerInfoGetPeerID(mypi);
-
-    return myPeerID && CFEqualSafe(myPeerID, peerID);
-}
-
-static bool isDefaultsWriteSetupToSyncOverIDS(){
-    return ((whichTransportType == kSOSTransportIDS || whichTransportType == kSOSTransportFuture || whichTransportType == kSOSTransportPresent));
-}
-
-bool SOSAccountSyncWithAllPeers(SOSAccountRef account, CFErrorRef *error)
-{
-    bool result = true;
-    __block bool SyncingCompletedOverIDS = true;
-    __block bool SyncingCompletedOverKVS = true;
-    __block CFErrorRef localError = NULL;
-    SOSCircleRef circle  = SOSAccountGetCircle(account, error);
-    CFMutableDictionaryRef circleToPeerIDs = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-    CFMutableArrayRef peerIds = CFArrayCreateMutableForCFTypes(kCFAllocatorDefault);
-    
-    require_action_quiet(SOSAccountThisDeviceCanSyncWithCircle(account), xit,
-                         SOSCreateError(kSOSErrorNoCircle, CFSTR("This device cannot sync with circle"),
-                                        NULL, &localError));
-
-    SOSCircleForEachValidPeer(circle, account->user_public, ^(SOSPeerInfoRef peer) {
-        if (!SOSAccountIsThisPeerIDMe(account, SOSPeerInfoGetPeerID(peer))) {
-            if (isDefaultsWriteSetupToSyncOverIDS() && SOSPeerInfoShouldUseIDSTransport(SOSFullPeerInfoGetPeerInfo(account->my_identity), peer)) {
-                secdebug("IDS Transport", "Syncing with IDS capable peers using IDS!");
-                CFMutableDictionaryRef circleToIdsId = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-                CFMutableArrayRef ids = CFArrayCreateMutableForCFTypes(kCFAllocatorDefault);
-                CFArrayAppendValue(ids, SOSPeerInfoGetPeerID(peer));
-                CFDictionaryAddValue(circleToIdsId, SOSCircleGetName(circle), ids);
-                SyncingCompletedOverIDS = SOSTransportMessageSyncWithPeers(account->ids_message_transport, circleToIdsId, &localError);
-                CFReleaseNull(circleToIdsId);
-            } else {
-                CFArrayAppendValue(peerIds, SOSPeerInfoGetPeerID(peer));
-            }
-        }
-    });
-    if (CFArrayGetCount(peerIds)) {
-        secnotice("KVS", "Syncing with KVS capable peers");
-        CFDictionarySetValue(circleToPeerIDs, SOSCircleGetName(circle), peerIds);
-        SyncingCompletedOverKVS &= SOSTransportMessageSyncWithPeers(account->kvs_message_transport, circleToPeerIDs, &localError);
-    }
-
-    SOSEngineRef engine = SOSTransportMessageGetEngine(account->kvs_message_transport);
-    result = SOSEngineSyncWithPeers(engine, account->ids_message_transport, account->kvs_message_transport, &localError);
-
-    result &= ((SyncingCompletedOverIDS) &&
-               (SyncingCompletedOverKVS || (CFDictionaryGetCount(circleToPeerIDs) == 0)));
-
-    if (result)
-        SetCloudKeychainTraceValueForKey(kCloudKeychainNumberOfTimesSyncedWithPeers, 1);
-
-xit:
-    CFReleaseNull(circleToPeerIDs);
-
-    if (!result) {
-        secdebug("Account", "Could not sync with all peers: %@", localError);
-        CFErrorPropagate(localError, error);
-        localError = NULL;
-    }
-    CFReleaseNull(peerIds);
-    CFReleaseSafe(localError);
-    return result;
-}
 
 bool SOSAccountCleanupAfterPeer(SOSAccountRef account, size_t seconds, SOSCircleRef circle,
                                 SOSPeerInfoRef cleanupPeer, CFErrorRef* error)
@@ -735,19 +881,46 @@ bool SOSAccountScanForRetired(SOSAccountRef account, SOSCircleRef circle, CFErro
 
 SOSCircleRef SOSAccountCloneCircleWithRetirement(SOSAccountRef account, SOSCircleRef starting_circle, CFErrorRef *error) {
     SOSCircleRef new_circle = SOSCircleCopyCircle(NULL, starting_circle, error);
+    SOSFullPeerInfoRef meFull = SOSAccountGetMyFullPeerInfo(account);
+    SOSPeerInfoRef me = SOSFullPeerInfoGetPeerInfo(meFull);
+    bool iAmApplicant = me && SOSCircleHasApplicant(new_circle, me, NULL);
+    
     if(!new_circle) return NULL;
-
+    __block bool workDone = false;
     if (account->retirees) {
         CFSetForEach(account->retirees, ^(const void* value) {
             SOSPeerInfoRef pi = (SOSPeerInfoRef) value;
             if (isSOSPeerInfo(pi)) {
                 SOSCircleUpdatePeerInfo(new_circle, pi);
+                workDone = true;
             }
         });
     }
 
-    if(SOSCircleCountPeers(new_circle) == 0) {
-        SOSCircleResetToEmpty(new_circle, NULL);
+    if(workDone && SOSCircleCountPeers(new_circle) == 0) {
+        SecKeyRef userPrivKey = SOSAccountGetPrivateCredential(account, error);
+ 
+        if(iAmApplicant) {
+            if(userPrivKey) {
+                secnotice("resetToOffering", "Reset to offering with last retirement and me as applicant");
+                if(!SOSCircleResetToOffering(new_circle, userPrivKey, meFull, error) ||
+                   !SOSAccountAddiCloudIdentity(account, new_circle, userPrivKey, error)) {
+                    CFReleaseNull(new_circle);
+                    return NULL;
+                }
+            } else {
+                // Do nothing.  We can't resetToOffering without a userPrivKey.  If we were to resetToEmpty
+                // we won't push the result later in handleUpdateCircle.  If we leave the circle as it is
+                // we have a chance to set things right with a SetCreds/Join sequence.  This will cause
+                // handleUpdateCircle to return false.
+                CFReleaseNull(new_circle);
+                return NULL;
+            }
+        } else {
+            // This case is when we aren't an applicant and the circle is retirement-empty.
+            secnotice("resetToEmpty", "Reset to empty with last retirement");
+            SOSCircleResetToEmpty(new_circle, NULL);
+        }
     }
 
     return new_circle;
@@ -971,10 +1144,21 @@ static SOSCCStatus SOSCCThisDeviceStatusInCircle(SOSCircleRef circle, SOSPeerInf
     return kSOSCCNotInCircle;
 }
 
+CFStringRef SOSAccountGetSOSCCStatusString(SOSCCStatus status) {
+    switch(status) {
+        case kSOSCCInCircle: return CFSTR("kSOSCCInCircle");
+        case kSOSCCNotInCircle: return CFSTR("kSOSCCNotInCircle");
+        case kSOSCCRequestPending: return CFSTR("kSOSCCRequestPending");
+        case kSOSCCCircleAbsent: return CFSTR("kSOSCCCircleAbsent");
+        case kSOSCCError: return CFSTR("kSOSCCError");
+    }
+    return CFSTR("kSOSCCError");
+}
+
 bool SOSAccountIsInCircle(SOSAccountRef account, CFErrorRef *error) {
     SOSCCStatus result = SOSAccountGetCircleStatus(account, error);
     
-    if (result != kSOSCCInCircle && result != kSOSCCError) {
+    if (result != kSOSCCInCircle) {
         SOSErrorCreate(kSOSErrorNoCircle, error, NULL, CFSTR("Not in circle"));
         return false;
     }
@@ -994,14 +1178,54 @@ SOSCCStatus SOSAccountGetCircleStatus(SOSAccountRef account, CFErrorRef* error) 
 // MARK: Account Reset Circles
 //
 
-static bool SOSAccountResetCircleToOffering(SOSAccountRef account, SecKeyRef user_key, CFErrorRef *error) {
+// This needs to be called within a SOSAccountModifyCircle() block
+
+bool SOSAccountAddiCloudIdentity(SOSAccountRef account, SOSCircleRef circle, SecKeyRef user_key, CFErrorRef *error) {
+    bool result = false;
+    SOSFullPeerInfoRef cloud_identity = NULL;
+    SOSPeerInfoRef cloud_peer = GenerateNewCloudIdentityPeerInfo(error);
+    require_quiet(cloud_peer, err_out);
+    cloud_identity = CopyCloudKeychainIdentity(cloud_peer, error);
+    CFReleaseNull(cloud_peer);
+    require_quiet(cloud_identity, err_out);
+    require_quiet(SOSCircleRequestAdmission(circle, user_key, cloud_identity, error), err_out);
+    require_quiet(SOSCircleAcceptRequest(circle, user_key, account->my_identity, SOSFullPeerInfoGetPeerInfo(cloud_identity), error), err_out);
+    result = true;
+err_out:
+    return result;
+}
+
+bool SOSAccountRemoveIncompleteiCloudIdentities(SOSAccountRef account, SOSCircleRef circle, SecKeyRef privKey, CFErrorRef *error) {
+    bool retval = false;
+    CFMutableSetRef iCloud2Remove = CFSetCreateMutableForCFTypes(kCFAllocatorDefault);
+    
+    SOSCircleForEachActivePeer(circle, ^(SOSPeerInfoRef peer) {
+        if(SOSPeerInfoIsCloudIdentity(peer)) {
+            SOSFullPeerInfoRef icfpi = SOSFullPeerInfoCreateCloudIdentity(kCFAllocatorDefault, peer, NULL);
+            if(!icfpi) {
+                CFSetAddValue(iCloud2Remove, peer);
+            }
+            CFReleaseNull(icfpi);
+        }
+    });
+    
+    if(CFSetGetCount(iCloud2Remove) > 0) {
+        retval = true;
+        SOSCircleRemovePeers(circle, privKey, account->my_identity, iCloud2Remove, error);
+    }
+    CFReleaseNull(iCloud2Remove);
+    return retval;
+}
+
+static bool SOSAccountResetCircleToOffering(SOSAccountTransactionRef aTxn, SecKeyRef user_key, CFErrorRef *error) {
+    SOSAccountRef account = aTxn->account;
     bool result = false;
 
     require(SOSAccountHasCircle(account, error), fail);
     require(SOSAccountEnsureFullPeerAvailable(account, error), fail);
     
     (void) SOSAccountResetAllRings(account, error);
-    
+
     SOSAccountModifyCircle(account, error, ^(SOSCircleRef circle) {
         bool result = false;
         SOSFullPeerInfoRef cloud_identity = NULL;
@@ -1009,18 +1233,10 @@ static bool SOSAccountResetCircleToOffering(SOSAccountRef account, SecKeyRef use
 
         require_quiet(SOSCircleResetToOffering(circle, user_key, account->my_identity, &localError), err_out);
 
-        {
-            SOSPeerInfoRef cloud_peer = GenerateNewCloudIdentityPeerInfo(error);
-            require_quiet(cloud_peer, err_out);
-            cloud_identity = CopyCloudKeychainIdentity(cloud_peer, error);
-            CFReleaseNull(cloud_peer);
-            require_quiet(cloud_identity, err_out);
-        }
-
         account->departure_code = kSOSNeverLeftCircle;
         require_quiet(SOSAccountAddEscrowToPeerInfo(account, SOSAccountGetMyFullPeerInfo(account), error), err_out);
-        require_quiet(SOSCircleRequestAdmission(circle, user_key, cloud_identity, &localError), err_out);
-        require_quiet(SOSCircleAcceptRequest(circle, user_key, account->my_identity, SOSFullPeerInfoGetPeerInfo(cloud_identity), &localError), err_out);
+
+        require_quiet(SOSAccountAddiCloudIdentity(account, circle, user_key, error), err_out);
         result = true;
         SOSAccountPublishCloudParameters(account, NULL);
 
@@ -1036,6 +1252,9 @@ static bool SOSAccountResetCircleToOffering(SOSAccountRef account, SecKeyRef use
         return result;
     });
 
+    SOSAccountSetValue(account, kSOSUnsyncedViewsKey, kCFBooleanTrue, NULL);
+    SOSAccountUpdateOutOfSyncViews(aTxn, SOSViewsGetAllCurrent());
+
     result = true;
 
 fail:
@@ -1043,14 +1262,16 @@ fail:
 }
 
 
-bool SOSAccountResetToOffering(SOSAccountRef account, CFErrorRef* error) {
+bool SOSAccountResetToOffering(SOSAccountTransactionRef aTxn, CFErrorRef* error) {
+    SOSAccountRef account = aTxn->account;
     SecKeyRef user_key = SOSAccountGetPrivateCredential(account, error);
     if (!user_key)
         return false;
 
     CFReleaseNull(account->my_identity);
+    secnotice("resetToOffering", "Resetting circle to offering by request from client");
 
-    return user_key && SOSAccountResetCircleToOffering(account, user_key, error);
+    return user_key && SOSAccountResetCircleToOffering(aTxn, user_key, error);
 }
 
 bool SOSAccountResetToEmpty(SOSAccountRef account, CFErrorRef* error) {
@@ -1063,6 +1284,7 @@ bool SOSAccountResetToEmpty(SOSAccountRef account, CFErrorRef* error) {
     CFReleaseNull(account->my_identity);
 
     account->departure_code = kSOSWithdrewMembership;
+    secnotice("resetToEmpty", "Reset Circle to empty by client request");
     result &= SOSAccountModifyCircle(account, error, ^(SOSCircleRef circle) {
         result = SOSCircleResetToEmpty(circle, error);
         return result;
@@ -1071,198 +1293,102 @@ bool SOSAccountResetToEmpty(SOSAccountRef account, CFErrorRef* error) {
     if (!result) {
         secerror("error: %@", error ? *error : NULL);
     }
+    return result;
+}
+//
+// MARK: start backups
+//
 
+bool SOSAccountEnsureInBackupRings(SOSAccountRef account) {
+    __block bool result = false;
+    __block CFErrorRef error = NULL;
+    secnotice("backup", "Ensuring in rings");
+
+    CFDataRef backupKey = NULL;
+
+    require_action_quiet(account->backup_key, exit, result = true);
+
+    backupKey = SOSPeerInfoV2DictionaryCopyData(SOSAccountGetMyPeerInfo(account), sBackupKeyKey);
+    
+    bool updateBackupKey = !CFEqualSafe(backupKey, account->backup_key);
+    
+    if(updateBackupKey) {
+        require_quiet(SOSAccountUpdatePeerInfo(account, CFSTR("Backup public key"), &error, ^bool(SOSFullPeerInfoRef fpi, CFErrorRef *error) {
+            return SOSFullPeerInfoUpdateBackupKey(fpi, account->backup_key, error);
+        }), exit);
+    }
+    require_quiet(account->backup_key, exit); // If it went null, we're done now.
+
+    require_quiet(SOSBSKBIsGoodBackupPublic(account->backup_key, &error), exit);
+    
+    CFDataRef recoveryKeyBackFromRing = SOSAccountCopyRecoveryPublic(kCFAllocatorDefault, account, &error);
+
+    if(updateBackupKey || recoveryKeyBackFromRing) {
+        // It's a good key, we're going with it. Stop backing up the old way.
+        CFErrorRef localError = NULL;
+        if (!SOSDeleteV0Keybag(&localError)) {
+            secerror("Failed to delete v0 keybag: %@", localError);
+        }
+        CFReleaseNull(localError);
+        
+        result = true;
+
+        // Setup backups the new way.
+        SOSAccountForEachBackupView(account, ^(const void *value) {
+            CFStringRef viewName = (CFStringRef)value;
+            if(updateBackupKey || (recoveryKeyBackFromRing && !SOSAccountRecoveryKeyIsInBackupAndCurrentInView(account, viewName))) {
+                result &= SOSAccountNewBKSBForView(account, viewName, &error);
+            }
+        });
+    }
+
+exit:
+    if (!result) {
+        secnotice("backupkey", "Failed to setup backup public key: %@", error ? (CFTypeRef) error : (CFTypeRef) CFSTR("No error space provided"));
+    }
+    CFReleaseNull(backupKey);
     return result;
 }
 
-
 //
-// MARK: Waiting for in-sync
+// MARK: Recovery Public Key Functions
 //
 
-static bool SOSAccountHasBeenInSync(SOSAccountRef account) {
-    CFTypeRef unsyncedObject = SOSAccountGetValue(account, kSOSUnsyncedViewsKey, NULL);
-    CFSetRef unsynced = asSet(unsyncedObject, NULL);
-
-    return !(unsyncedObject == kCFBooleanTrue || (unsynced && (CFSetGetCount(unsynced) > 0)));
+bool SOSAccountRegisterRecoveryPublicKey(SOSAccountTransactionRef txn, CFDataRef recovery_key, CFErrorRef *error){
+    bool retval = SOSAccountSetRecoveryKey(txn->account, recovery_key, error);
+    if(retval) secnotice("recovery", "successfully registered recovery public key");
+    else secnotice("recovery", "could not register recovery public key: %@", *error);
+    SOSClearErrorIfTrue(retval, error);
+    return retval;
 }
 
-static bool SOSAccountUpdateOutOfSyncViews(SOSAccountRef account, CFSetRef viewsInSync) {
-    bool notifyOfChange = false;
+bool SOSAccountClearRecoveryPublicKey(SOSAccountTransactionRef txn, CFDataRef recovery_key, CFErrorRef *error){
+    bool retval = SOSAccountRemoveRecoveryKey(txn->account, error);
+    SOSClearErrorIfTrue(retval, error);
+    return retval;
+}
 
-    SOSCCStatus circleStatus = SOSAccountGetCircleStatus(account, NULL);
-    bool inOrApplying = (circleStatus == kSOSCCInCircle) || (circleStatus == kSOSCCRequestPending);
+CFDataRef SOSAccountCopyRecoveryPublicKey(SOSAccountTransactionRef txn, CFErrorRef *error){
+    CFDataRef result = NULL;
+    result = SOSAccountCopyRecoveryPublic(kCFAllocatorDefault, txn->account, error);
+    if(!result)  secnotice("recovery", "Could not retrieve the recovery public key from the ring: %@", *error);
 
-    CFTypeRef unsyncedObject = SOSAccountGetValue(account, kSOSUnsyncedViewsKey, NULL);
-
-    if (!inOrApplying) {
-        if (unsyncedObject != NULL) {
-            SOSAccountClearValue(account, kSOSUnsyncedViewsKey, NULL);
-            secnotice("initial-sync", "in sync, clearing pending");
-            notifyOfChange = true;
-        }
-    } else if (circleStatus == kSOSCCInCircle) {
-        __block CFMutableSetRef viewsToSync = CFSetCreateMutableForCFTypes(kCFAllocatorDefault);
-        SOSAccountForEachCirclePeerExceptMe(account, ^(SOSPeerInfoRef peer) {
-            SOSPeerInfoWithEnabledViewSet(peer, ^(CFSetRef enabled) {
-                CFSetUnion(viewsToSync, enabled);
-            });
-        });
-
-        if (viewsInSync) {
-            CFSetSubtract(viewsToSync, viewsInSync);
-
-        }
-
-        if (unsyncedObject == kCFBooleanTrue) {
-            if (CFSetGetCount(viewsToSync) == 0) {
-                secnotice("initial-sync", "No views to wait for");
-                SOSAccountClearValue(account, kSOSUnsyncedViewsKey, NULL);
-            } else {
-                __block CFSetRef newViews = NULL;
-                SOSPeerInfoWithEnabledViewSet(SOSAccountGetMyPeerInfo(account), ^(CFSetRef enabled) {
-                    newViews = CFSetCreateIntersection(kCFAllocatorDefault, enabled, viewsToSync);
-                });
-                secnotice("initial-sync", "Pending views set from True: %@", newViews);
-                SOSAccountSetValue(account, kSOSUnsyncedViewsKey, newViews, NULL);
-                CFReleaseNull(newViews);
-            }
-            notifyOfChange = true;
-        } else if (isSet(unsyncedObject)) {
-            CFSetRef waiting = (CFMutableSetRef) unsyncedObject;
-            CFSetRef newViews = CFSetCreateIntersection(kCFAllocatorDefault, waiting, viewsToSync);
-            if (!CFEqualSafe(waiting, newViews)) {
-                secnotice("initial-sync", "Pending views updated: %@", newViews);
-                SOSAccountSetValue(account, kSOSUnsyncedViewsKey, newViews, NULL);
-                notifyOfChange = true;
-            }
-            CFReleaseNull(newViews);
-        }
-
-        CFReleaseNull(viewsToSync);
+    if (!isData(result)) {
+        CFReleaseNull(result);
     }
+    SOSClearErrorIfTrue(result != NULL, error);
 
-    if (notifyOfChange) {
-        secnotice("initial-sync-notify", "In sync: Posting: %s", kSOSCCInitialSyncChangedNotification);
-        notify_post(kSOSCCInitialSyncChangedNotification);
-        // Make sure we update the engine
-        account->circle_rings_retirements_need_attention = true;
-    }
-
-    return SOSAccountHasBeenInSync(account);
-}
-
-static void SOSAccountPeerGotInSync(SOSAccountRef account, CFStringRef peerID) {
-    secnotice("initial-sync", "Heard PeerID is in sync: %@", peerID);
-
-    if (account->trusted_circle) {
-        SOSPeerInfoRef peer = SOSCircleCopyPeerWithID(account->trusted_circle, peerID, NULL);
-        if (peer) {
-            CFSetRef views = SOSPeerInfoCopyEnabledViews(peer);
-            SOSAccountUpdateOutOfSyncViews(account, views);
-            CFReleaseNull(views);
-        }
-        CFReleaseNull(peer);
-    }
-}
-
-void SOSAccountCleanupNotificationForAllPeers(SOSAccountRef account) {
-    SOSEngineRef engine = SOSDataSourceFactoryGetEngineForDataSourceName(account->factory, SOSCircleGetName(account->trusted_circle), NULL);
-
-    CFDictionaryForEach(account->notification_cleanups, ^(const void *key, const void *value) {
-        if (engine) {
-            SOSEngineSetSyncCompleteListener(engine, key, NULL);
-        }
-        dispatch_async(account->queue, value);
-    });
-
-    CFDictionaryRemoveAllValues(account->notification_cleanups);
-}
-
-static void SOSAccountCleanupNotificationForPeer(SOSAccountRef account, CFStringRef peerID) {
-    dispatch_block_t cleanup = CFDictionaryGetValue(account->notification_cleanups, peerID);
-
-    if (cleanup) {
-        SOSEngineRef engine = SOSDataSourceFactoryGetEngineForDataSourceName(account->factory, SOSCircleGetName(account->trusted_circle), NULL);
-
-        if (engine) {
-            SOSEngineSetSyncCompleteListener(engine, peerID, NULL);
-        }
-
-        dispatch_async(account->queue, cleanup);
-    }
-
-    CFDictionaryRemoveValue(account->notification_cleanups, peerID);
-
-}
-
-static void SOSAccountRegisterCleanupBlock(SOSAccountRef account, CFStringRef peerID, dispatch_block_t block) {
-    dispatch_block_t copy = Block_copy(block);
-    CFDictionarySetValue(account->notification_cleanups, peerID, copy);
-    CFReleaseNull(copy);
-}
-
-void SOSAccountEnsureSyncChecking(SOSAccountRef account) {
-    if (CFDictionaryGetCount(account->notification_cleanups) == 0) {
-        secnotice("initial-sync", "Setting up notifications to monitor in-sync");
-        SOSEngineRef engine = SOSDataSourceFactoryGetEngineForDataSourceName(account->factory, SOSCircleGetName(account->trusted_circle), NULL);
-
-        SOSEngineSetSyncCompleteListenerQueue(engine, account->queue);
-
-        if (engine) {
-            SOSAccountForEachCirclePeerExceptMe(account, ^(SOSPeerInfoRef peer) {
-                CFStringRef peerID = CFStringCreateCopy(kCFAllocatorDefault, SOSPeerInfoGetPeerID(peer));
-
-                secnotice("initial-sync", "Setting up monitoring for peer: %@", peerID);
-                SOSAccountRegisterCleanupBlock(account, peerID, ^{
-                    CFReleaseSafe(peerID);
-                });
-
-                SOSEngineSetSyncCompleteListener(engine, peerID, ^{
-                    SOSAccountPeerGotInSync(account, peerID);
-                    SOSAccountCleanupNotificationForPeer(account, peerID);
-                    SOSAccountFinishTransaction(account);
-                });
-            });
-        } else {
-            secerror("Couldn't find engine to setup notifications!!!");
-        }
-    }
-}
-
-void SOSAccountCancelSyncChecking(SOSAccountRef account) {
-    SOSAccountCleanupNotificationForAllPeers(account);
-    SOSAccountUpdateOutOfSyncViews(account, NULL);
-}
-
-bool SOSAccountCheckHasBeenInSync(SOSAccountRef account) {
-    bool hasBeenInSync = false;
-
-    if (!SOSAccountIsInCircle(account, NULL)) {
-        SOSAccountCancelSyncChecking(account);
-    } else {
-        hasBeenInSync = SOSAccountHasBeenInSync(account);
-        if (!hasBeenInSync) {
-            hasBeenInSync = SOSAccountUpdateOutOfSyncViews(account, NULL);
-            if (hasBeenInSync) {
-                // Cancel and declare victory
-                SOSAccountCancelSyncChecking(account);
-            } else {
-                // Make sure we're watching in case this is the fist attempt
-                SOSAccountEnsureSyncChecking(account);
-            }
-        }
-    }
-
-    return hasBeenInSync;
+    return result;
 }
 
 //
 // MARK: Joining
 //
 
-static bool SOSAccountJoinCircle(SOSAccountRef account, SecKeyRef user_key,
+static bool SOSAccountJoinCircle(SOSAccountTransactionRef aTxn, SecKeyRef user_key,
                                 bool use_cloud_peer, CFErrorRef* error) {
+    SOSAccountRef account = aTxn->account;
+
     __block bool result = false;
     __block SOSFullPeerInfoRef cloud_full_peer = NULL;
 
@@ -1271,15 +1397,17 @@ static bool SOSAccountJoinCircle(SOSAccountRef account, SecKeyRef user_key,
 
     SOSFullPeerInfoRef myCirclePeer = account->my_identity;
 
-    if (use_cloud_peer) {
-        cloud_full_peer = SOSCircleCopyiCloudFullPeerInfoRef(account->trusted_circle, NULL);
+    if (SOSCircleCountPeers(account->trusted_circle) == 0 || SOSAccountGhostResultsInReset(account)) {
+        secnotice("resetToOffering", "Resetting circle to offering since there are no peers");
+        // this also clears initial sync data
+        result = SOSAccountResetCircleToOffering(aTxn, user_key, error);
     } else {
         SOSAccountSetValue(account, kSOSUnsyncedViewsKey, kCFBooleanTrue, NULL);
-    }
 
-    if (SOSCircleCountPeers(account->trusted_circle) == 0) {
-        result = SOSAccountResetCircleToOffering(account, user_key, error);
-    } else {
+        if (use_cloud_peer) {
+            cloud_full_peer = SOSCircleCopyiCloudFullPeerInfoRef(account->trusted_circle, NULL);
+        }
+
         SOSAccountModifyCircle(account, error, ^(SOSCircleRef circle) {
             result = SOSAccountAddEscrowToPeerInfo(account, myCirclePeer, error);
             result &= SOSCircleRequestAdmission(circle, user_key, myCirclePeer, error);
@@ -1290,6 +1418,7 @@ static bool SOSAccountJoinCircle(SOSAccountRef account, SecKeyRef user_key,
                 require_quiet(cloudid, finish);
                 require_quiet(SOSCircleHasActivePeerWithID(circle, cloudid, &localError), finish);
                 require_quiet(SOSCircleAcceptRequest(circle, user_key, cloud_full_peer, SOSFullPeerInfoGetPeerInfo(myCirclePeer), &localError), finish);
+
             finish:
                 if (localError){
                     secerror("Failed to join with cloud identity: %@", localError);
@@ -1298,6 +1427,10 @@ static bool SOSAccountJoinCircle(SOSAccountRef account, SecKeyRef user_key,
             }
             return result;
         });
+
+        if (use_cloud_peer) {
+            SOSAccountUpdateOutOfSyncViews(aTxn, SOSViewsGetAllCurrent());
+        }
     }
 
 fail:
@@ -1305,7 +1438,8 @@ fail:
     return result;
 }
 
-static bool SOSAccountJoinCircles_internal(SOSAccountRef account, bool use_cloud_identity, CFErrorRef* error) {
+static bool SOSAccountJoinCircles_internal(SOSAccountTransactionRef aTxn, bool use_cloud_identity, CFErrorRef* error) {
+    SOSAccountRef account = aTxn->account;
     bool success = false;
 
     SecKeyRef user_key = SOSAccountGetPrivateCredential(account, error);
@@ -1328,7 +1462,7 @@ static bool SOSAccountJoinCircles_internal(SOSAccountRef account, bool use_cloud
         }
     }
 
-    success = SOSAccountJoinCircle(account, user_key, use_cloud_identity, error);
+    success = SOSAccountJoinCircle(aTxn, user_key, use_cloud_identity, error);
 
     require_quiet(success, done);
        
@@ -1338,8 +1472,9 @@ done:
     return success;
 }
 
-bool SOSAccountJoinCircles(SOSAccountRef account, CFErrorRef* error) {
-    return SOSAccountJoinCircles_internal(account, false, error);
+bool SOSAccountJoinCircles(SOSAccountTransactionRef aTxn, CFErrorRef* error) {
+	secnotice("circleJoin", "Normal path circle join (SOSAccountJoinCircles)");
+    return SOSAccountJoinCircles_internal(aTxn, false, error);
 }
 
 CFStringRef SOSAccountCopyDeviceID(SOSAccountRef account, CFErrorRef *error){
@@ -1353,80 +1488,61 @@ fail:
     return result;
 }
 
-bool SOSAccountSetMyDSID(SOSAccountRef account, CFStringRef IDS, CFErrorRef* error){
+bool SOSAccountSetMyDSID(SOSAccountTransactionRef txn, CFStringRef IDS, CFErrorRef* error){
     bool result = true;
-
-    if(whichTransportType == kSOSTransportIDS || whichTransportType == kSOSTransportFuture){
-        secdebug("IDS Transport", "We are setting our device ID: %@", IDS);
-        if(IDS != NULL && (CFStringGetLength(IDS) > 0)){
-            require_action_quiet(account->my_identity, fail, SOSErrorCreate(kSOSErrorPeerNotFound, error, NULL, CFSTR("No peer for me")));
-            
-            result = SOSAccountModifyCircle(account, error, ^bool(SOSCircleRef circle) {
-                
-                SOSFullPeerInfoUpdateDeviceID(account->my_identity, IDS, error);
-                SOSFullPeerInfoUpdateTransportType(account->my_identity, SOSTransportMessageTypeIDS, error);
-                SOSFullPeerInfoUpdateTransportPreference(account->my_identity, kCFBooleanTrue, error);
-                
-                return SOSCircleHasPeer(circle, SOSFullPeerInfoGetPeerInfo(account->my_identity), NULL);
-            });
-        }
-        else
-            result = false;
-    }
-    else{
-        secdebug("IDS Transport", "We are setting our device ID: %@", IDS);
-        if(IDS != NULL && (CFStringGetLength(IDS) > 0)){
-            require_action_quiet(account->my_identity, fail, SOSErrorCreate(kSOSErrorPeerNotFound, error, NULL, CFSTR("No peer for me")));
-            
-            result = SOSAccountModifyCircle(account, error, ^bool(SOSCircleRef circle) {
-                
-                SOSFullPeerInfoUpdateDeviceID(account->my_identity, IDS, error);
-                SOSFullPeerInfoUpdateTransportType(account->my_identity, SOSTransportMessageTypeKVS, error);
-                SOSFullPeerInfoUpdateTransportPreference(account->my_identity, kCFBooleanTrue, error);
-                
-                return SOSCircleHasPeer(circle, SOSFullPeerInfoGetPeerInfo(account->my_identity), NULL);
-            });
-        }
-        else
-            result = false;
-
-    }
-   
-    SOSCCSyncWithAllPeers();
+    SOSAccountRef account = txn->account;
     
+    secdebug("IDS Transport", "We are setting our device ID: %@", IDS);
+    if(IDS != NULL && (CFStringGetLength(IDS) > 0)){
+        require_action_quiet(account->my_identity, fail, SOSErrorCreate(kSOSErrorPeerNotFound, error, NULL, CFSTR("No peer for me")));
+        
+        result = SOSAccountModifyCircle(account, error, ^bool(SOSCircleRef circle) {
+            
+            SOSFullPeerInfoUpdateDeviceID(account->my_identity, IDS, error);
+            SOSFullPeerInfoUpdateTransportType(account->my_identity, SOSTransportMessageTypeIDSV2, error);
+            SOSFullPeerInfoUpdateTransportPreference(account->my_identity, kCFBooleanFalse, error);
+            SOSFullPeerInfoUpdateTransportFragmentationPreference(account->my_identity, kCFBooleanTrue, error);
+            SOSFullPeerInfoUpdateTransportAckModelPreference(account->my_identity, kCFBooleanTrue, error);
+            return SOSCircleHasPeer(circle, SOSFullPeerInfoGetPeerInfo(account->my_identity), NULL);
+        });
+    }
+    else
+        result = false;
+
+    // Initiate sync with all IDS peers, since we just learned we can talk that way.
+    SOSAccountForEachCirclePeerExceptMe(account, ^(SOSPeerInfoRef peer) {
+        if (SOSPeerInfoShouldUseIDSTransport(SOSAccountGetMyPeerInfo(account), peer)) {
+            SOSAccountTransactionAddSyncRequestForPeerID(txn, SOSPeerInfoGetPeerID(peer));
+        }
+    });
+
 fail:
+    CFReleaseNull(account->deviceID);
+    account->deviceID = CFRetainSafe(IDS);
     return result;
 }
 
-
 bool SOSAccountSendIDSTestMessage(SOSAccountRef account, CFStringRef message, CFErrorRef *error){
     bool result = true;
-    if(whichTransportType == kSOSTransportIDS || whichTransportType == kSOSTransportFuture || whichTransportType == kSOSTransportPresent){
-        //construct message dictionary, circle -> peerID -> message
-        
-        CFMutableDictionaryRef circleToPeerMessages = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-        CFMutableDictionaryRef peerToMessage = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-        
-        char *messageCharStar;
-        asprintf(&messageCharStar, "%d", kIDSSendOneMessage);
-        CFStringRef messageString = CFStringCreateWithCString(kCFAllocatorDefault, messageCharStar, kCFStringEncodingUTF8);
-        
-        CFMutableDictionaryRef mutableDictionary = CFDictionaryCreateMutableForCFTypesWith(kCFAllocatorDefault, messageString, CFSTR("send IDS test message"), NULL);
-        
-        SOSCircleForEachPeer(account->trusted_circle, ^(SOSPeerInfoRef peer) {
-            if(!CFEqualSafe(peer, SOSAccountGetMyPeerInfo(account)))
-            CFDictionaryAddValue(peerToMessage, SOSPeerInfoGetPeerID(peer), mutableDictionary);
-        });
-        
-        CFDictionaryAddValue(circleToPeerMessages, SOSCircleGetName(account->trusted_circle), peerToMessage);
-        result = SOSTransportMessageSendMessages(account->ids_message_transport, circleToPeerMessages, error);
-        
-        CFReleaseNull(mutableDictionary);
-        CFReleaseNull(peerToMessage);
-        CFReleaseNull(circleToPeerMessages);
-        CFReleaseNull(messageString);
-        free(messageCharStar);
-    }
+    //construct message dictionary, circle -> peerID -> message
+    
+    CFMutableDictionaryRef peerToMessage = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
+
+    CFStringRef operationString = CFStringCreateWithFormat(kCFAllocatorDefault, NULL, CFSTR("%d"), kIDSSendOneMessage);
+    CFDictionaryRef rawMessage = CFDictionaryCreateForCFTypes(kCFAllocatorDefault,
+                                                              kIDSOperationType, operationString,
+                                                              kIDSMessageToSendKey, CFSTR("send IDS test message"),
+                                                              NULL);
+
+    SOSAccountForEachCirclePeerExceptMe(account, ^(SOSPeerInfoRef peer) {
+        CFDictionaryAddValue(peerToMessage, SOSPeerInfoGetPeerID(peer), rawMessage);
+    });
+
+    result = SOSTransportMessageSendMessages(account->ids_message_transport, peerToMessage, error);
+    
+    CFReleaseNull(peerToMessage);
+    CFReleaseNull(operationString);
+    CFReleaseNull(rawMessage);
     return result;
 }
 
@@ -1438,67 +1554,63 @@ bool SOSAccountStartPingTest(SOSAccountRef account, CFStringRef message, CFError
         account->ids_message_transport = (SOSTransportMessageRef)SOSTransportMessageIDSCreate(account, SOSCircleGetName(account->trusted_circle), error);
     
     require_quiet(account->ids_message_transport, fail);
-    CFMutableDictionaryRef circleToPeerMessages = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
     CFMutableDictionaryRef peerToMessage = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
+
+    CFStringRef operationString = CFStringCreateWithFormat(kCFAllocatorDefault, NULL, CFSTR("%d"), kIDSStartPingTestMessage);
+    CFDictionaryRef rawMessage = CFDictionaryCreateForCFTypes(kCFAllocatorDefault,
+                                                              kIDSOperationType, operationString,
+                                                              kIDSMessageToSendKey, CFSTR("send IDS test message"),
+                                                              NULL);
+
     
-    char *messageCharStar;
-    asprintf(&messageCharStar, "%d", kIDSStartPingTestMessage);
-    CFStringRef messageString = CFStringCreateWithCString(kCFAllocatorDefault, messageCharStar, kCFStringEncodingUTF8);
-    
-    CFMutableDictionaryRef mutableDictionary = CFDictionaryCreateMutableForCFTypesWith(kCFAllocatorDefault, messageString, CFSTR("send IDS test message"), NULL);
-    
-    SOSCircleForEachPeer(account->trusted_circle, ^(SOSPeerInfoRef peer) {
-        if(CFStringCompare(SOSAccountGetMyPeerID(account), SOSPeerInfoGetPeerID(peer), 0) != 0)
-            CFDictionaryAddValue(peerToMessage, SOSPeerInfoGetPeerID(peer), mutableDictionary);
+    SOSAccountForEachCirclePeerExceptMe(account, ^(SOSPeerInfoRef peer) {
+        CFDictionaryAddValue(peerToMessage, SOSPeerInfoGetPeerID(peer), rawMessage);
     });
     
-    CFDictionaryAddValue(circleToPeerMessages, SOSCircleGetName(account->trusted_circle), peerToMessage);
-    result = SOSTransportMessageSendMessages(account->ids_message_transport, circleToPeerMessages, error);
+    result = SOSTransportMessageSendMessages(account->ids_message_transport, peerToMessage, error);
     
-    CFReleaseNull(mutableDictionary);
     CFReleaseNull(peerToMessage);
-    CFReleaseNull(circleToPeerMessages);
-    CFReleaseNull(messageString);
-    free(messageCharStar);
+    CFReleaseNull(rawMessage);
+    CFReleaseNull(operationString);
 fail:
     return result;
 }
 
-bool SOSAccountRetrieveDeviceIDFromIDSKeychainSyncingProxy(SOSAccountRef account, CFErrorRef *error){
+bool SOSAccountRetrieveDeviceIDFromKeychainSyncingOverIDSProxy(SOSAccountRef account, CFErrorRef *error){
     bool result = true;
-    if(whichTransportType == kSOSTransportIDS || whichTransportType == kSOSTransportFuture || whichTransportType == kSOSTransportPresent){
+    
+    __block bool success = true;
+    __block CFErrorRef localError = NULL;
+    dispatch_semaphore_t wait_for = dispatch_semaphore_create(0);
+    dispatch_retain(wait_for); // Both this scope and the block own it
+    
+    SOSCloudKeychainGetIDSDeviceID(^(CFDictionaryRef returnedValues, CFErrorRef sync_error){
+        success = (sync_error == NULL);
+        if (!success) {
+            CFRetainAssign(localError, sync_error);
+        }
         
-        __block bool success = true;
-        __block CFErrorRef localError = NULL;
-        dispatch_semaphore_t wait_for = dispatch_semaphore_create(0);
-        dispatch_retain(wait_for); // Both this scope and the block own it
-        
-        SOSCloudKeychainGetIDSDeviceID(^(CFDictionaryRef returnedValues, CFErrorRef sync_error){
-            success = (sync_error == NULL);
-            if (!success) {
-                CFRetainAssign(localError, sync_error);
-            }
-            
-            dispatch_semaphore_signal(wait_for);
-            dispatch_release(wait_for);
-        });
-        
-        dispatch_semaphore_wait(wait_for, DISPATCH_TIME_FOREVER);
+        dispatch_semaphore_signal(wait_for);
         dispatch_release(wait_for);
-        
-        if(!success && localError != NULL && error != NULL){
-            secerror("Could not ask IDSKeychainSyncingProxy for Device ID: %@", localError);
-            *error = localError;
-        }
-        else{
-            secdebug("IDS Transport", "Attempting to retrieve the IDS Device ID");
-        }
+    });
+    
+    dispatch_semaphore_wait(wait_for, DISPATCH_TIME_FOREVER);
+    dispatch_release(wait_for);
+    
+    if(!success && localError != NULL && error != NULL){
+        secerror("Could not ask KeychainSyncingOverIDSProxy for Device ID: %@", localError);
+        *error = localError;
+        result = false;
+    }
+    else{
+        secdebug("IDS Transport", "Attempting to retrieve the IDS Device ID");
     }
     return result;
 }
 
-bool SOSAccountJoinCirclesAfterRestore(SOSAccountRef account, CFErrorRef* error) {
-    return SOSAccountJoinCircles_internal(account, true, error);
+bool SOSAccountJoinCirclesAfterRestore(SOSAccountTransactionRef aTxn, CFErrorRef* error) {
+	secnotice("circleJoin", "Joining after restore (SOSAccountJoinCirclesAfterRestore)");
+    return SOSAccountJoinCircles_internal(aTxn, true, error);
 }
 
 
@@ -1506,6 +1618,7 @@ bool SOSAccountLeaveCircle(SOSAccountRef account, CFErrorRef* error)
 {
     bool result = true;
 
+    secnotice("leaveCircle", "Leaving circle by client request");
     result &= SOSAccountModifyCircle(account, error, ^(SOSCircleRef circle) {
         return sosAccountLeaveCircle(account, circle, error);
     });
@@ -1517,27 +1630,38 @@ bool SOSAccountLeaveCircle(SOSAccountRef account, CFErrorRef* error)
 
 bool SOSAccountRemovePeersFromCircle(SOSAccountRef account, CFArrayRef peers, CFErrorRef* error)
 {
+    bool result = false;
+    CFMutableSetRef peersToRemove = NULL;
     SecKeyRef user_key = SOSAccountGetPrivateCredential(account, error);
-    if (!user_key)
-        return false;
+    require_action_quiet(user_key, errOut, secnotice("removePeers", "Can't remove without userKey"));
 
-    bool result = true;
+    SOSFullPeerInfoRef me_full = SOSAccountGetMyFullPeerInfo(account);
+    SOSPeerInfoRef me = SOSAccountGetMyPeerInfo(account);
+    require_action_quiet(me_full && me, errOut, {
+                            SOSErrorCreate(kSOSErrorPeerNotFound, error, NULL, CFSTR("Can't remove without being active peer"));
+                            secnotice("removePeers", "Can't remove without being active peer");
+                         });
+    
+    result = true; // beyond this point failures would be rolled up in AccountModifyCircle.
 
-    CFMutableSetRef peersToRemove = CFSetCreateMutableForSOSPeerInfosByIDWithArray(kCFAllocatorDefault, peers);
+    peersToRemove = CFSetCreateMutableForSOSPeerInfosByIDWithArray(kCFAllocatorDefault, peers);
+    require_action_quiet(peersToRemove, errOut, secnotice("removePeers", "No peerSet to remove"));
 
-    bool leaveCircle = CFSetContainsValue(peersToRemove, SOSAccountGetMyPeerInfo(account));
-
-    CFSetRemoveValue(peersToRemove, SOSAccountGetMyPeerInfo(account));
+    // If we're one of the peers expected to leave - note that and then remove ourselves from the set (different handling).
+    bool leaveCircle = CFSetContainsValue(peersToRemove, me);
+    CFSetRemoveValue(peersToRemove, me);
 
     result &= SOSAccountModifyCircle(account, error, ^(SOSCircleRef circle) {
         bool success = false;
 
-        require_quiet(SOSCircleRemovePeers(circle, user_key, SOSAccountGetMyFullPeerInfo(account), peersToRemove, error), done);
-
-        if (leaveCircle) {
-            success = sosAccountLeaveCircle(account, circle, error);
-        } else {
+        if(CFSetGetCount(peersToRemove) != 0) {
+            require_quiet(SOSCircleRemovePeers(circle, user_key, me_full, peersToRemove, error), done);
             success = SOSAccountGenerationSignatureUpdate(account, error);
+        } else success = true;
+
+        if (success && leaveCircle) {
+            secnotice("leaveCircle", "Leaving circle by client request");
+            success = sosAccountLeaveCircle(account, circle, error);
         }
 
     done:
@@ -1545,6 +1669,8 @@ bool SOSAccountRemovePeersFromCircle(SOSAccountRef account, CFArrayRef peers, CF
 
     });
 
+errOut:
+    CFReleaseNull(peersToRemove);
     return result;
 }
 
@@ -1557,6 +1683,7 @@ bool SOSAccountBail(SOSAccountRef account, uint64_t limit_in_seconds, CFErrorRef
     // Add a task to the group
     dispatch_group_async(group, queue, ^{
         SOSAccountModifyCircle(account, error, ^(SOSCircleRef circle) {
+            secnotice("leaveCircle", "Leaving circle by client request");
             return sosAccountLeaveCircle(account, circle, error);
         });
     });
@@ -1677,28 +1804,26 @@ bool SOSAccountEnsurePeerRegistration(SOSAccountRef account, CFErrorRef *error) 
 
     require_quiet(account->trusted_circle, done);
     require_quiet(account->my_identity, done);
+    require_quiet(account->user_public_trusted, done);
+    
     // If we are not in the circle, there is no point in setting up peers
     require_quiet(SOSAccountIsMyPeerActive(account, NULL), done);
 
     // This code only uses the SOSFullPeerInfoRef for two things:
     //  - Finding out if this device is in the trusted circle
     //  - Using the peerID for this device to see if the current peer is "me"
-    //  - It is used indirectly by passing account->my_identity to SOSPeerCoderInitializeForPeer
+    //  - It is used indirectly by passing account->my_identity to SOSEngineInitializePeerCoder
     
     CFStringRef my_id = SOSPeerInfoGetPeerID(SOSFullPeerInfoGetPeerInfo(account->my_identity));
 
-    SOSCircleForEachPeer(account->trusted_circle, ^(SOSPeerInfoRef peer) {
+    SOSCircleForEachValidSyncingPeer(account->trusted_circle, account->user_public, ^(SOSPeerInfoRef peer) {
         if (!SOSPeerInfoPeerIDEqual(peer, my_id)) {
             CFErrorRef localError = NULL;
             SOSTransportMessageRef messageTransport = NULL;
             
-            if(whichTransportType == kSOSTransportIDS || whichTransportType == kSOSTransportFuture || whichTransportType == kSOSTransportPresent){
-                 messageTransport = SOSPeerInfoHasDeviceID(peer) ? account->ids_message_transport : account->kvs_message_transport;
-            }
-            else
-                messageTransport = account->kvs_message_transport;
+            messageTransport = SOSPeerInfoHasDeviceID(peer) ? account->ids_message_transport : account->kvs_message_transport;
             
-            SOSPeerCoderInitializeForPeer(messageTransport->engine, account->my_identity, peer, &localError);
+            SOSEngineInitializePeerCoder(messageTransport->engine, account->my_identity, peer, &localError);
             if (localError)
                 secnotice("updates", "can't initialize transport for peer %@ with %@ (%@)", peer, account->my_identity, localError);
             CFReleaseSafe(localError);
@@ -1706,46 +1831,11 @@ bool SOSAccountEnsurePeerRegistration(SOSAccountRef account, CFErrorRef *error) 
     });
 
     //Initialize our device ID
-    if(whichTransportType == kSOSTransportIDS || whichTransportType == kSOSTransportFuture || whichTransportType == kSOSTransportPresent){
-        SOSTransportMessageIDSGetIDSDeviceID(account);
-    }
+    SOSTransportMessageIDSGetIDSDeviceID(account);    
+    
     
 done:
     return result;
-}
-
-static inline bool SOSAccountEnsureExpansion(SOSAccountRef account, CFErrorRef *error) {
-    if (!account->expansion) {
-        account->expansion = CFDictionaryCreateMutableForCFTypes(NULL);
-    }
-
-    return SecAllocationError(account->expansion, error, CFSTR("Can't Alloc Account Expansion dictionary"));
-}
-
-bool SOSAccountClearValue(SOSAccountRef account, const void *key, CFErrorRef *error) {
-    bool success = SOSAccountEnsureExpansion(account, error);
-    require_quiet(success, errOut);
-
-    CFDictionaryRemoveValue(account->expansion, key);
-errOut:
-    return success;
-}
-
-bool SOSAccountSetValue(SOSAccountRef account, const void *key, const void *value, CFErrorRef *error) {
-    bool success = SOSAccountEnsureExpansion(account, error);
-    require_quiet(success, errOut);
-
-    CFDictionarySetValue(account->expansion, key, value);
-errOut:
-    return success;
-}
-
-
-const void *SOSAccountGetValue(SOSAccountRef account, const void *key, CFErrorRef *error) {
-    if (!account->expansion) {
-        return NULL;
-    }
-    return CFDictionaryGetValue(account->expansion, key);
 }
 
 bool SOSAccountAddEscrowRecords(SOSAccountRef account, CFStringRef dsid, CFDictionaryRef record, CFErrorRef *error){
@@ -1781,31 +1871,26 @@ bool SOSAccountAddEscrowToPeerInfo(SOSAccountRef account, SOSFullPeerInfoRef myP
 
 bool SOSAccountCheckPeerAvailability(SOSAccountRef account, CFErrorRef *error)
 {
-    CFMutableDictionaryRef circleToPeerMessages = NULL;
-    CFStringRef messageString = NULL;
-    CFMutableDictionaryRef mutableDictionary = NULL;
+    CFStringRef operationString = NULL;
+    CFDictionaryRef rawMessage = NULL;
     CFMutableSetRef peers = NULL;
     CFMutableDictionaryRef peerList = NULL;
     char* message = NULL;
     bool result = false;
+
     if(account->ids_message_transport == NULL)
         account->ids_message_transport = (SOSTransportMessageRef)SOSTransportMessageIDSCreate(account, SOSCircleGetName(account->trusted_circle), error);
     
     require_quiet(account->ids_message_transport, fail);
-    circleToPeerMessages = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-    
-    //adding message type kIDSPeerAvailability so IDSKeychainSyncingProxy does not send this message as a keychain item
-  
-    asprintf(&message, "%d", kIDSPeerAvailability);
-    messageString = CFStringCreateWithCString(kCFAllocatorDefault, message, kCFStringEncodingUTF8);
-    
-    mutableDictionary = CFDictionaryCreateMutableForCFTypesWith(kCFAllocatorDefault, messageString, CFSTR("checking peers"), NULL);
-    
-    //make sure there are peers in the circle
-    peers = SOSCircleCopyPeers(account->trusted_circle, kCFAllocatorDefault);
-    require_quiet(CFSetGetCount(peers) > 0, fail);
-    CFReleaseNull(peers);
-    
+
+    //adding message type kIDSPeerAvailability so KeychainSyncingOverIDSProxy does not send this message as a keychain item
+
+    operationString = CFStringCreateWithFormat(kCFAllocatorDefault, NULL, CFSTR("%d"), kIDSPeerAvailability);
+    rawMessage = CFDictionaryCreateForCFTypes(kCFAllocatorDefault,
+                                              kIDSOperationType, operationString,
+                                              kIDSMessageToSendKey, CFSTR("checking peers"),
+                                              NULL);
+
     peerList = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
     SOSCircleRef circle = account->trusted_circle;
     
@@ -1818,30 +1903,28 @@ bool SOSAccountCheckPeerAvailability(SOSAccountRef account, CFErrorRef *error)
             if(CFEqualSafe(intersectSets, mySubSet)){
                 CFStringRef deviceID = SOSPeerInfoCopyDeviceID(peer);
                 if(deviceID != NULL)
-                    CFDictionaryAddValue(peerList, SOSPeerInfoGetPeerID(peer), mutableDictionary);
+                    CFDictionaryAddValue(peerList, SOSPeerInfoGetPeerID(peer), rawMessage);
                 CFReleaseNull(deviceID);
             }
             CFReleaseNull(peerViews);
             CFReleaseNull(intersectSets);
         }
     });
-    
+        
     require_quiet(CFDictionaryGetCount(peerList) > 0 , fail);
-    CFDictionaryAddValue(circleToPeerMessages, SOSCircleGetName(account->trusted_circle), peerList);
-    result = SOSTransportMessageSendMessages(account->ids_message_transport, circleToPeerMessages, error);
-   
+    result = SOSTransportMessageSendMessages(account->ids_message_transport, peerList, error);
+    
 fail:
-    CFReleaseNull(mutableDictionary);
-    CFReleaseNull(messageString);
+    CFReleaseNull(rawMessage);
+    CFReleaseNull(operationString);
     CFReleaseNull(peerList);
-    CFReleaseNull(circleToPeerMessages);
     CFReleaseNull(peers);
     free(message);
     return result;
 }
 
 
-static void SOSAccountRecordRetiredPeersInCircle(SOSAccountRef account) {
+void SOSAccountRecordRetiredPeersInCircle(SOSAccountRef account) {
     if (!SOSAccountIsInCircle(account, NULL))
         return;
 
@@ -1863,21 +1946,247 @@ static void SOSAccountRecordRetiredPeersInCircle(SOSAccountRef account) {
     });
 }
 
-void SOSAccountFinishTransaction(SOSAccountRef account) {
-    if(account->circle_rings_retirements_need_attention){
-        SOSAccountRecordRetiredPeersInCircle(account);
 
-        CFErrorRef localError = NULL;
-        if(!SOSTransportCircleFlushChanges(account->circle_transport, &localError)) {
-            secerror("flush circle failed %@", localError);
-        }
-        CFReleaseSafe(localError);
-
-        SOSAccountNotifyEngines(account); // For now our only rings are backup rings.
+static size_t SOSPiggyBackBlobGetDEREncodedSize(SOSGenCountRef gencount, SecKeyRef pubKey, CFDataRef signature, CFErrorRef *error) {
+    size_t total_payload = 0;
+    
+    CFDataRef publicBytes = NULL;
+    OSStatus result = SecKeyCopyPublicBytes(pubKey, &publicBytes);
+    
+    if (result != errSecSuccess) {
+        SOSCreateError(kSOSErrorBadKey, CFSTR("Failed to export public bytes"), NULL, error);
+        return 0;
     }
 
-    SOSAccountCheckHasBeenInSync(account);
-
-    account->circle_rings_retirements_need_attention = false;
+    require_quiet(accumulate_size(&total_payload, der_sizeof_number(gencount, error)), errOut);
+    require_quiet(accumulate_size(&total_payload, der_sizeof_data_or_null(publicBytes, error)), errOut);
+    require_quiet(accumulate_size(&total_payload, der_sizeof_data_or_null(signature, error)), errOut);
+    return ccder_sizeof(CCDER_CONSTRUCTED_SEQUENCE, total_payload);
+    
+errOut:
+    SecCFDERCreateError(kSecDERErrorUnknownEncoding, CFSTR("don't know how to encode"), NULL, error);
+    return 0;
 }
 
+static uint8_t* SOSPiggyBackBlobEncodeToDER(SOSGenCountRef gencount, SecKeyRef pubKey, CFDataRef signature, CFErrorRef* error, const uint8_t* der, uint8_t* der_end) {
+    CFDataRef publicBytes = NULL;
+
+    OSStatus result = SecKeyCopyPublicBytes(pubKey, &publicBytes);
+    
+    if (result != errSecSuccess) {
+        SOSCreateError(kSOSErrorBadKey, CFSTR("Failed to export public bytes"), NULL, error);
+        return NULL;
+    }
+
+    
+    der_end =  ccder_encode_constructed_tl(CCDER_CONSTRUCTED_SEQUENCE, der_end, der,
+            der_encode_number(gencount, error, der,
+            der_encode_data_or_null(publicBytes, error, der,
+            der_encode_data_or_null(signature, error, der, der_end))));
+    return der_end;
+}
+
+static CFDataRef SOSPiggyBackBlobCopyEncodedData(SOSGenCountRef gencount, SecKeyRef pubKey, CFDataRef signature, CFAllocatorRef allocator, CFErrorRef *error)
+{
+    return CFDataCreateWithDER(kCFAllocatorDefault, SOSPiggyBackBlobGetDEREncodedSize(gencount, pubKey, signature, error), ^uint8_t*(size_t size, uint8_t *buffer) {
+        return SOSPiggyBackBlobEncodeToDER(gencount, pubKey, signature, error, buffer, (uint8_t *) buffer + size);
+    });
+}
+
+struct piggyBackBlob {
+    SOSGenCountRef gencount;
+    SecKeyRef pubKey;
+    CFDataRef signature;
+};
+
+static struct piggyBackBlob *SOSPiggyBackBlobCreateFromDER(CFAllocatorRef allocator, CFErrorRef *error,
+                                                           const uint8_t** der_p, const uint8_t *der_end) {
+    const uint8_t *sequence_end;
+    struct piggyBackBlob *retval = NULL;
+    SOSGenCountRef gencount = NULL;
+    CFDataRef signature = NULL;
+    CFDataRef publicBytes = NULL;
+    
+    *der_p = ccder_decode_constructed_tl(CCDER_CONSTRUCTED_SEQUENCE, &sequence_end, *der_p, der_end);
+    require_action_quiet(sequence_end != NULL, errOut,
+                         SOSCreateError(kSOSErrorBadFormat, CFSTR("Bad Blob DER"), (error != NULL) ? *error : NULL, error));
+    *der_p = der_decode_number(allocator, 0, &gencount, error, *der_p, sequence_end);
+    *der_p = der_decode_data_or_null(kCFAllocatorDefault, &publicBytes, error, *der_p, der_end);
+    *der_p = der_decode_data_or_null(kCFAllocatorDefault, &signature, error, *der_p, der_end);
+    require_action_quiet(*der_p && *der_p == der_end, errOut,
+                         SOSCreateError(kSOSErrorBadFormat, CFSTR("Didn't consume all bytes for pbblob"), (error != NULL) ? *error : NULL, error));
+    retval = malloc(sizeof(struct piggyBackBlob));
+    retval->gencount = gencount;
+    retval->signature = signature;
+    retval->pubKey = SecKeyCreateFromPublicData(kCFAllocatorDefault, kSecECDSAAlgorithmID, publicBytes);
+    
+errOut:
+    if(!retval) {
+        CFReleaseNull(gencount);
+        CFReleaseNull(publicBytes);
+        CFReleaseNull(signature);
+    }
+    return retval;
+}
+
+static struct piggyBackBlob *SOSPiggyBackBlobCreateFromData(CFAllocatorRef allocator, CFDataRef blobData, CFErrorRef *error)
+{
+    size_t size = CFDataGetLength(blobData);
+    const uint8_t *der = CFDataGetBytePtr(blobData);
+    struct piggyBackBlob *inflated = SOSPiggyBackBlobCreateFromDER(allocator, error, &der, der + size);
+    return inflated;
+}
+
+
+
+SOSPeerInfoRef SOSAccountCopyApplication(SOSAccountRef account, CFErrorRef* error) {
+    SOSPeerInfoRef applicant = NULL;
+    SecKeyRef userKey = SOSAccountGetPrivateCredential(account, error);
+    if(!userKey) return false;
+    require_quiet(SOSAccountEnsureFullPeerAvailable(account, error), errOut);
+    require(SOSFullPeerInfoPromoteToApplication(account->my_identity, userKey, error), errOut);
+    applicant = SOSPeerInfoCreateCopy(kCFAllocatorDefault,  (SOSFullPeerInfoGetPeerInfo(account->my_identity)), error);
+errOut:
+    return applicant;
+}
+
+
+CFDataRef SOSAccountCopyCircleJoiningBlob(SOSAccountRef account, SOSPeerInfoRef applicant, CFErrorRef *error) {
+    SOSGenCountRef gencount = NULL;
+    CFDataRef signature = NULL;
+    SecKeyRef ourKey = NULL;
+
+    CFDataRef pbblob = NULL;
+
+	secnotice("circleJoin", "Making circle joining blob as sponsor (SOSAccountCopyCircleJoiningBlob)");
+
+    SecKeyRef userKey = SOSAccountGetTrustedPublicCredential(account, error);
+    require_quiet(userKey, errOut);
+
+    require_action_quiet(applicant, errOut, SOSCreateError(kSOSErrorProcessingFailure, CFSTR("No applicant provided"), (error != NULL) ? *error : NULL, error));
+    require_quiet(SOSPeerInfoApplicationVerify(applicant, userKey, error), errOut);
+
+    {
+        SOSFullPeerInfoRef fpi = SOSAccountGetMyFullPeerInfo(account);
+        ourKey = SOSFullPeerInfoCopyDeviceKey(fpi, error);
+        require_quiet(ourKey, errOut);
+    }
+
+    SOSCircleRef currentCircle = SOSAccountGetCircle(account, error);
+    require_quiet(currentCircle, errOut);
+
+    SOSCircleRef prunedCircle = SOSCircleCopyCircle(NULL, currentCircle, error);
+    require_quiet(prunedCircle, errOut);
+    require_quiet(SOSCirclePreGenerationSign(prunedCircle, userKey, error), errOut);
+
+    gencount = SOSGenerationIncrementAndCreate(SOSCircleGetGeneration(prunedCircle));
+
+    signature = SOSCircleCopyNextGenSignatureWithPeerAdded(prunedCircle, applicant, ourKey, error);
+    require_quiet(signature, errOut);
+
+    pbblob = SOSPiggyBackBlobCopyEncodedData(gencount, ourKey, signature, kCFAllocatorDefault, error);
+    
+errOut:
+    CFReleaseNull(gencount);
+    CFReleaseNull(signature);
+    CFReleaseNull(ourKey);
+
+	if(!pbblob) {
+		secnotice("circleJoin", "Failed to make circle joining blob as sponsor %@", *error);
+	}
+
+    return pbblob;
+}
+
+bool SOSAccountJoinWithCircleJoiningBlob(SOSAccountRef account, CFDataRef joiningBlob, CFErrorRef *error) {
+    bool retval = false;
+    SecKeyRef userKey = NULL;
+    struct piggyBackBlob *pbb = NULL;
+    
+	secnotice("circleJoin", "Joining circles through piggy-back (SOSAccountCopyCircleJoiningBlob)");
+
+    userKey = SOSAccountGetPrivateCredential(account, error);
+    require_quiet(userKey, errOut);
+    pbb = SOSPiggyBackBlobCreateFromData(kCFAllocatorDefault, joiningBlob, error);
+    require_quiet(pbb, errOut);
+
+    SOSAccountSetValue(account, kSOSUnsyncedViewsKey, kCFBooleanTrue, NULL);
+
+    retval = SOSAccountModifyCircle(account, error, ^bool(SOSCircleRef copyOfCurrent) {
+        return SOSCircleAcceptPeerFromHSA2(copyOfCurrent, userKey,
+                                           pbb->gencount,
+                                           pbb->pubKey,
+                                           pbb->signature,
+                                           account->my_identity, error);;
+
+    });
+    
+errOut:
+    if(pbb) {
+        CFReleaseNull(pbb->gencount);
+        CFReleaseNull(pbb->pubKey);
+        CFReleaseNull(pbb->signature);
+        free(pbb);
+    }
+    return retval;
+}
+
+static char boolToChars(bool val, char truechar, char falsechar) {
+    return val? truechar: falsechar;
+}
+
+#define ACCOUNTLOGSTATE "accountLogState"
+void SOSAccountLogState(SOSAccountRef account) {
+    bool hasPubKey = account->user_public != NULL;
+    bool pubTrusted = account->user_public_trusted;
+    bool hasPriv = account->_user_private != NULL;
+    SOSCCStatus stat = SOSAccountGetCircleStatus(account, NULL);
+    CFStringRef userPubKeyID =  (account->user_public) ? SOSCopyIDOfKeyWithLength(account->user_public, 8, NULL):
+            CFStringCreateCopy(kCFAllocatorDefault, CFSTR("*No Key*"));
+
+    secnotice(ACCOUNTLOGSTATE, "Start");
+
+    secnotice(ACCOUNTLOGSTATE, "ACCOUNT: [keyStatus: %c%c%c hpub %@] [SOSCCStatus: %@]",
+              boolToChars(hasPubKey, 'U', 'u'), boolToChars(pubTrusted, 'T', 't'), boolToChars(hasPriv, 'I', 'i'),
+              userPubKeyID,
+              SOSAccountGetSOSCCStatusString(stat)
+              );
+    CFReleaseNull(userPubKeyID);
+    if(account->trusted_circle)  SOSCircleLogState(ACCOUNTLOGSTATE, account->trusted_circle, account->user_public, SOSAccountGetMyPeerID(account));
+    else secnotice(ACCOUNTLOGSTATE, "ACCOUNT: No Circle");
+}
+
+void SOSAccountLogViewState(SOSAccountRef account) {
+    bool isInCircle = SOSAccountIsInCircle(account, NULL);
+    require_quiet(isInCircle, imOut);
+    SOSPeerInfoRef mpi = SOSAccountGetMyPeerInfo(account);
+    bool isInitialComplete = SOSAccountHasCompletedInitialSync(account);
+    bool isBackupComplete = SOSAccountHasCompletedRequiredBackupSync(account);
+
+    CFSetRef views = mpi ? SOSPeerInfoCopyEnabledViews(mpi) : NULL;
+    CFStringSetPerformWithDescription(views, ^(CFStringRef description) {
+        secnotice(ACCOUNTLOGSTATE, "Sync: %c%c PeerViews: %@",
+                  boolToChars(isInitialComplete, 'I', 'i'),
+                  boolToChars(isBackupComplete, 'B', 'b'),
+                  description);
+    });
+    CFReleaseNull(views);
+    CFSetRef unsyncedViews = SOSAccountCopyOutstandingViews(account);
+    CFStringSetPerformWithDescription(views, ^(CFStringRef description) {
+        secnotice(ACCOUNTLOGSTATE, "outstanding views: %@", description);
+    });
+    CFReleaseNull(unsyncedViews);
+
+imOut:
+    secnotice(ACCOUNTLOGSTATE, "Finish");
+
+    return;
+}
+
+
+void SOSAccountSetTestSerialNumber(SOSAccountRef account, CFStringRef serial) {
+    if(!isString(serial)) return;
+    CFMutableDictionaryRef newv2dict = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
+    CFDictionarySetValue(newv2dict, sSerialNumberKey, serial);
+    SOSAccountUpdateV2Dictionary(account, newv2dict);
+}

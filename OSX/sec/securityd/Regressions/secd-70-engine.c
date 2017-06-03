@@ -62,7 +62,6 @@ __unused static bool SOSCircleHandleCircleWithLock(SOSEngineRef engine, CFString
     CFDataRef coder = CFDataCreate(kCFAllocatorDefault, expected, resultSize);
     CFArrayForEachC(SOSEngineGetPeerIDs(engine), peerID){
         CFArrayAppendValue(trustedPeers, peerID);
-        SOSEngineSetCoderData(engine, peerID, coder, error);
     };
     CFReleaseNull(coder);
 
@@ -197,7 +196,7 @@ static void testsyncempty(void) {
         CFReleaseSafe(deviceID);
         if (deviceIX > 0) {
             for (CFIndex version = 0; version < 3; version += 2) {
-                CFMutableDictionaryRef testDevices = SOSTestDeviceListCreate(false, version, deviceIDs);
+                CFMutableDictionaryRef testDevices = SOSTestDeviceListCreate(false, version, deviceIDs, NULL);
                 SOSTestDeviceListSync("syncempty", test_directive, test_reason, testDevices, NULL, NULL);
                 SOSTestDeviceListInSync("syncempty", test_directive, test_reason, testDevices);
                 SOSTestDeviceDestroyEngine(testDevices);
@@ -222,7 +221,7 @@ static void testsyncmany(const char *name, const char *test_directive, const cha
         CFArrayAppendValue(deviceIDs, deviceID);
         CFReleaseSafe(deviceID);
         if (deviceIX >= devFirst) {
-            CFMutableDictionaryRef testDevices = SOSTestDeviceListCreate(false, version, deviceIDs);
+            CFMutableDictionaryRef testDevices = SOSTestDeviceListCreate(false, version, deviceIDs, NULL);
             __block int iteration = 0;
             SOSTestDeviceListSync(name, test_directive, test_reason, testDevices, ^bool(SOSTestDeviceRef source, SOSTestDeviceRef dest) {
                 bool didAdd = false;
@@ -302,8 +301,7 @@ SKIP:
             unlink(keychain_path);
         });
 
-        void kc_dbhandle_reset(void);
-        kc_dbhandle_reset();
+        SecKeychainDbReset(NULL);
 #else
         skip("Keychain not reset", kTestTestCount, false);
 #endif

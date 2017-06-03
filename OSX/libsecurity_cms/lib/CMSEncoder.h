@@ -243,7 +243,7 @@ OSStatus CMSEncoderCopySupportingCerts(
  * Standard signed attributes, optionally specified in 
  * CMSEncoderAddSignedAttributes().
  */
-typedef CF_ENUM(uint32_t, CMSSignedAttributes) {
+typedef CF_OPTIONS(uint32_t, CMSSignedAttributes) {
 	kCMSAttrNone						= 0x0000,
     /* 
      * S/MIME Capabilities - identifies supported signature, encryption, and
@@ -262,7 +262,11 @@ typedef CF_ENUM(uint32_t, CMSSignedAttributes) {
     /*
      * Include the signing time.
      */
-    kCMSAttrSigningTime					= 0x0008
+    kCMSAttrSigningTime					= 0x0008,
+    /*
+     * Include the Apple Codesigning Hash Agility.
+     */
+    kCMSAttrAppleCodesigningHashAgility = 0x0010
 };
 
 /*

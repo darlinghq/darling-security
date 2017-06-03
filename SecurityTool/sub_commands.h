@@ -26,4 +26,8 @@
 // This file can't be once, it gets included multiple times to get definitions and declarations.
 
 #include "Security/Tool/SecurityCommands.h"
-#include "SOSCircle/Tool/SOSCommands.h"
+#include "SOSCircle/Tool/keychain_sync.h"
+#include "SOSCircle/Tool/keychain_sync_test.h"
+#include "SOSCircle/Tool/keychain_log.h"
+#include "SOSCircle/Tool/syncbackup.h"
+#include "SOSCircle/Tool/recovery_key.h"

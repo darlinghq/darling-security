@@ -29,7 +29,7 @@
 
 #include "csgeneric.h"
 #include "StaticCode.h"
-#include "piddiskrep.h"
+#include "PidDiskRep.h"
 #include <security_utilities/utilities.h>
 
 namespace Security {
@@ -45,16 +45,21 @@ namespace CodeSigning {
 //
 class ProcessCode : public GenericCode {
 public:
-	ProcessCode(pid_t pid, PidDiskRep *pidDiskRep = NULL);
-	~ProcessCode() throw () { }
+	ProcessCode(pid_t pid, const audit_token_t* token, PidDiskRep *pidDiskRep = NULL);
+	~ProcessCode() throw () { delete mAudit; }
 	
 	pid_t pid() const { return mPid; }
-        PidDiskRep *pidBased() const { return mPidBased; }
+	const audit_token_t* audit() const { return mAudit; }
+	
+	PidDiskRep *pidBased() const { return mPidBased; }
+	
+	int csops(unsigned int ops, void *addr, size_t size);
 
 	mach_port_t getHostingPort();
 
 private:
 	pid_t mPid;
+	audit_token_t* mAudit;
 	RefPointer<PidDiskRep> mPidBased;
 };
 

@@ -27,7 +27,7 @@
 #include <AppleCSPSession.h>
 #include "AppleCSPKeys.h"
 #include <DH_csp.h>
-#include <openssl/dh.h>
+#include <openssl/dh_legacy.h>
 #include <security_cdsa_utilities/context.h>
 #include <security_utilities/debugging.h>
 #include <security_asn1/SecNssCoder.h>
@@ -39,7 +39,7 @@
 #define	DH_MIN_KEY_SIZE			512			/* FIXME */
 #define DH_MAX_KEY_SIZE			2048
 
-#define cspDhDebug(args...)		secdebug("dhDebug", ## args)
+#define cspDhDebug(args...)		secinfo("dhDebug", ## args)
 
 /*
  * Diffie-Hellman version of a BinaryKey.

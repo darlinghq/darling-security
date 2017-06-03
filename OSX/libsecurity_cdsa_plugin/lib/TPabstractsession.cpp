@@ -11,27 +11,31 @@
 TPAbstractPluginSession::~TPAbstractPluginSession()
 { /* virtual */ }
 
-static CSSM_RETURN CSSMTPI cssm_CertRevoke(CSSM_TP_HANDLE TPHandle,
-         CSSM_CL_HANDLE CLHandle,
+static CSSM_RETURN CSSMTPI cssm_CertReclaimKey(CSSM_TP_HANDLE TPHandle,
+         const CSSM_CERTGROUP *CertGroup,
+         uint32 CertIndex,
+         CSSM_LONG_HANDLE KeyCacheHandle,
          CSSM_CSP_HANDLE CSPHandle,
-         const CSSM_DATA *OldCrlTemplate,
-         const CSSM_CERTGROUP *CertGroupToBeRevoked,
-         const CSSM_CERTGROUP *RevokerCertGroup,
-         const CSSM_TP_VERIFY_CONTEXT *RevokerVerifyContext,
-         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR RevokerVerifyResult,
-         CSSM_TP_CERTCHANGE_REASON Reason,
-         CSSM_DATA_PTR NewCrlTemplate)
+         const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry)
 {
   BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CertRevoke(CLHandle,
+  findSession<TPPluginSession>(TPHandle).CertReclaimKey(Required(CertGroup),
+			CertIndex,
+			KeyCacheHandle,
 			CSPHandle,
-			CssmData::optional(OldCrlTemplate),
-			Required(CertGroupToBeRevoked),
-			Required(RevokerCertGroup),
-			Required(RevokerVerifyContext),
-			Required(RevokerVerifyResult),
-			Reason,
-			CssmData::required(NewCrlTemplate));
+			CredAndAclEntry);
+  END_API(TP)
+}
+
+static CSSM_RETURN CSSMTPI cssm_CertGroupToTupleGroup(CSSM_TP_HANDLE TPHandle,
+         CSSM_CL_HANDLE CLHandle,
+         const CSSM_CERTGROUP *CertGroup,
+         CSSM_TUPLEGROUP_PTR *TupleGroup)
+{
+  BEGIN_API
+  findSession<TPPluginSession>(TPHandle).CertGroupToTupleGroup(CLHandle,
+			Required(CertGroup),
+			Required(TupleGroup));
   END_API(TP)
 }
 
@@ -49,62 +53,6 @@ static CSSM_RETURN CSSMTPI cssm_CertCreateTemplate(CSSM_TP_HANDLE TPHandle,
   END_API(TP)
 }
 
-static CSSM_RETURN CSSMTPI cssm_FormSubmit(CSSM_TP_HANDLE TPHandle,
-         CSSM_TP_FORM_TYPE FormType,
-         const CSSM_DATA *Form,
-         const CSSM_TP_AUTHORITY_ID *ClearanceAuthority,
-         const CSSM_TP_AUTHORITY_ID *RepresentedAuthority,
-         CSSM_ACCESS_CREDENTIALS_PTR Credentials)
-{
-  BEGIN_API
-  findSession<TPPluginSession>(TPHandle).FormSubmit(FormType,
-			CssmData::required(Form),
-			ClearanceAuthority,
-			RepresentedAuthority,
-			AccessCredentials::optional(Credentials));
-  END_API(TP)
-}
-
-static CSSM_RETURN CSSMTPI cssm_CertRemoveFromCrlTemplate(CSSM_TP_HANDLE TPHandle,
-         CSSM_CL_HANDLE CLHandle,
-         CSSM_CSP_HANDLE CSPHandle,
-         const CSSM_DATA *OldCrlTemplate,
-         const CSSM_CERTGROUP *CertGroupToBeRemoved,
-         const CSSM_CERTGROUP *RevokerCertGroup,
-         const CSSM_TP_VERIFY_CONTEXT *RevokerVerifyContext,
-         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR RevokerVerifyResult,
-         CSSM_DATA_PTR NewCrlTemplate)
-{
-  BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CertRemoveFromCrlTemplate(CLHandle,
-			CSPHandle,
-			CssmData::optional(OldCrlTemplate),
-			Required(CertGroupToBeRemoved),
-			Required(RevokerCertGroup),
-			Required(RevokerVerifyContext),
-			Required(RevokerVerifyResult),
-			CssmData::required(NewCrlTemplate));
-  END_API(TP)
-}
-
-static CSSM_RETURN CSSMTPI cssm_SubmitCredRequest(CSSM_TP_HANDLE TPHandle,
-         const CSSM_TP_AUTHORITY_ID *PreferredAuthority,
-         CSSM_TP_AUTHORITY_REQUEST_TYPE RequestType,
-         const CSSM_TP_REQUEST_SET *RequestInput,
-         const CSSM_TP_CALLERAUTH_CONTEXT *CallerAuthContext,
-         sint32 *EstimatedTime,
-         CSSM_DATA_PTR ReferenceIdentifier)
-{
-  BEGIN_API
-  findSession<TPPluginSession>(TPHandle).SubmitCredRequest(PreferredAuthority,
-			RequestType,
-			Required(RequestInput),
-			CallerAuthContext,
-			Required(EstimatedTime),
-			CssmData::required(ReferenceIdentifier));
-  END_API(TP)
-}
-
 static CSSM_RETURN CSSMTPI cssm_FormRequest(CSSM_TP_HANDLE TPHandle,
          const CSSM_TP_AUTHORITY_ID *PreferredAuthority,
          CSSM_TP_FORM_TYPE FormType,
@@ -117,35 +65,23 @@ static CSSM_RETURN CSSMTPI cssm_FormRequest(CSSM_TP_HANDLE TPHandle,
   END_API(TP)
 }
 
-static CSSM_RETURN CSSMTPI cssm_CertGroupConstruct(CSSM_TP_HANDLE TPHandle,
+static CSSM_RETURN CSSMTPI cssm_CrlSign(CSSM_TP_HANDLE TPHandle,
          CSSM_CL_HANDLE CLHandle,
-         CSSM_CSP_HANDLE CSPHandle,
-         const CSSM_DL_DB_LIST *DBList,
-         const void *ConstructParams,
-         const CSSM_CERTGROUP *CertGroupFrag,
-         CSSM_CERTGROUP_PTR *CertGroup)
+         CSSM_CC_HANDLE CCHandle,
+         const CSSM_ENCODED_CRL *CrlToBeSigned,
+         const CSSM_CERTGROUP *SignerCertGroup,
+         const CSSM_TP_VERIFY_CONTEXT *SignerVerifyContext,
+         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR SignerVerifyResult,
+         CSSM_DATA_PTR SignedCrl)
 {
   BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CertGroupConstruct(CLHandle,
-			CSPHandle,
-			Required(DBList),
-			ConstructParams,
-			Required(CertGroupFrag),
-			Required(CertGroup));
-  END_API(TP)
-}
-
-static CSSM_RETURN CSSMTPI cssm_CrlCreateTemplate(CSSM_TP_HANDLE TPHandle,
-         CSSM_CL_HANDLE CLHandle,
-         uint32 NumberOfFields,
-         const CSSM_FIELD *CrlFields,
-         CSSM_DATA_PTR NewCrlTemplate)
-{
-  BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CrlCreateTemplate(CLHandle,
-			NumberOfFields,
-			CrlFields,
-			CssmData::required(NewCrlTemplate));
+  findSession<TPPluginSession>(TPHandle).CrlSign(CLHandle,
+			CCHandle,
+			Required(CrlToBeSigned),
+			Required(SignerCertGroup),
+			SignerVerifyContext,
+			SignerVerifyResult,
+			CssmData::required(SignedCrl));
   END_API(TP)
 }
 
@@ -175,23 +111,43 @@ static CSSM_RETURN CSSMTPI cssm_CertGetAllTemplateFields(CSSM_TP_HANDLE TPHandle
   END_API(TP)
 }
 
-static CSSM_RETURN CSSMTPI cssm_CertGroupToTupleGroup(CSSM_TP_HANDLE TPHandle,
-         CSSM_CL_HANDLE CLHandle,
-         const CSSM_CERTGROUP *CertGroup,
-         CSSM_TUPLEGROUP_PTR *TupleGroup)
-{
-  BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CertGroupToTupleGroup(CLHandle,
-			Required(CertGroup),
-			Required(TupleGroup));
-  END_API(TP)
-}
-
 static CSSM_RETURN CSSMTPI cssm_CertReclaimAbort(CSSM_TP_HANDLE TPHandle,
          CSSM_LONG_HANDLE KeyCacheHandle)
 {
   BEGIN_API
   findSession<TPPluginSession>(TPHandle).CertReclaimAbort(KeyCacheHandle);
+  END_API(TP)
+}
+
+static CSSM_RETURN CSSMTPI cssm_CrlCreateTemplate(CSSM_TP_HANDLE TPHandle,
+         CSSM_CL_HANDLE CLHandle,
+         uint32 NumberOfFields,
+         const CSSM_FIELD *CrlFields,
+         CSSM_DATA_PTR NewCrlTemplate)
+{
+  BEGIN_API
+  findSession<TPPluginSession>(TPHandle).CrlCreateTemplate(CLHandle,
+			NumberOfFields,
+			CrlFields,
+			CssmData::required(NewCrlTemplate));
+  END_API(TP)
+}
+
+static CSSM_RETURN CSSMTPI cssm_CertGroupConstruct(CSSM_TP_HANDLE TPHandle,
+         CSSM_CL_HANDLE CLHandle,
+         CSSM_CSP_HANDLE CSPHandle,
+         const CSSM_DL_DB_LIST *DBList,
+         const void *ConstructParams,
+         const CSSM_CERTGROUP *CertGroupFrag,
+         CSSM_CERTGROUP_PTR *CertGroup)
+{
+  BEGIN_API
+  findSession<TPPluginSession>(TPHandle).CertGroupConstruct(CLHandle,
+			CSPHandle,
+			Required(DBList),
+			ConstructParams,
+			Required(CertGroupFrag),
+			Required(CertGroup));
   END_API(TP)
 }
 
@@ -249,19 +205,65 @@ static CSSM_RETURN CSSMTPI cssm_CertSign(CSSM_TP_HANDLE TPHandle,
   END_API(TP)
 }
 
-static CSSM_RETURN CSSMTPI cssm_CertReclaimKey(CSSM_TP_HANDLE TPHandle,
-         const CSSM_CERTGROUP *CertGroup,
-         uint32 CertIndex,
-         CSSM_LONG_HANDLE KeyCacheHandle,
-         CSSM_CSP_HANDLE CSPHandle,
-         const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry)
+static CSSM_RETURN CSSMTPI cssm_FormSubmit(CSSM_TP_HANDLE TPHandle,
+         CSSM_TP_FORM_TYPE FormType,
+         const CSSM_DATA *Form,
+         const CSSM_TP_AUTHORITY_ID *ClearanceAuthority,
+         const CSSM_TP_AUTHORITY_ID *RepresentedAuthority,
+         CSSM_ACCESS_CREDENTIALS_PTR Credentials)
 {
   BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CertReclaimKey(Required(CertGroup),
-			CertIndex,
-			KeyCacheHandle,
+  findSession<TPPluginSession>(TPHandle).FormSubmit(FormType,
+			CssmData::required(Form),
+			ClearanceAuthority,
+			RepresentedAuthority,
+			AccessCredentials::optional(Credentials));
+  END_API(TP)
+}
+
+static CSSM_RETURN CSSMTPI cssm_CertGroupVerify(CSSM_TP_HANDLE TPHandle,
+         CSSM_CL_HANDLE CLHandle,
+         CSSM_CSP_HANDLE CSPHandle,
+         const CSSM_CERTGROUP *CertGroupToBeVerified,
+         const CSSM_TP_VERIFY_CONTEXT *VerifyContext,
+         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR VerifyContextResult)
+{
+  BEGIN_API
+  findSession<TPPluginSession>(TPHandle).CertGroupVerify(CLHandle,
 			CSPHandle,
-			CredAndAclEntry);
+			Required(CertGroupToBeVerified),
+			VerifyContext,
+			VerifyContextResult);
+  END_API(TP)
+}
+
+static CSSM_RETURN CSSMTPI cssm_SubmitCredRequest(CSSM_TP_HANDLE TPHandle,
+         const CSSM_TP_AUTHORITY_ID *PreferredAuthority,
+         CSSM_TP_AUTHORITY_REQUEST_TYPE RequestType,
+         const CSSM_TP_REQUEST_SET *RequestInput,
+         const CSSM_TP_CALLERAUTH_CONTEXT *CallerAuthContext,
+         sint32 *EstimatedTime,
+         CSSM_DATA_PTR ReferenceIdentifier)
+{
+  BEGIN_API
+  findSession<TPPluginSession>(TPHandle).SubmitCredRequest(PreferredAuthority,
+			RequestType,
+			Required(RequestInput),
+			CallerAuthContext,
+			Required(EstimatedTime),
+			CssmData::required(ReferenceIdentifier));
+  END_API(TP)
+}
+
+static CSSM_RETURN CSSMTPI cssm_ReceiveConfirmation(CSSM_TP_HANDLE TPHandle,
+         const CSSM_DATA *ReferenceIdentifier,
+         CSSM_TP_CONFIRM_RESPONSE_PTR *Responses,
+         sint32 *ElapsedTime)
+{
+  BEGIN_API
+  findSession<TPPluginSession>(TPHandle).ReceiveConfirmation(CssmData::required(ReferenceIdentifier),
+			Required(Responses),
+			Required(ElapsedTime));
   END_API(TP)
 }
 
@@ -279,17 +281,21 @@ static CSSM_RETURN CSSMTPI cssm_ConfirmCredResult(CSSM_TP_HANDLE TPHandle,
   END_API(TP)
 }
 
-static CSSM_RETURN CSSMTPI cssm_CertGroupPrune(CSSM_TP_HANDLE TPHandle,
+static CSSM_RETURN CSSMTPI cssm_CrlVerify(CSSM_TP_HANDLE TPHandle,
          CSSM_CL_HANDLE CLHandle,
-         const CSSM_DL_DB_LIST *DBList,
-         const CSSM_CERTGROUP *OrderedCertGroup,
-         CSSM_CERTGROUP_PTR *PrunedCertGroup)
+         CSSM_CSP_HANDLE CSPHandle,
+         const CSSM_ENCODED_CRL *CrlToBeVerified,
+         const CSSM_CERTGROUP *SignerCertGroup,
+         const CSSM_TP_VERIFY_CONTEXT *VerifyContext,
+         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR RevokerVerifyResult)
 {
   BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CertGroupPrune(CLHandle,
-			Required(DBList),
-			Required(OrderedCertGroup),
-			Required(PrunedCertGroup));
+  findSession<TPPluginSession>(TPHandle).CrlVerify(CLHandle,
+			CSPHandle,
+			Required(CrlToBeVerified),
+			Required(SignerCertGroup),
+			VerifyContext,
+			RevokerVerifyResult);
   END_API(TP)
 }
 
@@ -311,69 +317,63 @@ static CSSM_RETURN CSSMTPI cssm_ApplyCrlToDb(CSSM_TP_HANDLE TPHandle,
   END_API(TP)
 }
 
-static CSSM_RETURN CSSMTPI cssm_CrlSign(CSSM_TP_HANDLE TPHandle,
+static CSSM_RETURN CSSMTPI cssm_CertGroupPrune(CSSM_TP_HANDLE TPHandle,
          CSSM_CL_HANDLE CLHandle,
-         CSSM_CC_HANDLE CCHandle,
-         const CSSM_ENCODED_CRL *CrlToBeSigned,
-         const CSSM_CERTGROUP *SignerCertGroup,
-         const CSSM_TP_VERIFY_CONTEXT *SignerVerifyContext,
-         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR SignerVerifyResult,
-         CSSM_DATA_PTR SignedCrl)
+         const CSSM_DL_DB_LIST *DBList,
+         const CSSM_CERTGROUP *OrderedCertGroup,
+         CSSM_CERTGROUP_PTR *PrunedCertGroup)
 {
   BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CrlSign(CLHandle,
-			CCHandle,
-			Required(CrlToBeSigned),
-			Required(SignerCertGroup),
-			SignerVerifyContext,
-			SignerVerifyResult,
-			CssmData::required(SignedCrl));
+  findSession<TPPluginSession>(TPHandle).CertGroupPrune(CLHandle,
+			Required(DBList),
+			Required(OrderedCertGroup),
+			Required(PrunedCertGroup));
   END_API(TP)
 }
 
-static CSSM_RETURN CSSMTPI cssm_ReceiveConfirmation(CSSM_TP_HANDLE TPHandle,
-         const CSSM_DATA *ReferenceIdentifier,
-         CSSM_TP_CONFIRM_RESPONSE_PTR *Responses,
-         sint32 *ElapsedTime)
-{
-  BEGIN_API
-  findSession<TPPluginSession>(TPHandle).ReceiveConfirmation(CssmData::required(ReferenceIdentifier),
-			Required(Responses),
-			Required(ElapsedTime));
-  END_API(TP)
-}
-
-static CSSM_RETURN CSSMTPI cssm_CertGroupVerify(CSSM_TP_HANDLE TPHandle,
+static CSSM_RETURN CSSMTPI cssm_CertRevoke(CSSM_TP_HANDLE TPHandle,
          CSSM_CL_HANDLE CLHandle,
          CSSM_CSP_HANDLE CSPHandle,
-         const CSSM_CERTGROUP *CertGroupToBeVerified,
-         const CSSM_TP_VERIFY_CONTEXT *VerifyContext,
-         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR VerifyContextResult)
+         const CSSM_DATA *OldCrlTemplate,
+         const CSSM_CERTGROUP *CertGroupToBeRevoked,
+         const CSSM_CERTGROUP *RevokerCertGroup,
+         const CSSM_TP_VERIFY_CONTEXT *RevokerVerifyContext,
+         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR RevokerVerifyResult,
+         CSSM_TP_CERTCHANGE_REASON Reason,
+         CSSM_DATA_PTR NewCrlTemplate)
 {
   BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CertGroupVerify(CLHandle,
+  findSession<TPPluginSession>(TPHandle).CertRevoke(CLHandle,
 			CSPHandle,
-			Required(CertGroupToBeVerified),
-			VerifyContext,
-			VerifyContextResult);
+			CssmData::optional(OldCrlTemplate),
+			Required(CertGroupToBeRevoked),
+			Required(RevokerCertGroup),
+			Required(RevokerVerifyContext),
+			Required(RevokerVerifyResult),
+			Reason,
+			CssmData::required(NewCrlTemplate));
   END_API(TP)
 }
 
-static CSSM_RETURN CSSMTPI cssm_CrlVerify(CSSM_TP_HANDLE TPHandle,
+static CSSM_RETURN CSSMTPI cssm_CertRemoveFromCrlTemplate(CSSM_TP_HANDLE TPHandle,
          CSSM_CL_HANDLE CLHandle,
          CSSM_CSP_HANDLE CSPHandle,
-         const CSSM_ENCODED_CRL *CrlToBeVerified,
-         const CSSM_CERTGROUP *SignerCertGroup,
-         const CSSM_TP_VERIFY_CONTEXT *VerifyContext,
-         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR RevokerVerifyResult)
+         const CSSM_DATA *OldCrlTemplate,
+         const CSSM_CERTGROUP *CertGroupToBeRemoved,
+         const CSSM_CERTGROUP *RevokerCertGroup,
+         const CSSM_TP_VERIFY_CONTEXT *RevokerVerifyContext,
+         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR RevokerVerifyResult,
+         CSSM_DATA_PTR NewCrlTemplate)
 {
   BEGIN_API
-  findSession<TPPluginSession>(TPHandle).CrlVerify(CLHandle,
+  findSession<TPPluginSession>(TPHandle).CertRemoveFromCrlTemplate(CLHandle,
 			CSPHandle,
-			Required(CrlToBeVerified),
-			Required(SignerCertGroup),
-			VerifyContext,
-			RevokerVerifyResult);
+			CssmData::optional(OldCrlTemplate),
+			Required(CertGroupToBeRemoved),
+			Required(RevokerCertGroup),
+			Required(RevokerVerifyContext),
+			Required(RevokerVerifyResult),
+			CssmData::required(NewCrlTemplate));
   END_API(TP)
 }
 

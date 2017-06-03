@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2014 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2014-2016 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
- * 
+ *
  * This file contains Original Code and/or Modifications of Original Code
  * as defined in and that are subject to the Apple Public Source License
  * Version 2.0 (the 'License'). You may not use this file except in
  * compliance with the License. Please obtain a copy of the License at
  * http://www.opensource.apple.com/apsl/ and read it before using this
  * file.
- * 
+ *
  * The Original Code and all software distributed under the License are
  * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
  * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  *
  * SecSharedCredential.c - CoreFoundation-based functions to store and retrieve shared credentials.
@@ -37,6 +37,7 @@
 OSStatus SecAddSharedWebCredentialSync(CFStringRef fqdn, CFStringRef account, CFStringRef password, CFErrorRef *error);
 OSStatus SecCopySharedWebCredentialSync(CFStringRef fqdn, CFStringRef account, CFArrayRef *credentials, CFErrorRef *error);
 
+#if TARGET_OS_IOS
 
 OSStatus SecAddSharedWebCredentialSync(CFStringRef fqdn,
     CFStringRef account,
@@ -54,20 +55,16 @@ OSStatus SecAddSharedWebCredentialSync(CFStringRef fqdn,
         CFDictionaryAddValue(args, kSecAttrAccount, account);
     }
     if (password) {
-#if TARGET_OS_IPHONE && !TARGET_IPHONE_SIMULATOR && !TARGET_OS_WATCH
         CFDictionaryAddValue(args, kSecSharedPassword, password);
-#else
-        CFDictionaryAddValue(args, CFSTR("spwd"), password);
-#endif
     }
     status = SecOSStatusWith(^bool (CFErrorRef *error) {
         CFTypeRef raw_result = NULL;
         bool xpc_result;
         bool internal_spi = false; // TODO: support this for SecurityDevTests
         if(internal_spi && gSecurityd && gSecurityd->sec_add_shared_web_credential) {
-            xpc_result = gSecurityd->sec_add_shared_web_credential(args, NULL, NULL, SecAccessGroupsGetCurrent(), &raw_result, error);
+            xpc_result = gSecurityd->sec_add_shared_web_credential(args, NULL, NULL, NULL, SecAccessGroupsGetCurrent(), &raw_result, error);
         } else {
-            xpc_result = cftype_ag_to_bool_cftype_error_request(sec_add_shared_web_credential_id, args, SecAccessGroupsGetCurrent(), &raw_result, error);
+            xpc_result = cftype_client_to_bool_cftype_error_request(sec_add_shared_web_credential_id, args, SecSecurityClientGet(), &raw_result, error);
         }
         CFReleaseSafe(args);
         if (!xpc_result) {
@@ -87,6 +84,7 @@ OSStatus SecAddSharedWebCredentialSync(CFStringRef fqdn,
 
     return status;
 }
+#endif /* TARGET_OS_IOS */
 
 void SecAddSharedWebCredential(CFStringRef fqdn,
     CFStringRef account,
@@ -95,7 +93,7 @@ void SecAddSharedWebCredential(CFStringRef fqdn,
 {
 	__block CFErrorRef error = NULL;
 	__block dispatch_queue_t dst_queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0);
-	dispatch_retain(dst_queue);
+#if TARGET_OS_IOS
 
     /* sanity check input arguments */
 	CFStringRef errStr = NULL;
@@ -113,7 +111,6 @@ void SecAddSharedWebCredential(CFStringRef fqdn,
 				completionHandler(error);
 			}
 			CFReleaseSafe(error);
-			dispatch_release(dst_queue);
 		});
 		return;
 	}
@@ -136,12 +133,20 @@ void SecAddSharedWebCredential(CFStringRef fqdn,
 				completionHandler(error);
 			}
 			CFReleaseSafe(error);
-			dispatch_release(dst_queue);
 		});
 	});
-
+#else
+    SecError(errSecParam, &error, CFSTR("SharedWebCredentials not supported on this platform"));
+    dispatch_async(dst_queue, ^{
+        if (completionHandler) {
+            completionHandler(error);
+        }
+        CFReleaseSafe(error);
+    });
+#endif
 }
 
+#if TARGET_OS_IOS
 OSStatus SecCopySharedWebCredentialSync(CFStringRef fqdn,
     CFStringRef account,
     CFArrayRef *credentials,
@@ -162,9 +167,9 @@ OSStatus SecCopySharedWebCredentialSync(CFStringRef fqdn,
         bool xpc_result;
         bool internal_spi = false; // TODO: support this for SecurityDevTests
         if(internal_spi && gSecurityd && gSecurityd->sec_copy_shared_web_credential) {
-            xpc_result = gSecurityd->sec_copy_shared_web_credential(args, NULL, NULL, SecAccessGroupsGetCurrent(), &raw_result, error);
+            xpc_result = gSecurityd->sec_copy_shared_web_credential(args, NULL, NULL, NULL, SecAccessGroupsGetCurrent(), &raw_result, error);
         } else {
-            xpc_result = cftype_ag_to_bool_cftype_error_request(sec_copy_shared_web_credential_id, args, SecAccessGroupsGetCurrent(), &raw_result, error);
+            xpc_result = cftype_client_to_bool_cftype_error_request(sec_copy_shared_web_credential_id, args, SecSecurityClientGet(), &raw_result, error);
         }
         CFReleaseSafe(args);
         if (!xpc_result) {
@@ -186,17 +191,17 @@ OSStatus SecCopySharedWebCredentialSync(CFStringRef fqdn,
     });
 
     return status;
-
 }
+#endif /* TARGET_OS_IOS */
 
 void SecRequestSharedWebCredential(CFStringRef fqdn,
     CFStringRef account,
     void (^completionHandler)(CFArrayRef credentials, CFErrorRef error))
 {
-    __block CFArrayRef result = NULL;
 	__block CFErrorRef error = NULL;
 	__block dispatch_queue_t dst_queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0);
-	dispatch_retain(dst_queue);
+#if TARGET_OS_IOS
+    __block CFArrayRef result = NULL;
 
     /* sanity check input arguments, if provided */
 	CFStringRef errStr = NULL;
@@ -214,7 +219,6 @@ void SecRequestSharedWebCredential(CFStringRef fqdn,
 			}
 			CFReleaseSafe(error);
             CFReleaseSafe(result);
-			dispatch_release(dst_queue);
 		});
 		return;
 	}
@@ -236,24 +240,32 @@ void SecRequestSharedWebCredential(CFStringRef fqdn,
 			}
 			CFReleaseSafe(error);
 			CFReleaseSafe(result);
-			dispatch_release(dst_queue);
 		});
 	});
+#else
+    SecError(errSecParam, &error, CFSTR("SharedWebCredentials not supported on this platform"));
+    dispatch_async(dst_queue, ^{
+        if (completionHandler) {
+            completionHandler(NULL, error);
+        }
+        CFReleaseSafe(error);
+    });
+#endif
 
 }
 
 CFStringRef SecCreateSharedWebCredentialPassword(void)
 {
-    
+
     CFStringRef password = NULL;
     CFErrorRef error = NULL;
     CFMutableDictionaryRef passwordRequirements = NULL;
-    
+
     CFStringRef allowedCharacters = CFSTR("abcdefghkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789");
     CFCharacterSetRef requiredCharactersLower = CFCharacterSetCreateWithCharactersInString(NULL, CFSTR("abcdefghkmnopqrstuvwxyz"));
     CFCharacterSetRef requiredCharactersUppder = CFCharacterSetCreateWithCharactersInString(NULL, CFSTR("ABCDEFGHJKLMNPQRSTUVWXYZ"));
     CFCharacterSetRef requiredCharactersNumbers = CFCharacterSetCreateWithCharactersInString(NULL, CFSTR("3456789"));
-    
+
     int groupSize = 3;
     int groupCount = 4;
     int totalLength = (groupSize * groupCount);
@@ -261,12 +273,12 @@ CFStringRef SecCreateSharedWebCredentialPassword(void)
     CFNumberRef groupCountRef = CFNumberCreate(NULL, kCFNumberIntType, &groupCount);
     CFNumberRef totalLengthRef = CFNumberCreate(NULL, kCFNumberIntType, &totalLength);
     CFStringRef separator = CFSTR("-");
-    
+
     CFMutableArrayRef requiredCharacterSets = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
     CFArrayAppendValue(requiredCharacterSets, requiredCharactersLower);
     CFArrayAppendValue(requiredCharacterSets, requiredCharactersUppder);
     CFArrayAppendValue(requiredCharacterSets, requiredCharactersNumbers);
-    
+
     passwordRequirements = CFDictionaryCreateMutable(NULL, 0, NULL, NULL);
     CFDictionaryAddValue(passwordRequirements, kSecPasswordAllowedCharactersKey, allowedCharacters);
     CFDictionaryAddValue(passwordRequirements, kSecPasswordRequiredCharactersKey, requiredCharacterSets);
@@ -282,11 +294,11 @@ CFStringRef SecCreateSharedWebCredentialPassword(void)
     CFRelease(groupSizeRef);
     CFRelease(groupCountRef);
     CFRelease(totalLengthRef);
-    
+
     password = SecPasswordGenerate(kSecPasswordTypeSafari, &error, passwordRequirements);
-    
+
     CFRelease(requiredCharacterSets);
-    CFRelease(passwordRequirements);    
+    CFRelease(passwordRequirements);
     if ((error && error != errSecSuccess) || !password)
     {
         if (password) CFRelease(password);
@@ -295,6 +307,5 @@ CFStringRef SecCreateSharedWebCredentialPassword(void)
     } else {
         return password;
     }
-    
-}
 
+}

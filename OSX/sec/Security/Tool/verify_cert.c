@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003-2007,2009-2010,2013-2014 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2003-2007,2009-2010,2013-2017 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -26,92 +26,46 @@
 #define CFRELEASE(cf)	if (cf) { CFRelease(cf); }
 
 #include <Security/SecCertificate.h>
+#include <Security/SecCertificatePriv.h>
 #include <Security/SecTrust.h>
 #include <Security/SecPolicy.h>
+#include <utilities/fileIo.h>
 
 #include <sys/stat.h>
 #include <stdio.h>
 #include <time.h>
 
-int readFile(const char	*fileName, unsigned char **bytes, unsigned *numBytes);
 CFStringRef policyToConstant(const char *policy);
 int verify_cert(int argc, char * const *argv);
-
-/* Read an entire file. Copied from cuFileIo.c */
-int readFile(
-             const char		*fileName,
-             unsigned char	**bytes,		/* malloc'd and returned */
-             unsigned		*numBytes)		/* returned */
-{
-    int rtn;
-    int fd;
-    unsigned char *buf;
-    struct stat	sb;
-    unsigned size;
-    
-    *numBytes = 0;
-    *bytes = NULL;
-    fd = open(fileName, O_RDONLY, 0);
-    if (fd < 0) {
-        return errno;
-    }
-    
-    rtn = fstat(fd, &sb);
-    if (rtn) {
-        goto errOut;
-    }
-    size = (unsigned)sb.st_size;
-    buf = malloc(size);
-    if (buf == NULL) {
-        rtn = ENOMEM;
-        goto errOut;
-    }
-    
-    rtn = (int)lseek(fd, 0, SEEK_SET);
-    if (rtn < 0) {
-        free(buf);
-        goto errOut;
-    }
-    
-    rtn = (int)read(fd, buf, (size_t)size);
-    if (rtn != (int)size) {
-        if (rtn >= 0) {
-            printf("readFile: short read\n");
-        }
-        free(buf);
-        rtn = EIO;
-    }
-    else {
-        rtn = 0;
-        *bytes = buf;
-        *numBytes = size;
-    }
-errOut:
-    close(fd);
-    return rtn;
-}
 
 static int addCertFile(const char *fileName, CFMutableArrayRef *array) {
     SecCertificateRef certRef = NULL;
     CFDataRef dataRef = NULL;
     unsigned char *buf = NULL;
-    unsigned int numBytes;
+    size_t numBytes;
     int rtn = 0;
-    
-    if (readFile(fileName, &buf, &numBytes)) {
+
+    if (readFileSizet(fileName, &buf, &numBytes)) {
         rtn = -1;
         goto errOut;
     }
-    
+
     dataRef = CFDataCreate(NULL, buf, numBytes);
     certRef = SecCertificateCreateWithData(NULL, dataRef);
-    
+    if (!certRef) {
+        certRef = SecCertificateCreateWithPEM(NULL, dataRef);
+        if (!certRef) {
+            rtn = -1;
+            goto errOut;
+        }
+    }
+
     if (*array == NULL) {
         *array = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
     }
-    
+
     CFArrayAppendValue(*array, certRef);
-    
+
 errOut:
     /* Cleanup */
     free(buf);
@@ -164,35 +118,35 @@ int verify_cert(int argc, char * const *argv) {
 	extern char	*optarg;
 	extern int optind;
 	int	arg;
-    
+
 	CFMutableArrayRef certs = NULL;
 	CFMutableArrayRef roots = NULL;
 
     CFMutableDictionaryRef dict = NULL;
-    const char *name = NULL;
-    bool client = false;
-    
+    CFStringRef name = NULL;
+    CFBooleanRef client = kCFBooleanFalse;
+
     OSStatus ortn;
 	int	ourRtn = 0;
 	bool quiet = false;
-    
+
     struct tm time;
     CFGregorianDate gregorianDate;
     CFDateRef dateRef = NULL;
-    
+
     CFStringRef policy = NULL;
 	SecPolicyRef policyRef = NULL;
     Boolean fetch = true;
 	SecTrustRef	trustRef = NULL;
 	SecTrustResultType resultType;
-    
+
 	if (argc < 2) {
         /* Return 2 triggers usage message. */
 		return 2;
 	}
-    
+
 	optind = 1;
-    
+
 	while ((arg = getopt(argc, argv, "c:r:p:d:n:LqC")) != -1) {
 		switch (arg) {
 			case 'c':
@@ -224,8 +178,8 @@ int verify_cert(int argc, char * const *argv) {
                 fetch = false;
 				break;
 			case 'n':
-                if (name != NULL) {
-                    name = optarg;
+                if (name == NULL) {
+                    name = CFStringCreateWithCString(NULL, optarg, kCFStringEncodingUTF8);
                 }
 				break;
 			case 'q':
@@ -233,7 +187,7 @@ int verify_cert(int argc, char * const *argv) {
 				break;
             case 'C':
                 /* Set to client */
-                client = true;
+                client = kCFBooleanTrue;
                 break;
             case 'd':
                 memset(&time, 0, sizeof(struct tm));
@@ -244,14 +198,14 @@ int verify_cert(int argc, char * const *argv) {
                         goto errOut;
                     }
                 }
-                
+
                 gregorianDate.second = time.tm_sec;
                 gregorianDate.minute = time.tm_min;
                 gregorianDate.hour = time.tm_hour;
                 gregorianDate.day = time.tm_mday;
                 gregorianDate.month = time.tm_mon + 1;
                 gregorianDate.year = time.tm_year + 1900;
-                
+
                 if (dateRef == NULL) {
                     dateRef = CFDateCreate(NULL, CFGregorianDateGetAbsoluteTime(gregorianDate, NULL));
                 }
@@ -262,16 +216,16 @@ int verify_cert(int argc, char * const *argv) {
 				goto errOut;
 		}
 	}
-    
+
 	if (optind != argc) {
 		ourRtn = 2;
 		goto errOut;
 	}
-    
+
     if (policy == NULL) {
         policy = kSecPolicyAppleX509Basic;
     }
-    
+
 	if (certs == NULL) {
         if (roots == NULL) {
 			fprintf(stderr, "No certs specified.\n");
@@ -292,31 +246,33 @@ int verify_cert(int argc, char * const *argv) {
     /* Per-policy options */
     if (!CFStringCompare(policy, kSecPolicyAppleSSL, 0) || !CFStringCompare(policy, kSecPolicyAppleIPsec, 0)) {
         dict = CFDictionaryCreateMutable(NULL, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        
+
         if (name == NULL) {
+            fprintf(stderr, "Name not specified for IPsec or SSL policy. '-n' is a required option for these policies.");
             ourRtn = 2;
             goto errOut;
         }
         CFDictionaryAddValue(dict, kSecPolicyName, name);
-        CFDictionaryAddValue(dict, kSecPolicyClient, &client);
+        CFDictionaryAddValue(dict, kSecPolicyClient, client);
     }
     else if (!CFStringCompare(policy, kSecPolicyAppleEAP, 0)) {
         dict = CFDictionaryCreateMutable(NULL, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        
-        CFDictionaryAddValue(dict, kSecPolicyClient, &client);
+
+        CFDictionaryAddValue(dict, kSecPolicyClient, client);
     }
     else if (!CFStringCompare(policy, kSecPolicyAppleSMIME, 0)) {
         dict = CFDictionaryCreateMutable(NULL, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        
+
         if (name == NULL) {
+            fprintf(stderr, "Name not specified for SMIME policy. '-n' is a required option for this policy.");
             ourRtn = 2;
             goto errOut;
         }
         CFDictionaryAddValue(dict, kSecPolicyName, name);
     }
-    
+
     policyRef = SecPolicyCreateWithProperties(policy, dict);
-    
+
 	/* Now create a SecTrustRef and set its options */
 	ortn = SecTrustCreateWithCertificates(certs, policyRef, &trustRef);
 	if (ortn) {
@@ -342,7 +298,7 @@ int verify_cert(int argc, char * const *argv) {
             goto errOut;
         }
     }
-    
+
     /* Set verification time for trust object */
     if (dateRef != NULL) {
         ortn = SecTrustSetVerifyDate(trustRef, dateRef);
@@ -352,7 +308,7 @@ int verify_cert(int argc, char * const *argv) {
             goto errOut;
         }
     }
-    
+
 	/* Evaluate certs */
 	ortn = SecTrustEvaluate(trustRef, &resultType);
 	if (ortn) {
@@ -430,5 +386,6 @@ errOut:
     CFRELEASE(dict);
 	CFRELEASE(policyRef);
 	CFRELEASE(trustRef);
+    CFRELEASE(name);
 	return ourRtn;
 }

@@ -48,17 +48,8 @@
 #include <security_asn1/secerr.h>
 #include <security_asn1/secport.h>
 
-#if USE_CDSA_CRYPTO
-#include <Security/cssmapi.h>
-#include <Security/cssmapple.h>
-#include <Security/SecBase.h>
-
-#else
 #include <CommonCrypto/CommonDigest.h>
 #include <Security/SecBase.h>
-
-#endif
-
 
 /*
  * SecCmsArraySortByDER - sort array of objects by objects' DER encoding
@@ -227,27 +218,12 @@ SecCmsAlgArrayGetIndexByAlgTag(SECAlgorithmID **algorithmArray,
     return i;
 }
 
-#if USE_CDSA_CRYPTO
-CSSM_CC_HANDLE
-#else
 void *
-#endif
 SecCmsUtilGetHashObjByAlgID(SECAlgorithmID *algid)
 {
     SECOidData *oidData = SECOID_FindOID(&(algid->algorithm));
     if (oidData)
     {
-#if USE_CDSA_CRYPTO
-	CSSM_ALGORITHMS alg = oidData->cssmAlgorithm;
-	if (alg)
-	{
-	    CSSM_CC_HANDLE digobj;
-	    CSSM_CSP_HANDLE cspHandle = SecCspHandleForAlgorithm(alg);
-
-	    if (!CSSM_CSP_CreateDigestContext(cspHandle, alg, &digobj))
-		return digobj;
-	}
-#else
         void *digobj = NULL;
         switch (oidData->offset) {
         case SEC_OID_SHA1:
@@ -278,7 +254,6 @@ SecCmsUtilGetHashObjByAlgID(SECAlgorithmID *algid)
             break;
         }
         return digobj;
-#endif
     }
 
     return 0;
@@ -318,6 +293,23 @@ SecCmsUtilMakeSignatureAlgorithm(SECOidTag hashalg, SECOidTag encalg)
 	  default:
 	    return SEC_OID_UNKNOWN;
 	}
+      case SEC_OID_EC_PUBLIC_KEY:
+        switch(hashalg) {
+          /*
+           * Note this is only used when signing and verifying signed attributes,
+           * In which case we really do want the combined ECDSA_WithSHA1 alg...
+           */
+          case SEC_OID_SHA1:
+            return SEC_OID_ECDSA_WithSHA1;
+          case SEC_OID_SHA256:
+            return SEC_OID_ECDSA_WITH_SHA256;
+          case SEC_OID_SHA384:
+            return SEC_OID_ECDSA_WITH_SHA384;
+          case SEC_OID_SHA512:
+            return SEC_OID_ECDSA_WITH_SHA512;
+          default:
+            return SEC_OID_UNKNOWN;
+        }
       default:
 	break;
     }

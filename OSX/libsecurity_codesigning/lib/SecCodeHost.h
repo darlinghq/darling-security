@@ -129,7 +129,7 @@ CF_ASSUME_NONNULL_BEGIN
 	hash from the loaded in-memory signature of its guest and pass the result as an
 	attribute with key kSecGuestAttributeHash.
 */
-enum {
+CF_ENUM(uint32_t) {
 	kSecCSDedicatedHost = 1 << 0,
 	kSecCSGenerateGuestHash = 1 << 1,
 };

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2004,2011-2015 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2000-2004,2011-2016 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -80,7 +80,7 @@ SecKeychainSearchCreateFromAttributesExtended(CFTypeRef keychainOrArray, SecItem
 OSStatus
 SecKeychainSearchCopyNext(SecKeychainSearchRef searchRef, SecKeychainItemRef *itemRef)
 {
-    BEGIN_SECAPI
+	BEGIN_SECAPI
 
 	RequiredParam(itemRef);
 	Item item;
@@ -90,7 +90,6 @@ SecKeychainSearchCopyNext(SecKeychainSearchRef searchRef, SecKeychainItemRef *it
 
 	*itemRef=item->handle();
 
-#if SECTRUST_OSX
 	bool itemChecked = false;
 	do {
 		/* see if we should convert outgoing item to a unified SecCertificateRef */
@@ -104,8 +103,10 @@ SecKeychainSearchCopyNext(SecKeychainSearchRef searchRef, SecKeychainItemRef *it
 			}
 			if (!data) {
 				/* zero-length or otherwise bad cert data; skip to next item */
-				CFRelease(*itemRef);
-				*itemRef = NULL;
+				if (*itemRef) {
+					CFRelease(*itemRef);
+					*itemRef = NULL;
+				}
 				if (!itemCursor->next(item))
 					return errSecItemNotFound;
 				*itemRef=item->handle();
@@ -117,13 +118,24 @@ SecKeychainSearchCopyNext(SecKeychainSearchRef searchRef, SecKeychainItemRef *it
 				CFRelease(data);
 			if (tmpRef)
 				CFRelease(tmpRef);
+			if (NULL == *itemRef) {
+				/* unable to create unified certificate item; skip to next item */
+				if (!itemCursor->next(item))
+					return errSecItemNotFound;
+				*itemRef=item->handle();
+				continue;
+			}
 			itemChecked = true;
-        }
+		}
 		else {
 			itemChecked = true;
 		}
 	} while (!itemChecked);
-#endif
+
+	if (NULL == *itemRef) {
+		/* never permit a NULL item reference to be returned without an error result */
+		return errSecItemNotFound;
+	}
 
 	END_SECAPI
 }

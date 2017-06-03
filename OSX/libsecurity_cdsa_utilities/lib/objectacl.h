@@ -30,6 +30,7 @@
 
 #include <security_cdsa_utilities/aclsubject.h>
 #include <security_utilities/globalizer.h>
+#include <security_utilities/threading.h>
 #include <map>
 #include <set>
 #include <limits.h>
@@ -88,7 +89,7 @@ public:
 	// (Gets are not const because underlying implementations usually want them writable) 
     void cssmGetAcl(const char *tag, uint32 &count, AclEntryInfo * &acls);
     void cssmChangeAcl(const AclEdit &edit, const AccessCredentials *cred,
-		AclValidationEnvironment *env = NULL);
+		AclValidationEnvironment *env = NULL, const char *preserveTag = NULL);
     void cssmGetOwner(AclOwnerPrototype &owner);
     void cssmChangeOwner(const AclOwnerPrototype &newOwner, const AccessCredentials *cred,
 		AclValidationEnvironment *env = NULL);
@@ -122,7 +123,7 @@ public:
                         Allocator &alloc) const; // encode copy in CSSM format
 
         virtual bool authorizes(AclAuthorization auth) const = 0;
-        virtual bool validate(const AclValidationContext &ctx) const = 0;
+        virtual bool validates(const AclValidationContext &ctx) const = 0;
 
 		template <class Action>
 		void exportBlob(Action &pub, Action &priv)
@@ -152,7 +153,7 @@ public:
         OwnerEntry(const Input &owner) : Entry(owner) { }
 
         bool authorizes(AclAuthorization auth) const;
-        bool validate(const AclValidationContext &ctx) const;
+        bool validates(const AclValidationContext &ctx) const;
     };
     
     class AclEntry : public Entry {
@@ -171,8 +172,10 @@ public:
                         Allocator &alloc) const; // encode copy in CSSM format
         
         bool authorizes(AclAuthorization auth) const;
-        bool validate(const AclValidationContext &ctx) const;
+        bool validates(const AclValidationContext &ctx) const;
         
+		void addAuthorization(AclAuthorization auth);
+		
         template <class Action>
         void exportBlob(Action &pub, Action &priv)
         {
@@ -214,7 +217,7 @@ public:
     EntryMap::const_iterator end() const { return mEntries.end(); }
 
     unsigned int getRange(const std::string &tag,
-		pair<EntryMap::const_iterator, EntryMap::const_iterator> &range) const;	
+		pair<EntryMap::const_iterator, EntryMap::const_iterator> &range, bool tolerant = false) const;
     EntryMap::iterator findEntryHandle(CSSM_ACL_HANDLE handle);
 
     // construct an AclSubject through the Maker registry (by subject type)
@@ -227,7 +230,7 @@ protected:
 	void owner(const Input &input);
 	void entries(uint32 count, const AclEntryInfo *infos);
 
-private:
+public:
 	void add(const std::string &tag, const AclEntry &newEntry);
 	void add(const std::string &tag, AclEntry newEntry, CSSM_ACL_HANDLE handle);
 
@@ -239,6 +242,7 @@ private:
 private:
     typedef map<CSSM_ACL_SUBJECT_TYPE, AclSubject::Maker *> MakerMap;
     static ModuleNexus<MakerMap> makers;	// registered subject Makers
+    static NormalMutex makersMutex;
 
     static AclSubject::Maker &makerFor(CSSM_ACL_SUBJECT_TYPE type);
 };

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009,2012-2014 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2009,2012-2016 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  * 
@@ -105,7 +105,7 @@ struct __SecOCSPSingleResponse {
 /*!
 	@function SecOCSPResponseCreate
 	@abstract Returns a SecOCSPResponseRef from a BER encoded ocsp response.
-	@param berResponse The BER encoded ocsp response.
+	@param ocspResponse The BER encoded ocsp response.
 	@result A SecOCSPResponseRef.
 */
 SecOCSPResponseRef SecOCSPResponseCreate(CFDataRef ocspResponse);
@@ -140,7 +140,6 @@ CFArrayRef SecOCSPResponseCopySigners(SecOCSPResponseRef ocspResponse);
 	@function SecOCSPResponseFinalize
 	@abstract Frees a SecOCSPResponseRef.
 	@param ocspResponse The BER encoded ocsp response.
-	@result A SecOCSPResponseRef.
 */
 void SecOCSPResponseFinalize(SecOCSPResponseRef ocspResponse);
 
@@ -159,8 +158,8 @@ void SecOCSPSingleResponseDestroy(SecOCSPSingleResponseRef this);
    we can find one and NULL if we can't find a valid signer. The issuerPath
    contains the cert chain from the anchor to the certificate that issued the
    leaf certificate for which this ocspResponse is supposed to be valid. */
-SecCertificatePathRef SecOCSPResponseCopySigner(SecOCSPResponseRef this,
-    SecCertificatePathRef issuerPath);
+SecCertificateRef SecOCSPResponseCopySigner(SecOCSPResponseRef this,
+    SecCertificateRef issuerPath);
 
 __END_DECLS
 

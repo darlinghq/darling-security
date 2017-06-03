@@ -79,18 +79,18 @@ static void tests(void)
     
     /* ==================== Three Accounts setup =============================================*/
     
-    ok(SOSAccountResetToOffering(alice_account, &error), "Reset to offering (%@)", error);
+    ok(SOSAccountResetToOffering_wTxn(alice_account, &error), "Reset to offering (%@)", error);
     CFReleaseNull(error);
     
     is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, carol_account, NULL), 2, "update");
 
-    ok(SOSAccountJoinCircles(bob_account, &error), "Bob Applies (%@)", error);
+    ok(SOSAccountJoinCircles_wTxn(bob_account, &error), "Bob Applies (%@)", error);
     CFReleaseNull(error);
     
     is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, carol_account, NULL), 2, "update");
 
     
-    ok(SOSAccountJoinCircles(carol_account, &error), "Carol Applies (%@)", error);
+    ok(SOSAccountJoinCircles_wTxn(carol_account, &error), "Carol Applies (%@)", error);
     CFReleaseNull(error);
     
     is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, carol_account, NULL), 2, "update");
@@ -109,9 +109,20 @@ static void tests(void)
 
     accounts_agree_internal("bob&alice pair", bob_account, alice_account, false);
     accounts_agree_internal("bob&carol pair", bob_account, carol_account, false);
+    CFDictionaryRef alice_devstate = SOSTestSaveStaticAccountState(alice_account);
+    CFDictionaryRef bob_devstate = SOSTestSaveStaticAccountState(bob_account);
+    CFDictionaryRef carol_devstate = SOSTestSaveStaticAccountState(carol_account);
 
     /* ==================== Three Accounts in circle =============================================*/
     InjectChangeToMulti(changes, CFSTR("^AccountChanged"), CFSTR("none"), alice_account, bob_account, carol_account, NULL);
+    
+    SOSTestRestoreAccountState(alice_account, alice_devstate);
+    SOSTestRestoreAccountState(bob_account, bob_devstate);
+    SOSTestRestoreAccountState(carol_account, carol_devstate);
+    
+    CFReleaseNull(alice_devstate);
+    CFReleaseNull(bob_devstate);
+    CFReleaseNull(carol_devstate);
 
     SOSAccountEnsureFactoryCirclesTest(alice_account, CFSTR("Alice"));
     SOSAccountEnsureFactoryCirclesTest(bob_account, CFSTR("Bob"));
@@ -146,7 +157,7 @@ static void tests(void)
     
     /* ==================== Three Accounts setup =============================================*/
     
-    ok(SOSAccountResetToOffering(alice_account,   &error), "Reset to offering (%@)", error);
+    ok(SOSAccountResetToOffering_wTxn(alice_account,   &error), "Reset to offering (%@)", error);
     CFReleaseNull(error);
     is(countActivePeers(alice_account), 2, "2 peers - alice and icloud");
     
@@ -156,12 +167,12 @@ static void tests(void)
     is(SOSAccountGetCircleStatus(bob_account, &error), kSOSCCNotInCircle, "Bob is not in circle");
     is(SOSAccountGetCircleStatus(carol_account, &error), kSOSCCNotInCircle, "Carol is not in circle");
     
-    ok(SOSAccountJoinCircles(bob_account,   &error), "Bob Applies (%@)", error);
+    ok(SOSAccountJoinCircles_wTxn(bob_account,   &error), "Bob Applies (%@)", error);
     CFReleaseNull(error);
     
     is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, carol_account, NULL), 2, "updates");
 
-    ok(SOSAccountJoinCircles(carol_account,   &error), "Carol Applies (%@)", error);
+    ok(SOSAccountJoinCircles_wTxn(carol_account,   &error), "Carol Applies (%@)", error);
     CFReleaseNull(error);
     
     is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, carol_account, NULL), 2, "updates");
@@ -184,21 +195,12 @@ static void tests(void)
     accounts_agree_internal("bob&carol pair", bob_account, carol_account, false);
     
     CFReleaseSafe(cfpassword2);
-    
-    CFReleaseNull(alice_account);
-    CFReleaseNull(bob_account);
-    CFReleaseNull(carol_account);
-
-    SOSUnregisterAllTransportMessages();
-    SOSUnregisterAllTransportCircles();
-    SOSUnregisterAllTransportKeyParameters();
-    CFArrayRemoveAllValues(key_transports);
-    CFArrayRemoveAllValues(circle_transports);
-    CFArrayRemoveAllValues(message_transports);
     CFReleaseNull(changes);
     CFReleaseNull(alice_account);
     CFReleaseNull(bob_account);
     CFReleaseNull(carol_account);
+    SOSTestCleanup();
+
 }
 
 

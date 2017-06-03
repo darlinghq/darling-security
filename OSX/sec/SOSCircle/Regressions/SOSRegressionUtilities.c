@@ -216,7 +216,6 @@ CFTypeRef testGetObjectsFromCloud(CFArrayRef keysToGet, dispatch_queue_t process
         if (error)
         {
             secerror("SOSCloudKeychainGetObjectsFromCloud returned error: %@", error);
-     //       CFRelease(*error);
         }
         dispatch_group_leave(dgroup);
         secnotice("test", "SOSCloudKeychainGetObjectsFromCloud block exit: %@", object);
@@ -306,7 +305,7 @@ SOSPeerInfoRef SOSCreatePeerInfoFromName(CFStringRef name, SecKeyRef* outSigning
 
     require(outSigningKey, exit);
 
-    GeneratePermanentECPair(256, &publicKey, outSigningKey);
+    require_quiet(SecError(GeneratePermanentECPair(256, &publicKey, outSigningKey), error, CFSTR("Failed To Create Key")), exit);
 
     gestalt = SOSCreatePeerGestaltFromName(name);
     require(gestalt, exit);
@@ -330,6 +329,8 @@ SOSFullPeerInfoRef SOSCreateFullPeerInfoFromName(CFStringRef name, SecKeyRef* ou
 
     //GeneratePermanentECPair(256, &publicKey, outSigningKey);
     *outSigningKey = GeneratePermanentFullECKey(256, name, error);
+    require(*outSigningKey, exit);
+
     gestalt = SOSCreatePeerGestaltFromName(name);
     require(gestalt, exit);
 

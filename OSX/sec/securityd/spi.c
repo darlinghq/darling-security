@@ -34,6 +34,7 @@
 #include <securityd/SOSCloudCircleServer.h>
 #include <securityd/SecOTRRemote.h>
 #include <securityd/SecLogSettingsServer.h>
+#include <securityd/personalization.h>
 
 #include <CoreFoundation/CFXPCBridge.h>
 #include "utilities/iOSforOSX.h"
@@ -41,20 +42,31 @@
 #include "OTATrustUtilities.h"
 
 static struct securityd spi = {
+#if !TRUSTD_SERVER
+    /* Trustd must xpc to secd to use these. */
     .sec_item_add                           = _SecItemAdd,
     .sec_item_copy_matching                 = _SecItemCopyMatching,
     .sec_item_update                        = _SecItemUpdate,
     .sec_item_delete                        = _SecItemDelete,
+#if TARGET_OS_IOS
     .sec_add_shared_web_credential          = _SecAddSharedWebCredential,
     .sec_copy_shared_web_credential         = _SecCopySharedWebCredential,
+#endif
     .sec_trust_store_for_domain             = SecTrustStoreForDomainName,
     .sec_trust_store_contains               = SecTrustStoreContainsCertificateWithDigest,
     .sec_trust_store_set_trust_settings     = _SecTrustStoreSetTrustSettings,
     .sec_trust_store_remove_certificate     = SecTrustStoreRemoveCertificateWithDigest,
     .sec_truststore_remove_all              = _SecTrustStoreRemoveAll,
     .sec_item_delete_all                    = _SecItemDeleteAll,
+#endif
+#if TRUSTD_SERVER || TARGET_OS_IPHONE
+    /* Local trust evaluation only occurs in trustd and iOS securityd */
     .sec_trust_evaluate                     = SecTrustServerEvaluate,
-    .sec_keychain_backup                    = _SecServerKeychainBackup,
+    .sec_device_is_internal                 = SecIsDeviceInternal,
+#endif
+#if !TRUSTD_SERVER
+    /* Trustd must xpc to secd to use these. */
+    .sec_keychain_backup                    = _SecServerKeychainCreateBackup,
     .sec_keychain_restore                   = _SecServerKeychainRestore,
     .sec_keychain_backup_syncable           = _SecServerBackupSyncable,
     .sec_keychain_restore_syncable          = _SecServerRestoreSyncable,
@@ -103,9 +115,10 @@ static struct securityd spi = {
     .soscc_CopyConcurringPeerInfo           = SOSCCCopyConcurringPeerPeerInfo_Server,
     .ota_CopyEscrowCertificates             = SecOTAPKICopyCurrentEscrowCertificates,
     .sec_ota_pki_get_new_asset              = SecOTAPKISignalNewAsset,
+    .soscc_ProcessSyncWithPeers             = SOSCCProcessSyncWithPeers_Server,
     .soscc_ProcessSyncWithAllPeers          = SOSCCProcessSyncWithAllPeers_Server,
     .soscc_EnsurePeerRegistration           = SOSCCProcessEnsurePeerRegistration_Server,
-    .sec_roll_keys                          = _SecServerRollKeys,
+    .sec_roll_keys                          = _SecServerRollKeysGlue,
     .soscc_CopyDeviceID                     = SOSCCCopyDeviceID_Server,
     .soscc_SetDeviceID                      = SOSCCSetDeviceID_Server,
     .soscc_CheckIDSRegistration             = SOSCCIDSServiceRegistrationTest_Server,
@@ -126,7 +139,29 @@ static struct securityd spi = {
     .soscc_SetEscrowRecords                 = SOSCCSetEscrowRecord_Server,
     .soscc_CopyEscrowRecords                = SOSCCCopyEscrowRecord_Server,
     .soscc_PeerAvailability                 = SOSCCCheckPeerAvailability_Server,
+    .sosbskb_WrapToBackupSliceKeyBagForView = SOSWrapToBackupSliceKeyBagForView_Server,
+    .soscc_CopyAccountState                 = SOSCCCopyAccountState_Server,
+    .soscc_DeleteAccountState               = SOSCCDeleteAccountState_Server,
+    .soscc_CopyEngineData                   = SOSCCCopyEngineData_Server,
+    .soscc_DeleteEngineState                = SOSCCDeleteEngineState_Server,
+    .soscc_AccountHasPublicKey              = SOSCCAccountHasPublicKey_Server,
+    .soscc_AccountIsNew                     = SOSCCAccountIsNew_Server,
+    .sec_item_update_token_items            = _SecItemUpdateTokenItems,
+    .sec_trust_store_copy_all               = _SecTrustStoreCopyAll,
+    .sec_trust_store_copy_usage_constraints = _SecTrustStoreCopyUsageConstraints,
+    .sec_delete_items_with_access_groups    = _SecItemServerDeleteAllWithAccessGroups,
+    .soscc_IsThisDeviceLastBackup           = SOSCCkSecXPCOpIsThisDeviceLastBackup_Server,
+    .soscc_requestSyncWithPeerOverKVS       = SOSCCRequestSyncWithPeerOverKVS_Server,
+    .soscc_requestSyncWithPeerOverKVSIDOnly = SOSCCRequestSyncWithPeerOverKVSUsingIDOnly_Server,
+    .soscc_SOSCCPeersHaveViewsEnabled       = SOSCCPeersHaveViewsEnabled_Server,
+    .socc_clearPeerMessageKeyInKVS          = SOSCCClearPeerMessageKeyInKVS_Server,
+    .soscc_RegisterRecoveryPublicKey        = SOSCCRegisterRecoveryPublicKey_Server,
+    .soscc_CopyRecoveryPublicKey            = SOSCCCopyRecoveryPublicKey_Server,
+    .soscc_CopyBackupInformation            = SOSCCCopyBackupInformation_Server,
+    .soscc_SOSCCMessageFromPeerIsPending    = SOSCCMessageFromPeerIsPending_Server,
+    .soscc_SOSCCSendToPeerIsPending         = SOSCCSendToPeerIsPending_Server,
 
+#endif /* !TRUSTD_SERVER */
 };
 
 void securityd_init_server(void) {
@@ -134,7 +169,7 @@ void securityd_init_server(void) {
     SecPolicyServerInitalize();
 }
 
-void securityd_init(char* home_path) {
+void securityd_init(CFURLRef home_path) {
     if (home_path)
         SetCustomHomeURL(home_path);
 

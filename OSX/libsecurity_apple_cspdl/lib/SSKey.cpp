@@ -27,6 +27,7 @@
 #include "SSDLSession.h"
 #include <security_cdsa_utilities/KeySchema.h>
 #include <security_cdsa_plugin/cssmplugin.h>
+#include <security_utilities/threading.h>
 
 using namespace CssmClient;
 using namespace SecurityServer;
@@ -39,6 +40,7 @@ SSKey::SSKey(SSCSPSession &session, KeyHandle keyHandle, CssmKey &ioKey,
 mAllocator(session), mKeyHandle(keyHandle),
 mClientSession(session.clientSession())
 {
+    StLock<Mutex> _ (mMutex); // In the constructor??? Yes. Our handlers aren't thread safe in the slightest...
 	CssmKey::Header &header = ioKey.header();
 	if (inKeyAttr & CSSM_KEYATTR_PERMANENT)
 	{
@@ -124,9 +126,7 @@ mClientSession(session.clientSession())
 		attributes.add(KeySchema::Unwrap,
 					   header.useFor(CSSM_KEYUSE_ANY | CSSM_KEYUSE_UNWRAP));
 
-		// @@@ Fixme
-		mUniqueId = inSSDatabase->insert(mRecordType, &attributes, &blob,
-										 true);
+		mUniqueId = inSSDatabase->ssInsert(mRecordType, &attributes, &blob);
 	}
 
 	header.cspGuid(session.plugin.myGuid()); // Set the csp guid to me.
@@ -142,6 +142,7 @@ mAllocator(session.allocator()), mKeyHandle(noKey), mUniqueId(uniqueId),
 mRecordType(recordType),
 mClientSession(session.clientSession())
 {
+    StLock<Mutex> _ (mMutex);
 	CssmKey::Header &header = ioKey.header();
 	memset(&header, 0, sizeof(header)); // Clear key header
 
@@ -236,6 +237,7 @@ mClientSession(session.clientSession())
 
 SSKey::~SSKey()
 {
+    StLock<Mutex> _(mMutex); // In the destructor too??? Yes. See SSCSPSession.cpp:354 for an explanation of this code's policy on threads.
 	if (mKeyHandle != noKey)
 		clientSession().releaseKey(mKeyHandle);
 }
@@ -244,6 +246,7 @@ void
 SSKey::free(const AccessCredentials *accessCred, CssmKey &ioKey,
 			CSSM_BOOL deleteKey)
 {
+    StLock<Mutex> _(mMutex);
 	freeReferenceKey(mAllocator, ioKey);
 	if (deleteKey)
 	{
@@ -266,17 +269,20 @@ SSKey::free(const AccessCredentials *accessCred, CssmKey &ioKey,
 SecurityServer::ClientSession &
 SSKey::clientSession()
 {
+    StLock<Mutex> _(mMutex);
 	return mClientSession;
 }
 
 KeyHandle SSKey::optionalKeyHandle() const
 {
+    StLock<Mutex> _(mMutex);
 	return mKeyHandle;
 }
 
 KeyHandle
 SSKey::keyHandle()
 {
+    StLock<Mutex> _(mMutex);
 	if (mKeyHandle == noKey)
 	{
 		// Deal with uninstantiated keys.
@@ -290,6 +296,8 @@ SSKey::keyHandle()
 			clientSession().decodeKey(mUniqueId->database().dbHandle(), blob,
 									  dummyHeader);
 
+        secinfo("SecAccessReference", "decoded a new key into handle %d [reference %ld]", mKeyHandle, keyReference());
+
 		// @@@ Check decoded header against returned header
 	}
 
@@ -302,6 +310,7 @@ SSKey::keyHandle()
 void
 SSKey::getOwner(CSSM_ACL_OWNER_PROTOTYPE &owner, Allocator &allocator)
 {
+    StLock<Mutex> _ (mMutex);
 	clientSession().getKeyOwner(keyHandle(), AclOwnerPrototype::overlay(owner),
 								allocator);
 }
@@ -310,6 +319,7 @@ void
 SSKey::changeOwner(const AccessCredentials &accessCred,
 				   const AclOwnerPrototype &newOwner)
 {
+    StLock<Mutex> _ (mMutex);
 	clientSession().changeKeyOwner(keyHandle(), accessCred, newOwner);
 	didChangeAcl();
 }
@@ -318,6 +328,7 @@ void
 SSKey::getAcl(const char *selectionTag, uint32 &numberOfAclInfos,
 			  AclEntryInfo *&aclInfos, Allocator &allocator)
 {
+    StLock<Mutex> _ (mMutex);
 	clientSession().getKeyAcl(keyHandle(), selectionTag, numberOfAclInfos,
 							  aclInfos, allocator);
 }
@@ -325,6 +336,7 @@ SSKey::getAcl(const char *selectionTag, uint32 &numberOfAclInfos,
 void
 SSKey::changeAcl(const AccessCredentials &accessCred, const AclEdit &aclEdit)
 {
+    StLock<Mutex> _ (mMutex);
 	clientSession().changeKeyAcl(keyHandle(), accessCred, aclEdit);
 	didChangeAcl();
 }
@@ -334,7 +346,7 @@ SSKey::didChangeAcl()
 {
 	if (mUniqueId == true)
 	{
-	    secdebug("keyacl", "SSKey::didChangeAcl() keyHandle: %lu updating DL entry", (unsigned long)mKeyHandle);
+	    secinfo("keyacl", "SSKey::didChangeAcl() keyHandle: %lu updating DL entry", (unsigned long)mKeyHandle);
 		// The key is persistent, make the change on disk.
 		CssmDataContainer keyBlob(mAllocator);
 		clientSession().encodeKey(keyHandle(), keyBlob);
@@ -342,6 +354,6 @@ SSKey::didChangeAcl()
 	}
 	else
 	{
-	    secdebug("keyacl", "SSKey::didChangeAcl() keyHandle: %lu transient key no update done", (unsigned long)mKeyHandle);
+	    secinfo("keyacl", "SSKey::didChangeAcl() keyHandle: %lu transient key no update done", (unsigned long)mKeyHandle);
 	}
 }

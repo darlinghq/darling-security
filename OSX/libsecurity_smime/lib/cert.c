@@ -42,7 +42,7 @@
 #include <syslog.h>
 
 /* for errKCDuplicateItem */
-#include <MacErrors.h>
+#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
 
 #define CERT_DEBUG	0
 #if	CERT_DEBUG
@@ -488,12 +488,15 @@ SecCertificateRef CERT_FindCertBySubjectKeyID (CFTypeRef keychainOrArray,
 }
 
 static SecIdentityRef
-CERT_FindIdentityByCertificate (CFTypeRef keychainOrArray, SecCertificateRef certificate)
+CERT_FindIdentityByCertificate (CFTypeRef keychainOrArray, SecCertificateRef CF_CONSUMED certificate)
 {
     SecIdentityRef  identity = NULL;
     SecIdentityCreateWithCertificate(keychainOrArray, certificate, &identity);
     if (!identity)
 	PORT_SetError(SEC_ERROR_NOT_A_RECIPIENT);
+    if (certificate) {
+        CFRelease(certificate);
+    }
 
     return identity;
 }
@@ -671,7 +674,7 @@ SECStatus CERT_ImportCerts(SecKeychainRef keychain, SECCertUsage usage, unsigned
 	    rv = SecCertificateAddToKeychain(cert, keychain);
 	    if (rv)
 	    {
-		if (rv == errSecDuplicateItem)
+		if (rv == errKCDuplicateItem)
 		    rv = noErr;
 		else
 		{

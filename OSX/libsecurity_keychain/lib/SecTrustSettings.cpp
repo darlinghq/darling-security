@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005,2011-2015 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2005,2011-2016 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -54,9 +54,9 @@
 #include <vector>
 #include <CommonCrypto/CommonDigest.h>
 #include <CoreFoundation/CFPreferences.h>
-#include <CoreServices/CoreServicesPriv.h> /* for _CSCheckFix */
+#include <utilities/SecCFRelease.h>
 
-#define trustSettingsDbg(args...)	secdebug("trustSettings", ## args)
+#define trustSettingsDbg(args...)	secinfo("trustSettings", ## args)
 
 /*
  * Ideally we'd like to implement our own lock to protect the state of the cert stores
@@ -244,7 +244,7 @@ static void tsPurgeCache()
 	StLock<Mutex>	_(sutCacheLock());
 	trustSettingsDbg("tsPurgeCache");
 	for(domain=0; domain<TRUST_SETTINGS_NUM_DOMAINS; domain++) {
-		tsSetGlobalTrustSettings(NULL, domain);
+		tsSetGlobalTrustSettings(NULL, (SecTrustSettingsDomain) domain);
 	}
 }
 
@@ -390,9 +390,9 @@ static OSStatus tsCopyCertsCommon(
 		&kCFTypeArrayCallBacks));
 
 	/*
-	 * Search all keychains - user's, System.keychain, system root store,
-	 * system intermdiates as appropriate
-  	 */
+	 * Search all keychains - user's keychain list, System.keychain,
+	 * and system root store
+	 */
 	StorageManager::KeychainList keychains;
 	Keychain adminKc;
 	if(user) {
@@ -404,15 +404,13 @@ static OSStatus tsCopyCertsCommon(
 	}
 	Keychain sysRootKc = globals().storageManager.make(SYSTEM_ROOT_STORE_PATH, false);
 	keychains.push_back(sysRootKc);
-	Keychain sysCertKc = globals().storageManager.make(SYSTEM_CERT_STORE_PATH, false);
-	keychains.push_back(sysCertKc);
 
 	assert(kSecTrustSettingsDomainUser == 0);
 	for(unsigned domain=0; domain<TRUST_SETTINGS_NUM_DOMAINS; domain++) {
 		if(!domainEnable[domain]) {
 			continue;
 		}
-		TrustSettings *ts = tsGetGlobalTrustSettings(domain);
+		TrustSettings *ts = tsGetGlobalTrustSettings((SecTrustSettingsDomain)domain);
 		if(ts == NULL) {
 			continue;
 		}
@@ -432,68 +430,34 @@ static OSStatus tsCopyCertsCommon(
 	return errSecSuccess;
 }
 
-#if TARGET_OS_MAC && !TARGET_IPHONE_SIMULATOR && !TARGET_OS_IPHONE && !TARGET_OS_NANO
-/*
- * _CSCheckFix is implemented in CarbonCore and exported via CoreServices.
- * To avoid a circular dependency with Security, load this symbol dynamically.
- */
-typedef Boolean (*CSCheckFix_f)(CFStringRef str);
-
-static dispatch_once_t sTSInitializeOnce  = 0;
-static void *          sCSCheckFixLibrary = NULL;
-static CSCheckFix_f    sCSCheckFix_f      = NULL;
-
-static OSStatus _tsEnsuredInitialized(void);
-
-static OSStatus _tsEnsuredInitialized(void)
-{
-    __block OSStatus status = errSecNotAvailable;
-
-    dispatch_once(&sTSInitializeOnce, ^{
-        sCSCheckFixLibrary = dlopen("/System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Versions/A/CarbonCore", RTLD_LAZY | RTLD_LOCAL);
-        assert(sCSCheckFixLibrary);
-        if (sCSCheckFixLibrary) {
-            sCSCheckFix_f = (CSCheckFix_f)(uintptr_t) dlsym(sCSCheckFixLibrary, "_CSCheckFix");
-        }
-    });
-
-    if (sCSCheckFix_f) {
-        status = noErr;
-    }
-    return status;
-}
-#endif
-
 static void tsAddConditionalCerts(CFMutableArrayRef certArray)
 {
 #if TARGET_OS_MAC && !TARGET_IPHONE_SIMULATOR && !TARGET_OS_IPHONE && !TARGET_OS_NANO
 	struct certmap_entry_s {
+		CFStringRef bundleId;
 		const UInt8* data;
 		const CFIndex length;
 	};
 	typedef struct certmap_entry_s certmap_entry_t;
 
-	if (!certArray) { return; }
+	CFBundleRef bundle = CFBundleGetMainBundle();
+	CFStringRef bundleIdentifier = (bundle) ? CFBundleGetIdentifier(bundle) : NULL;
+	if (!bundleIdentifier || !certArray) { return; }
 
-	OSStatus status = _tsEnsuredInitialized();
-	if (status == 0 && sCSCheckFix_f(CFSTR("21946795"))) {
-		// conditionally include these 1024-bit roots
-		const certmap_entry_t certmap[] = {
-			{ _EquifaxSecureCA, sizeof(_EquifaxSecureCA) },
-			{ _GTECyberTrustGlobalRootCA, sizeof(_GTECyberTrustGlobalRootCA) },
-			{ _ThawtePremiumServerCA, sizeof(_ThawtePremiumServerCA) },
-			{ _ThawteServerCA, sizeof(_ThawteServerCA) },
-			{ _VeriSignClass3CA, sizeof(_VeriSignClass3CA) },
-		};
-		unsigned int i, certmaplen = sizeof(certmap) / sizeof(certmap_entry_t);
-		for (i=0; i<certmaplen; i++) {
-			SecCertificateRef cert = SecCertificateCreateWithBytes(NULL,
-				certmap[i].data, certmap[i].length);
-			if (cert) {
-				CFArrayAppendValue(certArray, cert);
-				CFRelease(cert);
-				cert = NULL;
-			}
+	// conditionally include 1024-bit compatibility roots for specific apps
+	const certmap_entry_t certmap[] = {
+		{ CFSTR("com.autodesk.AdSSO"), _GTECyberTrustGlobalRootCA, sizeof(_GTECyberTrustGlobalRootCA) }, // rdar://25916338
+		{ CFSTR("com.clo3d.MD5"), _ThawtePremiumServerCA, sizeof(_ThawtePremiumServerCA) }, // rdar://26281864
+	};
+
+	unsigned int i, certmaplen = sizeof(certmap) / sizeof(certmap_entry_t);
+	for (i=0; i<certmaplen; i++) {
+		if (CFStringCompare(bundleIdentifier, certmap[i].bundleId, 0) == kCFCompareEqualTo) {
+			SecCertificateRef cert = SecCertificateCreateWithBytes(NULL, certmap[i].data, certmap[i].length);
+			if (!cert) { continue; }
+			CFArrayAppendValue(certArray, cert);
+			CFRelease(cert);
+			cert = NULL;
 		}
 	}
 #else
@@ -587,7 +551,7 @@ OSStatus SecTrustSettingsEvaluateCert(
 	for(unsigned domain=kSecTrustSettingsDomainUser;
 			     domain<=kSecTrustSettingsDomainSystem;
 				 domain++) {
-		TrustSettings *ts = tsGetGlobalTrustSettings(domain);
+		TrustSettings *ts = tsGetGlobalTrustSettings((SecTrustSettingsDomain)domain);
 		if(ts == NULL) {
 			continue;
 		}
@@ -604,7 +568,7 @@ OSStatus SecTrustSettingsEvaluateCert(
 			 * is an Unspecified entry and we find a definitive entry
 			 * later
 			 */
-			*foundDomain = domain;
+			*foundDomain = (SecTrustSettingsDomain)domain;
 		}
 		if(found && (*resultType != kSecTrustSettingsResultUnspecified)) {
 			trustSettingsDbg("SecTrustSettingsEvaluateCert: found in domain %d", domain);
@@ -670,10 +634,12 @@ OSStatus SecTrustSettingsCopyUnrestrictedRoots(
 {
 	BEGIN_RCSAPI
 
-	return tsCopyCertsCommon(NULL, NULL, NULL,	/* no constraints */
+	OSStatus status = tsCopyCertsCommon(NULL, NULL, NULL,	/* no constraints */
 		true,				/* onlyRoots */
 		user, admin, system,
 		certArray);
+
+    return status;
 
 	END_RCSAPI
 }
@@ -697,6 +663,7 @@ CFStringRef SecTrustSettingsCertHashStrFromCert(
 	if(certRef == kSecTrustSettingsDefaultRootCertSetting) {
 		/* use this string instead of the cert hash as the dictionary key */
 		trustSettingsDbg("SecTrustSettingsCertHashStrFromCert: DefaultSetting");
+        secerror("Caller passed kSecTrustSettingsDefaultRootCertSetting. This constant is deprecated and no longer affects the behavior of the system.");
 		return kSecTrustRecordDefaultRootCert;
 	}
 
@@ -753,7 +720,7 @@ OSStatus SecTrustSettingsSetTrustSettingsExternal(
 	OSStatus result;
 	TrustSettings* ts;
 
-	result = TrustSettings::CreateTrustSettings(kSecTrustSettingsDomainMemory, settingsIn, ts);
+	result = TrustSettings::CreateTrustSettings((SecTrustSettingsDomain)kSecTrustSettingsDomainMemory, settingsIn, ts);
 	if (result != errSecSuccess) {
 		return result;
 	}
@@ -888,12 +855,10 @@ OSStatus SecTrustSettingsCopyCertificates(
 	CFMutableArrayRef outArray = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
 
 	/*
-	 * Keychains to search: user's search list, System.keychain, system root store,
-	 * system intermediates, as appropriate
+	 * Keychains to search: user's search list, System.keychain, system root store
 	 */
 	StorageManager::KeychainList keychains;
 	Keychain adminKc;
-	Keychain sysCertKc;
 	Keychain sysRootKc;
 	switch(domain) {
 		case kSecTrustSettingsDomainUser:
@@ -904,9 +869,6 @@ OSStatus SecTrustSettingsCopyCertificates(
 			/* admin certs in system keychain */
 			adminKc = globals().storageManager.make(ADMIN_CERT_STORE_PATH, false);
 			keychains.push_back(adminKc);
-			/* system-wide intermediate certs */
-			sysCertKc = globals().storageManager.make(SYSTEM_CERT_STORE_PATH, false);
-			keychains.push_back(sysCertKc);
 			/* drop thru to next case */
 		case kSecTrustSettingsDomainSystem:
 			/* and, for all cases, immutable system root store */
@@ -921,9 +883,82 @@ OSStatus SecTrustSettingsCopyCertificates(
 		CFRelease(outArray);
 		return errSecNoTrustSettings;
 	}
-	tsAddConditionalCerts(outArray);
+	if (kSecTrustSettingsDomainSystem == domain) {
+		tsAddConditionalCerts(outArray);
+	}
 	*certArray = outArray;
 	END_RCSAPI
+}
+
+static CFArrayRef gUserAdminCerts = NULL;
+static bool gUserAdminCertsCacheBuilt = false;
+static ReadWriteLock gUserAdminCertsLock;
+
+void SecTrustSettingsPurgeUserAdminCertsCache(void) {
+    StReadWriteLock _(gUserAdminCertsLock, StReadWriteLock::Write);
+    CFReleaseNull(gUserAdminCerts);
+    gUserAdminCertsCacheBuilt = false;
+}
+
+OSStatus SecTrustSettingsCopyCertificatesForUserAdminDomains(
+                                                             CFArrayRef  *certArray)
+{
+    TS_REQUIRED(certArray);
+    OSStatus result = errSecSuccess;
+
+    { /* Hold the read lock for the check */
+        StReadWriteLock _(gUserAdminCertsLock, StReadWriteLock::Read);
+        if (gUserAdminCertsCacheBuilt) {
+            if (gUserAdminCerts) {
+                *certArray = (CFArrayRef)CFRetain(gUserAdminCerts);
+                return errSecSuccess;
+            } else {
+                return errSecNoTrustSettings;
+            }
+        }
+    }
+
+    /* There were no cached results. We'll have to recreate them. */
+    CFMutableArrayRef outArray = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
+    if (!outArray) {
+        return errSecAllocate;
+    }
+
+    CFArrayRef userTrusted = NULL, adminTrusted = NULL;
+    OSStatus userStatus = SecTrustSettingsCopyCertificates(kSecTrustSettingsDomainUser, &userTrusted);
+    if ((userStatus == errSecSuccess) && (userTrusted != NULL)) {
+        CFArrayAppendArray(outArray, userTrusted, CFRangeMake(0, CFArrayGetCount(userTrusted)));
+        CFRelease(userTrusted);
+    }
+
+    OSStatus adminStatus = SecTrustSettingsCopyCertificates(kSecTrustSettingsDomainAdmin, &adminTrusted);
+    if ((adminStatus == errSecSuccess) && (adminTrusted != NULL)) {
+        CFArrayAppendArray(outArray, adminTrusted, CFRangeMake(0, CFArrayGetCount(adminTrusted)));
+        CFRelease(adminTrusted);
+    }
+
+    /* Lack of trust settings for a domain results in an error above. Only fail
+     * if we weren't able to get trust settings for both domains. */
+    if (userStatus != errSecSuccess && adminStatus != errSecSuccess) {
+        result = userStatus;
+    }
+
+    if (result != errSecSuccess && outArray) {
+        CFRelease(outArray);
+        outArray = NULL;
+    }
+
+    *certArray = outArray;
+
+    /* For valid results, update the global cache */
+    if (result == errSecSuccess || result == errSecNoTrustSettings) {
+        StReadWriteLock _(gUserAdminCertsLock, StReadWriteLock::Write);
+        CFReleaseNull(gUserAdminCerts);
+        gUserAdminCerts = (CFArrayRef)CFRetainSafe(outArray);
+        gUserAdminCertsCacheBuilt = true;
+    }
+
+    return result;
 }
 
 /*

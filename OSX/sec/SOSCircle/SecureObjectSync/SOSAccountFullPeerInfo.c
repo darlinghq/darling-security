@@ -17,7 +17,7 @@
  * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
  * Please see the License for the specific language governing rights and
  * limitations under the License.
- * 
+ *
  * @APPLE_LICENSE_HEADER_END@
  */
 
@@ -26,9 +26,9 @@
 #include "SOSAccountPriv.h"
 #include "SOSInternal.h"
 #include "SOSViews.h"
+#include "SOSPeerInfoV2.h"
 
 static CFStringRef kicloud_identity_name = CFSTR("Cloud Identity");
-
 
 SecKeyRef SOSAccountCopyDeviceKey(SOSAccountRef account, CFErrorRef *error) {
     SecKeyRef privateKey = NULL;
@@ -99,16 +99,30 @@ bool SOSAccountEnsureFullPeerAvailable(SOSAccountRef account, CFErrorRef * error
         CFReleaseNull(keyName);
 
         if (full_key) {
-            CFSetRef defaultViews = SOSViewsCreateDefault(false, NULL);
+            CFSetRef initialViews = SOSViewCopyViewSet(kViewSetInitial);
 
             CFReleaseNull(account->my_identity);
-            account->my_identity = SOSFullPeerInfoCreateWithViews(kCFAllocatorDefault, account->gestalt, account->backup_key, defaultViews,
+            account->my_identity = SOSFullPeerInfoCreateWithViews(kCFAllocatorDefault, account->gestalt, account->backup_key, initialViews,
                                                                   full_key, error);
-            CFReleaseNull(defaultViews);
+            CFDictionaryRef v2dictionaryTestUpdates = SOSAccountGetValue(account, kSOSTestV2Settings, NULL);
+            if(v2dictionaryTestUpdates) SOSFullPeerInfoUpdateV2Dictionary(account->my_identity, v2dictionaryTestUpdates, NULL);
+            CFReleaseNull(initialViews);
             CFReleaseNull(full_key);
+
+            CFSetRef pendingDefaultViews = SOSViewCopyViewSet(kViewSetDefault);
+            SOSAccountPendEnableViewSet(account, pendingDefaultViews);
+            CFReleaseNull(pendingDefaultViews);
+
+            SOSAccountSetValue(account, kSOSUnsyncedViewsKey, kCFBooleanTrue, NULL);
 
             if (!account->my_identity) {
                 secerror("Can't make FullPeerInfo for %@-%@ (%@) - is AKS ok?", SOSPeerGestaltGetName(account->gestalt), SOSCircleGetName(account->trusted_circle), error ? (void*)*error : (void*)CFSTR("-"));
+            }
+            else{
+                secnotice("fpi", "alert KeychainSyncingOverIDSProxy the fpi is available");
+                notify_post(kSecServerPeerInfoAvailable);
+                if(account->deviceID)
+                    SOSFullPeerInfoUpdateDeviceID(account->my_identity, account->deviceID, error);
             }
         }
         else {
@@ -151,6 +165,9 @@ SOSPeerInfoRef SOSAccountGetMyPeerInfo(SOSAccountRef account) {
     return SOSFullPeerInfoGetPeerInfo(SOSAccountGetMyFullPeerInfo(account));
 }
 
+CFStringRef SOSAccountGetMyPeerID(SOSAccountRef a) {
+    return SOSPeerInfoGetPeerID(SOSAccountGetMyPeerInfo(a));
+}
 
 SOSFullPeerInfoRef SOSAccountGetMyFullPeerInfo(SOSAccountRef account) {
     return account->trusted_circle ? account->my_identity : NULL;

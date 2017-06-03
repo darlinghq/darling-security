@@ -146,7 +146,7 @@ OSStatus MakeServerConnection(
 	PeerSpec *peer)			// RETURNED
 {
     struct sockaddr_in  addr;
-	struct hostent      *ent;
+	struct hostent      *ent = NULL;
     struct in_addr      host;
 	int					sock = 0;
 	
@@ -179,7 +179,8 @@ OSStatus MakeServerConnection(
 
     addr.sin_family = AF_INET;
     if (connect(sock, (struct sockaddr *) &addr, sizeof(struct sockaddr_in)) != 0)
-    {   printf("connect returned error\n");
+    {
+        perror("connect returned error");
         return errSecIO;
     }
 
@@ -270,8 +271,6 @@ OSStatus ListenForClients(
 		}
 		return rtn;
     }
-	/* NOT REACHED */
-	return 0;
 }
 
 /*

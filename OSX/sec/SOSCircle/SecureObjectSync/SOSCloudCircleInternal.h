@@ -55,23 +55,30 @@ CFArrayRef SOSCCCopyConcurringPeerPeerInfo(CFErrorRef* error);
 bool SOSCCPurgeUserCredentials(CFErrorRef* error);
 
 CFStringRef SOSCCGetStatusDescription(SOSCCStatus status);
-SecKeyRef SOSCCGetUserPrivKey(CFErrorRef *error);
-SecKeyRef SOSCCGetUserPubKey(CFErrorRef *error);
+bool SOSCCAccountHasPublicKey(CFErrorRef *error);
+bool SOSCCAccountIsNew(CFErrorRef *error);
 
 /*!
  @function SOSCCHandleIDSMessage
- @abstract Handles an IDS message from IDSKeychainSyncingProxy
+ @abstract Handles an IDS message from KeychainSyncingOverIDSProxy
  @param IDS The incoming IDS message
  @param error What went wrong if we returned false
  */
 HandleIDSMessageReason SOSCCHandleIDSMessage(CFDictionaryRef IDS, CFErrorRef* error);
 
 /*!
+ @function SOSCCProcessSyncWithPeers
+ @abstract Returns the peers for whom we handled syncing from the list send to us.
+ @param peers Set of peerIDs to sync with
+ @param backupPeers Set of backup peerIDs to sync with
+ */
+CFSetRef /* CFString */ SOSCCProcessSyncWithPeers(CFSetRef peers, CFSetRef backupPeers, CFErrorRef* error);
+
+/*!
  @function SOSCCProcessSyncWithAllPeers
  @abstract Returns the information (string, hopefully URL) that will lead to an explanation of why you have an incompatible circle.
  @param error What went wrong if we returned NULL.
  */
-
 SyncWithAllPeersReason SOSCCProcessSyncWithAllPeers(CFErrorRef* error);
 
 bool SOSCCProcessEnsurePeerRegistration(CFErrorRef* error);
@@ -111,10 +118,38 @@ bool SOSCCIDSPingTest(CFStringRef message, CFErrorRef *error);
 
 /*!
  @function SOSCCIDSDeviceIDIsAvailableTest
- @abstract Attempts to communicate with IDSKeychainSyncingProxy to retrieve the device ID using IDS framework
+ @abstract Attempts to communicate with KeychainSyncingOverIDSProxy to retrieve the device ID using IDS framework
  @param error What went wrong if we returned false
  */
 bool SOSCCIDSDeviceIDIsAvailableTest(CFErrorRef *error);
+
+/*!
+ @function SOSWrapToBackupSliceKeyBagForView
+ @abstract Encrypts the given plaintext, and wraps the encryption key to the backup slice keybag for this view
+ @param viewName The view to wrap to
+ @param input The plaintext to encrypt
+ @param output The ciphertext
+ @param bskbEncoded The encoded backup slice keybag used to wrap the data
+ @param error What went wrong if we returned false
+ */
+bool SOSWrapToBackupSliceKeyBagForView(CFStringRef viewName, CFDataRef input, CFDataRef* output, CFDataRef* bskbEncoded, CFErrorRef* error);
+
+//
+// Security Tool calls
+//
+CFDataRef SOSCCCopyAccountState(CFErrorRef* error);
+bool SOSCCDeleteAccountState(CFErrorRef *error);
+CFDataRef SOSCCCopyEngineData(CFErrorRef* error);
+bool SOSCCDeleteEngineState(CFErrorRef *error);
+bool SOSCCRequestSyncWithPeerOverKVS( CFStringRef peerID, CFDataRef message, CFErrorRef *error);
+bool SOSCCClearPeerMessageKeyInKVS(CFStringRef peerID, CFErrorRef *error);
+CFDataRef SOSCCCopyRecoveryPublicKey(CFErrorRef *error);
+CFDictionaryRef SOSCCCopyBackupInformation(CFErrorRef *error);
+bool SOSCCRequestSyncWithPeerOverKVSUsingIDOnly(CFStringRef peerID, CFErrorRef *error);
+
+char *SOSCCSysdiagnose(const char *directoryname);
+
+void SOSCCForEachEngineStateAsStringFromArray(CFArrayRef states, void (^block)(CFStringRef oneStateString));
 
 __END_DECLS
 

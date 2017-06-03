@@ -47,6 +47,8 @@ SOSFullPeerInfoRef SOSFullPeerInfoCreateWithViews(CFAllocatorRef allocator,
                                                   CFDictionaryRef gestalt, CFDataRef backupKey, CFSetRef enabledViews,
                                                   SecKeyRef signingKey, CFErrorRef *error);
 
+SOSFullPeerInfoRef SOSFullPeerInfoCopyFullPeerInfo(SOSFullPeerInfoRef toCopy);
+
 SOSFullPeerInfoRef SOSFullPeerInfoCreateCloudIdentity(CFAllocatorRef allocator, SOSPeerInfoRef peer, CFErrorRef* error);
 
 SOSPeerInfoRef SOSFullPeerInfoGetPeerInfo(SOSFullPeerInfoRef fullPeer);
@@ -63,6 +65,8 @@ bool SOSFullPeerInfoValidate(SOSFullPeerInfoRef peer, CFErrorRef* error);
 bool SOSFullPeerInfoPrivKeyExists(SOSFullPeerInfoRef peer);
 
 bool SOSFullPeerInfoUpdateGestalt(SOSFullPeerInfoRef peer, CFDictionaryRef gestalt, CFErrorRef* error);
+
+bool SOSFullPeerInfoUpdateV2Dictionary(SOSFullPeerInfoRef peer, CFDictionaryRef newv2dict, CFErrorRef* error);
 
 bool SOSFullPeerInfoUpdateBackupKey(SOSFullPeerInfoRef peer, CFDataRef backupKey, CFErrorRef* error);
 
@@ -97,6 +101,9 @@ CFDataRef SOSFullPeerInfoCopyEncodedData(SOSFullPeerInfoRef peer, CFAllocatorRef
 bool SOSFullPeerInfoUpdateTransportType(SOSFullPeerInfoRef peer, CFStringRef transportType, CFErrorRef* error);
 bool SOSFullPeerInfoUpdateDeviceID(SOSFullPeerInfoRef peer, CFStringRef deviceID, CFErrorRef* error);
 bool SOSFullPeerInfoUpdateTransportPreference(SOSFullPeerInfoRef peer, CFBooleanRef preference, CFErrorRef* error);
+bool SOSFullPeerInfoUpdateTransportFragmentationPreference(SOSFullPeerInfoRef peer, CFBooleanRef preference, CFErrorRef* error);
+bool SOSFullPeerInfoUpdateTransportAckModelPreference(SOSFullPeerInfoRef peer, CFBooleanRef preference, CFErrorRef* error);
+
 SOSSecurityPropertyResultCode SOSFullPeerInfoUpdateSecurityProperty(SOSFullPeerInfoRef peer, SOSViewActionCode action, CFStringRef property, CFErrorRef* error);
 SOSSecurityPropertyResultCode SOSFullPeerInfoSecurityPropertyStatus(SOSFullPeerInfoRef peer, CFStringRef property, CFErrorRef *error);
 

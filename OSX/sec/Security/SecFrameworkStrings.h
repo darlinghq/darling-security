@@ -70,6 +70,7 @@ __BEGIN_DECLS
 #define SEC_USAGE_KEY               SecStringWithDefaultValue("Usage", "Certificate", 0, "Usage", "Label for KeyUsage bitfield values")
 #define SEC_NOT_VALID_BEFORE_KEY	SecStringWithDefaultValue("Not Valid Before", "Certificate", 0, "Not Valid Before", "label indicating the soonest date at which something is valid")
 #define SEC_NOT_VALID_AFTER_KEY		SecStringWithDefaultValue("Not Valid After", "Certificate", 0, "Not Valid After", "label indicating the date after which something is no longer valid")
+#define SEC_VALIDITY_PERIOD_KEY     SecStringWithDefaultValue("Validity Period", "Certificate", 0, "Validity Period", "")
 #define SEC_PRIVATE_KU_PERIOD_KEY   SecStringWithDefaultValue("Private Key Usage Period", "Certificate", 0, "Private Key Usage Period", "Label for an invlaid private key se perion value")
 #define SEC_OTHER_NAME_KEY			SecStringWithDefaultValue("Other Name", "Certificate", 0, "Other Name", "Label used for Other Name RDN when value is invalid")
 #define SEC_EMAIL_ADDRESS_KEY		SecStringWithDefaultValue("Email Address", "Certificate", 0, "Email Address", "label for general name field value")
@@ -170,17 +171,24 @@ __BEGIN_DECLS
 #define SEC_SUBJECT_NAME_KEY		SecStringWithDefaultValue("Subject Name", "Certificate", 0, "Subject Name", "")
 #define SEC_ISSUER_NAME_KEY			SecStringWithDefaultValue("Issuer Name", "Certificate", 0, "Issuer Name", "")
 
-//#define SEC_X509_VERSION_KEY		SecStringWithDefaultValue("X.509 version %d %scertificate", "Certificate", 0, "X.509 version %d %scertificate", "")
-//#define SEC_CERTIFICATE_TYPE_KEY	SecStringWithDefaultValue("Certificate Type", "Certificate", 0, "Certificate Type", "")
 #define SEC_CERT_VERSION_VALUE_KEY  SecStringWithDefaultValue("%d", "Certificate", 0, "%d", "format string to turn version number into a string")
 #define SEC_VERSION_KEY             SecStringWithDefaultValue("Version", "Certificate", 0, "Version", "")
 #define SEC_SERIAL_NUMBER_KEY		SecStringWithDefaultValue("Serial Number", "Certificate", 0, "Serial Number", "")
-#define SEC_SIGNATURE_ALGORITHM_KEY SecStringWithDefaultValue("Signature Algorithm", "Certificate", 0, "Signature Algorithm", "")
 #define SEC_SUBJECT_UNIQUE_ID_KEY	SecStringWithDefaultValue("Subject Unique ID", "Certificate", 0, "Subject Unique ID", "")
 #define SEC_ISSUER_UNIQUE_ID_KEY	SecStringWithDefaultValue("Issuer Unique ID", "Certificate", 0, "Issuer Unique ID", "")
+
+#define SEC_PUBLIC_KEY_KEY          SecStringWithDefaultValue("Public Key Info", "Certificate", 0, "Public Key Info", "")
 #define SEC_PUBLIC_KEY_ALG_KEY		SecStringWithDefaultValue("Public Key Algorithm", "Certificate", 0, "Public Key Algorithm", "")
-#define SEC_PULIC_KEY_DATA_KEY		SecStringWithDefaultValue("Public Key Data", "Certificate", 0, "Public Key Data", "")
+#define SEC_PUBLIC_KEY_DATA_KEY		SecStringWithDefaultValue("Public Key Data", "Certificate", 0, "Public Key Data", "")
+#define SEC_PUBLIC_KEY_SIZE_KEY     SecStringWithDefaultValue("Public Key Size", "Certificate", 0, "Public Key Size", "")
+
 #define SEC_SIGNATURE_KEY			SecStringWithDefaultValue("Signature", "Certificate", 0, "Signature", "")
+#define SEC_SIGNATURE_ALGORITHM_KEY SecStringWithDefaultValue("Signature Algorithm", "Certificate", 0, "Signature Algorithm", "")
+#define SEC_SIGNATURE_DATA_KEY      SecStringWithDefaultValue("Signature Data", "Certificate", 0, "Signature Data", "")
+
+#define SEC_FINGERPRINTS_KEY         SecStringWithDefaultValue("Fingerprints", "Certificate", 0, "Fingerprints", "")
+#define SEC_SHA1_FINGERPRINT_KEY    SecStringWithDefaultValue("SHA-1", "Certificate", 0, "SHA-1", "")
+#define SEC_SHA2_FINGERPRINT_KEY    SecStringWithDefaultValue("SHA-256", "Certificate", 0, "SHA-256", "")
 
 /* SecTrust Strings. */
 #define SEC_INVALID_LINKAGE_KEY     SecStringWithDefaultValue("Invalid certificate chain linkage.", "Certificate", 0, "Invalid certificate chain linkage.", "")
@@ -189,11 +197,12 @@ __BEGIN_DECLS
 #define SEC_HOSTNAME_MISMATCH_KEY   SecStringWithDefaultValue("Hostname mismatch.", "Certificate", 0, "Hostname mismatch.", "")
 #define SEC_POLICY__REQ_NOT_MET_KEY SecStringWithDefaultValue("Policy requirements not met.", "Certificate", 0, "Policy requirements not met.", "")
 #define SEC_CHAIN_VALIDITY_ERR_KEY  SecStringWithDefaultValue("One or more certificates have expired or are not valid yet.", "Certificate", 0, "One or more certificates have expired or are not valid yet.", "")
+#define SEC_WEAK_KEY_ERR_KEY        SecStringWithDefaultValue("One or more certificates is using a weak key size.", "Certificate", 0, "One or more certificates is using a weak key size.", "")
 
 #define SEC_CK_PASSWORD_INCORRECT   SecStringWithDefaultValue("Incorrect Password For “%@”", "CloudKeychain", 0, "Incorrect Password For “%@”", "Title for alert when password has been entered incorrectly")
 #define SEC_CK_TRY_AGAIN            SecStringWithDefaultValue("Try Again", "CloudKeychain", 0, "Try Again", "Button for try again after incorrect password")
 #define SEC_CK_ALLOW                SecStringWithDefaultValue("Allow", "CloudKeychain", 0, "Allow", "Allow button")
-#define SEC_CK_DONT_ALLOW           SecStringWithDefaultValue("Don't Allow", "CloudKeychain", 0, "Don't Allow", "Don't Allow button")
+#define SEC_CK_DONT_ALLOW           SecStringWithDefaultValue("Don’t Allow", "CloudKeychain", 0, "Don’t Allow", "Don’t Allow button")
 #define SEC_CK_ICLOUD_PASSWORD      SecStringWithDefaultValue("Password", "CloudKeychain", 0, "password", "Password prompt text")
 
 #define SEC_CK_TID_FUTURE           SecStringWithDefaultValue("the future", "CloudKeychain", 0, "the future", "the future")
@@ -210,11 +219,11 @@ __BEGIN_DECLS
 #define SEC_CK_PWD_REQUIRED_BODY_IOS	SecStringWithDefaultValue("Enter your password in iCloud Settings.", "CloudKeychain", 0, "Enter your password in iCloud Settings.", "iOS alert text when iCloud keychain was disabled or reset")
 #define SEC_CK_CR_REASON_INTERNAL		SecStringWithDefaultValue(" (AppleInternal: departure reason %s)", "CloudKeychain", 0, " (AppleInternal: departure reason %s)", "Display departure reason code on internal devices")
 #define SEC_CK_CONTINUE					SecStringWithDefaultValue("Continue", "CloudKeychain", 0, "Continue", "Button text to continue to iCloud settings (iOS)")
-#define SEC_CK_NOT_NOW					SecStringWithDefaultValue("Not now", "CloudKeychain", 0, "Not now", "Button text to dismiss alert")
+#define SEC_CK_NOT_NOW					SecStringWithDefaultValue("Not Now", "CloudKeychain", 0, "Not Now", "Button text to dismiss alert")
 
 #define SEC_CK_APPROVAL_TITLE_OSX		SecStringWithDefaultValue("Apple ID Sign In Alert", "CloudKeychain", 0, "Apple ID Sign In Alert", "Title for alert when approving another device")
 #define SEC_CK_APPROVAL_BODY_OSX		SecStringWithDefaultValue("“%@” wants to use your iCloud account.", "CloudKeychain", 0, "“%@” wants to use your iCloud account.", "Body text when approving another device")
-#define SEC_CK_APPROVAL_TITLE_IOS		SecStringWithDefaultValue("Allow “%@” to Use iCloud?", "CloudKeychain", 0, "Allow “%@” to Use iCloud?", "Title for alert when approving another device")
+#define SEC_CK_APPROVAL_TITLE_IOS		SecStringWithDefaultValue("Allow “%@” to use iCloud?", "CloudKeychain", 0, "Allow “%@” to use iCloud?", "Title for alert when approving another device")
 #define SEC_CK_APPROVAL_BODY_IOS_IPAD	SecStringWithDefaultValue("Enter the password for “%@” to allow this new iPad to use your iCloud account.", "CloudKeychain", 0, "Enter the password for “%@” to allow this new iPad to use your iCloud account.", "Body text when approving an iPad")
 #define SEC_CK_APPROVAL_BODY_IOS_IPHONE	SecStringWithDefaultValue("Enter the password for “%@” to allow this new iPhone to use your iCloud account.", "CloudKeychain", 0, "Enter the password for “%@” to allow this new iPhone to use your iCloud account.", "Body text when approving an iPhone")
 #define SEC_CK_APPROVAL_BODY_IOS_IPOD	SecStringWithDefaultValue("Enter the password for “%@” to allow this new iPod to use your iCloud account.", "CloudKeychain", 0, "Enter the password for “%@” to allow this new iPod to use your iCloud account.", "Body text when approving an iPod")

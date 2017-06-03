@@ -191,8 +191,7 @@ SecSMIMEEnableCipher(uint32 which, Boolean on)
 	return SECFailure;
     }
 
-    if (smime_cipher_map[mapi].enabled != on)
-	smime_cipher_map[mapi].enabled = on;
+    smime_cipher_map[mapi].enabled = on;
 
     return SECSuccess;
 }
@@ -219,8 +218,7 @@ SecSMIMEAllowCipher(uint32 which, Boolean on)
 	/* XXX set an error */
 	return SECFailure;
 
-    if (smime_cipher_map[mapi].allowed != on)
-	smime_cipher_map[mapi].allowed = on;
+    smime_cipher_map[mapi].allowed = on;
 
     return SECSuccess;
 }
@@ -366,6 +364,8 @@ nss_SMIME_FindCipherForSMIMECap(NSSSMIMECapability *cap)
 	return smime_cipher_map[i].cipher;	/* match found, point to cipher */
 }
 
+static int smime_keysize_by_cipher (unsigned long which);
+
 /*
  * smime_choose_cipher - choose a cipher that works for all the recipients
  *
@@ -509,6 +509,10 @@ done:
     if (poolp != NULL)
 	PORT_FreeArena (poolp, PR_FALSE);
 
+    if (smime_keysize_by_cipher(chosen_cipher) < 128) {
+        /* you're going to use strong(er) crypto whether you like it or not */
+        chosen_cipher = SMIME_DES_EDE3_168;
+    }
     return chosen_cipher;
 }
 
@@ -568,6 +572,9 @@ SecSMIMEFindBulkAlgForRecipients(SecCertificateRef *rcerts, SECOidTag *bulkalgta
 
     cipher = smime_choose_cipher(NULL, rcerts);
     mapi = smime_mapi_by_cipher(cipher);
+    if (mapi < 0) {
+        return SECFailure;
+    }
 
     *bulkalgtag = smime_cipher_map[mapi].algtag;
     *keysize = smime_keysize_by_cipher(smime_cipher_map[mapi].cipher);

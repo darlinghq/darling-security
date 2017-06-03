@@ -27,12 +27,12 @@
 #include "xpcengine.h"
 #include "csutilities.h"
 #include <CoreFoundation/CFRuntime.h>
+#include <CoreFoundation/CFBundlePriv.h>
 #include <security_utilities/globalizer.h>
 #include <security_utilities/unix++.h>
 #include <security_utilities/cfmunge.h>
 #include <notify.h>
-#include <netinet6/esp.h>
-#include "quarantine.h"
+#include <esp.h>
 
 using namespace CodeSigning;
 
@@ -127,10 +127,14 @@ ModuleNexus<PolicyEngine> gEngine;
 //
 // Policy evaluation ("assessment") operations
 //
+CFStringRef kSecAssessmentContextKeyUTI = CFSTR("context:uti");
+
 CFStringRef kSecAssessmentContextKeyFeedback = CFSTR("context:feedback");
 CFStringRef kSecAssessmentFeedbackProgress = CFSTR("feedback:progress");
 CFStringRef kSecAssessmentFeedbackInfoCurrent = CFSTR("current");
 CFStringRef kSecAssessmentFeedbackInfoTotal = CFSTR("total");
+
+CFStringRef kSecAssessmentContextKeyPrimarySignature = CFSTR("context:primary-signature");
 
 CFStringRef kSecAssessmentAssessmentVerdict = CFSTR("assessment:verdict");
 CFStringRef kSecAssessmentAssessmentOriginator = CFSTR("assessment:originator");
@@ -139,6 +143,7 @@ CFStringRef kSecAssessmentAssessmentSource = CFSTR("assessment:authority:source"
 CFStringRef kSecAssessmentAssessmentAuthorityRow = CFSTR("assessment:authority:row");
 CFStringRef kSecAssessmentAssessmentAuthorityOverride = CFSTR("assessment:authority:override");
 CFStringRef kSecAssessmentAssessmentAuthorityOriginalVerdict = CFSTR("assessment:authority:verdict");
+CFStringRef kSecAssessmentAssessmentAuthorityFlags = CFSTR("assessment:authority:flags");
 CFStringRef kSecAssessmentAssessmentFromCache = CFSTR("assessment:authority:cached");
 CFStringRef kSecAssessmentAssessmentWeakSignature = CFSTR("assessment:authority:weak");
 CFStringRef kSecAssessmentAssessmentCodeSigningError = CFSTR("assessment:cserror");
@@ -237,7 +242,7 @@ static void traceResult(CFURLRef target, MessageTrace &trace, std::string &sanit
 
 	string identifier = "UNBUNDLED";
 	string version = "UNKNOWN";
-	if (CFRef<CFBundleRef> bundle = CFBundleCreate(NULL, target)) {
+	if (CFRef<CFBundleRef> bundle = _CFBundleCreateUnique(NULL, target)) {
 		if (CFStringRef ident = CFBundleGetIdentifier(bundle))
 			identifier = cfString(ident);
 		if (CFStringRef vers = CFStringRef(CFBundleGetValueForInfoDictionaryKey(bundle, CFSTR("CFBundleShortVersionString"))))
@@ -463,7 +468,7 @@ CFDictionaryRef SecAssessmentCopyUpdate(CFTypeRef target,
 	traceUpdate(target, context, result);
 	return result.yield();
 
-	END_CSAPI_ERRORS1(false)
+	END_CSAPI_ERRORS1(NULL)
 }
 
 
@@ -496,20 +501,21 @@ Boolean SecAssessmentControl(CFStringRef control, void *arguments, CFErrorRef *e
 			result = kCFBooleanTrue;
 		return true;
 	} else if (CFEqual(control, CFSTR("ui-enable-devid"))) {
-		CFTemp<CFDictionaryRef> ctx("{%O=%s}", kSecAssessmentUpdateKeyLabel, "Developer ID");
-		if (CFDictionaryRef result = gEngine().enable(NULL, kAuthorityInvalid, kSecCSDefaultFlags, ctx, false))
-			CFRelease(result);
+		CFTemp<CFDictionaryRef> ctx("{%O=%s, %O=%O}", kSecAssessmentUpdateKeyLabel, "Developer ID", kSecAssessmentContextKeyUpdate, kSecAssessmentUpdateOperationEnable);
+        SecAssessmentUpdate(NULL, kSecCSDefaultFlags, ctx, errors);
 		MessageTrace trace("com.apple.security.assessment.state", "enable-devid");
 		trace.send("enable Developer ID approval");
 		return true;
 	} else if (CFEqual(control, CFSTR("ui-disable-devid"))) {
-		CFTemp<CFDictionaryRef> ctx("{%O=%s}", kSecAssessmentUpdateKeyLabel, "Developer ID");
-		if (CFDictionaryRef result = gEngine().disable(NULL, kAuthorityInvalid, kSecCSDefaultFlags, ctx, false))
-			CFRelease(result);
+        CFTemp<CFDictionaryRef> ctx("{%O=%s, %O=%O}", kSecAssessmentUpdateKeyLabel, "Developer ID", kSecAssessmentContextKeyUpdate, kSecAssessmentUpdateOperationDisable);
+        SecAssessmentUpdate(NULL, kSecCSDefaultFlags, ctx, errors);
 		MessageTrace trace("com.apple.security.assessment.state", "disable-devid");
 		trace.send("disable Developer ID approval");
 		return true;
-	} else if (CFEqual(control, CFSTR("ui-get-devid"))) {
+    } else if (CFEqual(control, CFSTR("ui-get-devid"))) {
+        xpcEngineCheckDevID((CFBooleanRef*)(arguments));
+        return true;
+    } else if (CFEqual(control, CFSTR("ui-get-devid-local"))) {
 		CFBooleanRef &result = *(CFBooleanRef*)(arguments);
 		if (gEngine().value<int>("SELECT disabled FROM authority WHERE label = 'Developer ID';", true))
 			result = kCFBooleanFalse;

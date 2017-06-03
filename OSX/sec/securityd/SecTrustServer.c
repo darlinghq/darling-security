@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2010,2012-2015 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2006-2010,2012-2016 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -27,19 +27,22 @@
 
 #include <securityd/SecTrustServer.h>
 #include <securityd/SecPolicyServer.h>
-#include <securityd/SecTrustStoreServer.h>
-#include <securityd/SecCAIssuerRequest.h>
-#include <securityd/SecItemServer.h>
+#include <securityd/SecTrustLoggingServer.h>
+#include <securityd/SecCertificateSource.h>
 
 #include <utilities/SecIOFormat.h>
 #include <utilities/SecDispatchRelease.h>
+#include <utilities/SecAppleAnchorPriv.h>
 
 #include <Security/SecTrustPriv.h>
 #include <Security/SecItem.h>
 #include <Security/SecCertificateInternal.h>
 #include <Security/SecCertificatePath.h>
 #include <Security/SecFramework.h>
+#include <Security/SecPolicyPriv.h>
 #include <Security/SecPolicyInternal.h>
+#include <Security/SecTrustSettingsPriv.h>
+#include <Security/SecTask.h>
 #include <CoreFoundation/CFRuntime.h>
 #include <CoreFoundation/CFSet.h>
 #include <CoreFoundation/CFString.h>
@@ -51,6 +54,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <sys/codesign.h>
 #include <Security/SecBase.h>
 #include "SecRSAKey.h"
 #include <libDER/oids.h>
@@ -60,534 +64,18 @@
 #include <ipc/securityd_client.h>
 #include <CommonCrypto/CommonDigest.h>
 #include "OTATrustUtilities.h"
+#include "personalization.h"
+#include <utilities/SecInternalReleasePriv.h>
 
-
-/********************************************************
- ***************** OTA Trust support ********************
- ********************************************************/
-
-
-//#ifndef SECITEM_SHIM_OSX
-
-static CFArrayRef subject_to_anchors(CFDataRef nic);
-static CFArrayRef CopyCertsFromIndices(CFArrayRef offsets);
-
-static CFArrayRef subject_to_anchors(CFDataRef nic)
-{
-    CFArrayRef result = NULL;
-
-    if (NULL == nic)
-    {
-        return result;
-    }
-
-	SecOTAPKIRef otapkiref = SecOTAPKICopyCurrentOTAPKIRef();
-	if (NULL == otapkiref)
-	{
-		return result;
-	}
-
-	CFDictionaryRef lookupTable = SecOTAPKICopyAnchorLookupTable(otapkiref);
-	CFRelease(otapkiref);
-
-	if (NULL == lookupTable)
-	{
-		return result;
-	}
-
-    unsigned char subject_digest[CC_SHA1_DIGEST_LENGTH];
-    memset(subject_digest, 0, CC_SHA1_DIGEST_LENGTH);
-
-    (void)CC_SHA1(CFDataGetBytePtr(nic), (CC_LONG)CFDataGetLength(nic), subject_digest);
-    CFDataRef sha1Digest = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, subject_digest, CC_SHA1_DIGEST_LENGTH, kCFAllocatorNull);
-
-
-    result = (CFArrayRef)CFDictionaryGetValue(lookupTable, sha1Digest);
-	CFReleaseSafe(lookupTable);
-    CFReleaseSafe(sha1Digest);
-
-    return result;
-}
-
-static CFArrayRef CopyCertDataFromIndices(CFArrayRef offsets)
-{
-    CFMutableArrayRef result = NULL;
-
-	SecOTAPKIRef otapkiref = SecOTAPKICopyCurrentOTAPKIRef();
-	if (NULL == otapkiref)
-	{
-		return result;
-	}
-
-	const char* anchorTable = SecOTAPKIGetAnchorTable(otapkiref);
-	if (NULL == anchorTable)
-	{
-		CFReleaseSafe(otapkiref);
-		return result;
-	}
-
-	CFIndex num_offsets = CFArrayGetCount(offsets);
-
-	result = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
-
-	for (CFIndex idx = 0; idx < num_offsets; idx++)
-    {
-		CFNumberRef offset = (CFNumberRef)CFArrayGetValueAtIndex(offsets, idx);
-		uint32_t offset_value = 0;
-		if (CFNumberGetValue(offset, kCFNumberSInt32Type, &offset_value))
-		{
-			char* pDataPtr = (char *)(anchorTable + offset_value);
-			//int32_t record_length = *((int32_t * )pDataPtr);
-			//record_length = record_length;
-			pDataPtr += sizeof(uint32_t);
-
-			int32_t cert_data_length = *((int32_t * )pDataPtr);
-			pDataPtr += sizeof(uint32_t);
-
-			CFDataRef cert_data = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, (const UInt8 *)pDataPtr,
-                                                              cert_data_length, kCFAllocatorNull);
-			if (NULL != cert_data)
-			{
-                CFArrayAppendValue(result, cert_data);
-                CFReleaseSafe(cert_data);
-            }
-		}
-	}
-	CFReleaseSafe(otapkiref);
-	return result;
-}
-
-static CFArrayRef CopyCertsFromIndices(CFArrayRef offsets)
-{
-	CFMutableArrayRef result = NULL;
-
-    CFArrayRef cert_data_array = CopyCertDataFromIndices(offsets);
-
-    if (NULL != cert_data_array)
-    {
-        result = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
-        CFIndex num_cert_datas = CFArrayGetCount(cert_data_array);
-        for (CFIndex idx = 0; idx < num_cert_datas; idx++)
-        {
-            CFDataRef cert_data = (CFDataRef)CFArrayGetValueAtIndex(cert_data_array, idx);
-            if (NULL != cert_data)
-            {
-                SecCertificateRef cert = SecCertificateCreateWithData(kCFAllocatorDefault, cert_data);
-                if (NULL != cert)
-                {
-                    CFArrayAppendValue(result, cert);
-                    CFRelease(cert);
-                }
-            }
-        }
-        CFRelease(cert_data_array);
-    }
-    return result;
-
-}
-//#endif // SECITEM_SHIM_OSX
-
-/********************************************************
- *************** END OTA Trust support ******************
- ********************************************************/
+#if TARGET_OS_OSX
+#include <Security/SecTaskPriv.h>
+#endif
 
 #define MAX_CHAIN_LENGTH  15
+#define ACCEPT_PATH_SCORE 10000000
 
 /* Forward declaration for use in SecCertificateSource. */
 static void SecPathBuilderExtendPaths(void *context, CFArrayRef parents);
-
-
-// MARK: -
-// MARK: SecCertificateSource
-/********************************************************
- ************ SecCertificateSource object ***************
- ********************************************************/
-
-typedef struct SecCertificateSource *SecCertificateSourceRef;
-typedef void(*SecCertificateSourceParents)(void *, CFArrayRef);
-typedef bool(*CopyParents)(SecCertificateSourceRef source,
-	SecCertificateRef certificate, void *context, SecCertificateSourceParents);
-typedef bool(*Contains)(SecCertificateSourceRef source,
-	SecCertificateRef certificate);
-
-struct SecCertificateSource {
-	CopyParents		copyParents;
-	Contains		contains;
-};
-
-static bool SecCertificateSourceCopyParents(SecCertificateSourceRef source,
-    SecCertificateRef certificate,
-    void *context, SecCertificateSourceParents callback) {
-    return source->copyParents(source, certificate, context, callback);
-}
-
-static bool SecCertificateSourceContains(SecCertificateSourceRef source,
-	SecCertificateRef certificate) {
-	return source->contains(source, certificate);
-}
-
-// MARK: -
-// MARK: SecItemCertificateSource
-/********************************************************
- *********** SecItemCertificateSource object ************
- ********************************************************/
-struct SecItemCertificateSource {
-	struct SecCertificateSource base;
-	CFArrayRef accessGroups;
-};
-typedef struct SecItemCertificateSource *SecItemCertificateSourceRef;
-
-static CFTypeRef SecItemCertificateSourceResultsPost(CFTypeRef raw_results) {
-    if (isArray(raw_results)) {
-        CFMutableArrayRef result = CFArrayCreateMutable(kCFAllocatorDefault, CFArrayGetCount(raw_results), &kCFTypeArrayCallBacks);
-        CFArrayForEach(raw_results, ^(const void *value) {
-            SecCertificateRef cert = SecCertificateCreateWithData(kCFAllocatorDefault, value);
-            if (cert) {
-                CFArrayAppendValue(result, cert);
-				CFRelease(cert);
-			}
-        });
-        return result;
-    } else if (isData(raw_results)) {
-        return SecCertificateCreateWithData(kCFAllocatorDefault, (CFDataRef)raw_results);
-    }
-    return NULL;
-}
-
-static bool SecItemCertificateSourceCopyParents(
-	SecCertificateSourceRef source, SecCertificateRef certificate,
-        void *context, SecCertificateSourceParents callback) {
-	SecItemCertificateSourceRef msource = (SecItemCertificateSourceRef)source;
-    /* FIXME: Search for things other than just subject of our issuer if we
-       have a subjectID or authorityKeyIdentifier. */
-    CFDataRef normalizedIssuer =
-        SecCertificateGetNormalizedIssuerContent(certificate);
-    const void *keys[] = {
-        kSecClass,
-        kSecReturnData,
-        kSecMatchLimit,
-        kSecAttrSubject
-    },
-    *values[] = {
-        kSecClassCertificate,
-        kCFBooleanTrue,
-        kSecMatchLimitAll,
-        normalizedIssuer
-    };
-    CFDictionaryRef query = CFDictionaryCreate(NULL, keys, values, 4,
-		NULL, NULL);
-    CFTypeRef results = NULL;
-    /* We can make this async or run this on a queue now easily. */
-    CFErrorRef localError = NULL;
-    if (!_SecItemCopyMatching(query, msource->accessGroups, &results, &localError)) {
-        if (CFErrorGetCode(localError) != errSecItemNotFound) {
-            secdebug("trust", "_SecItemCopyMatching: %@", localError);
-        }
-        CFRelease(localError);
-    }
-    CFRelease(query);
-    CFTypeRef certs = SecItemCertificateSourceResultsPost(results);
-    CFReleaseSafe(results);
-    callback(context, certs);
-    CFReleaseSafe(certs);
-    return true;
-}
-
-static bool SecItemCertificateSourceContains(SecCertificateSourceRef source,
-	SecCertificateRef certificate) {
-	SecItemCertificateSourceRef msource = (SecItemCertificateSourceRef)source;
-    /* Lookup a certificate by issuer and serial number. */
-    CFDataRef normalizedSubject =
-        SecCertificateGetNormalizedSubjectContent(certificate);
-    CFDataRef serialNumber =
-    #if (TARGET_OS_MAC && !(TARGET_OS_EMBEDDED || TARGET_OS_IPHONE))
-        SecCertificateCopySerialNumber(certificate, NULL);
-    #else
-        SecCertificateCopySerialNumber(certificate);
-    #endif
-    const void *keys[] = {
-        kSecClass,
-        kSecMatchLimit,
-        kSecAttrIssuer,
-        kSecAttrSerialNumber
-    },
-    *values[] = {
-        kSecClassCertificate,
-        kSecMatchLimitOne,
-        normalizedSubject,
-        serialNumber
-    };
-    CFDictionaryRef query = CFDictionaryCreate(NULL, keys, values, 5,
-        NULL, NULL);
-    CFErrorRef localError = NULL;
-    CFTypeRef results = NULL;
-    bool ok = _SecItemCopyMatching(query, msource->accessGroups, &results, &localError);
-    CFRelease(query);
-    CFRelease(serialNumber);
-    CFReleaseSafe(results);
-    if (!ok) {
-        if (CFErrorGetCode(localError) != errSecItemNotFound) {
-            secdebug("trust", "_SecItemCopyMatching: %@", localError);
-        }
-        CFRelease(localError);
-        return false;
-    }
-    return true;
-}
-
-static SecCertificateSourceRef SecItemCertificateSourceCreate(CFArrayRef accessGroups) {
-	SecItemCertificateSourceRef result = (SecItemCertificateSourceRef)malloc(sizeof(*result));
-	result->base.copyParents = SecItemCertificateSourceCopyParents;
-	result->base.contains = SecItemCertificateSourceContains;
-	result->accessGroups = accessGroups;
-    CFRetainSafe(accessGroups);
-	return (SecCertificateSourceRef)result;
-}
-
-static void SecItemCertificateSourceDestroy(SecCertificateSourceRef source) {
-	SecItemCertificateSourceRef msource = (SecItemCertificateSourceRef)source;
-	CFReleaseSafe(msource->accessGroups);
-	free(msource);
-}
-
-// MARK: -
-// MARK: SecSystemAnchorSource
-/********************************************************
- *********** SecSystemAnchorSource object ************
- ********************************************************/
-
-static bool SecSystemAnchorSourceCopyParents(
-	SecCertificateSourceRef source, SecCertificateRef certificate,
-        void *context, SecCertificateSourceParents callback) {
-//#ifndef SECITEM_SHIM_OSX
-    CFArrayRef parents = NULL;
-	CFArrayRef anchors = NULL;
-	SecOTAPKIRef otapkiref = NULL;
-
-    CFDataRef nic = SecCertificateGetNormalizedIssuerContent(certificate);
-    /* 64 bits cast: the worst that can happen here is we truncate the length and match an actual anchor.
-       It does not matter since we would be returning the wrong anchors */
-    assert((unsigned long)CFDataGetLength(nic)<UINT_MAX); /* Debug check. correct as long as CFIndex is signed long */
-
-	otapkiref = SecOTAPKICopyCurrentOTAPKIRef();
-	require_quiet(otapkiref, errOut);
-	anchors = subject_to_anchors(nic);
-	require_quiet(anchors, errOut);
-	parents = CopyCertsFromIndices(anchors);
-
-errOut:
-    callback(context, parents);
-    CFReleaseSafe(parents);
-	CFReleaseSafe(otapkiref);
-//#endif // SECITEM_SHIM_OSX
-    return true;
-}
-
-/* Quick thought: we can eliminate this method if we search anchor sources
-   before all others and we remember if we got a cert from an anchorsource. */
-static bool SecSystemAnchorSourceContains(SecCertificateSourceRef source,
-	SecCertificateRef certificate) {
-	bool result = false;
-//#ifndef SECITEM_SHIM_OSX
-	CFArrayRef anchors = NULL;
-	SecOTAPKIRef otapkiref = NULL;
-	CFArrayRef cert_datas = NULL;
-
-    CFDataRef nic = SecCertificateGetNormalizedSubjectContent(certificate);
-    /* 64 bits cast: the worst that can happen here is we truncate the length and match an actual anchor.
-     It does not matter since we would be returning the wrong anchors */
-    assert((unsigned long)CFDataGetLength(nic)<UINT_MAX); /* Debug check. correct as long as CFIndex is signed long */
-
-	otapkiref = SecOTAPKICopyCurrentOTAPKIRef();
-	require_quiet(otapkiref, errOut);
-    anchors = subject_to_anchors(nic);
-	require_quiet(anchors, errOut);
-    cert_datas = CopyCertDataFromIndices(anchors);
-    require_quiet(cert_datas, errOut);
-
-    CFIndex cert_length = SecCertificateGetLength(certificate);
-    const UInt8 *cert_data_ptr = SecCertificateGetBytePtr(certificate);
-
-    CFIndex num_cert_datas = CFArrayGetCount(cert_datas);
-    for (CFIndex idx = 0; idx < num_cert_datas; idx++)
-    {
-        CFDataRef cert_data = (CFDataRef)CFArrayGetValueAtIndex(cert_datas, idx);
-
-		if (NULL != cert_data)
-		{
-            if (CFGetTypeID(cert_data) == CFDataGetTypeID())
-            {
-                CFIndex  aCert_Length = CFDataGetLength(cert_data);
-                const UInt8*  aCert_Data_Ptr = CFDataGetBytePtr(cert_data);
-
-                if (aCert_Length == cert_length)
-                {
-                    if (!memcmp(cert_data_ptr, aCert_Data_Ptr, cert_length))
-                    {
-						result = true;
-						break;
-                    }
-                }
-            }
-		}
-    }
-
-errOut:
-	CFReleaseSafe(cert_datas);
-	CFReleaseSafe(otapkiref);
-//#endif // SECITEM_SHIM_OSX
-    return result;
-}
-
-
-
-struct SecCertificateSource kSecSystemAnchorSource = {
-	SecSystemAnchorSourceCopyParents,
-	SecSystemAnchorSourceContains
-};
-
-// MARK: -
-// MARK: SecUserAnchorSource
-/********************************************************
- *********** SecUserAnchorSource object ************
- ********************************************************/
-static bool SecUserAnchorSourceCopyParents(
-	SecCertificateSourceRef source, SecCertificateRef certificate,
-        void *context, SecCertificateSourceParents callback) {
-    CFArrayRef parents = SecTrustStoreCopyParents(
-        SecTrustStoreForDomain(kSecTrustStoreDomainUser), certificate, NULL);
-    callback(context, parents);
-    CFReleaseSafe(parents);
-    return true;
-}
-
-static bool SecUserAnchorSourceContains(SecCertificateSourceRef source,
-	SecCertificateRef certificate) {
-    return SecTrustStoreContains(
-        SecTrustStoreForDomain(kSecTrustStoreDomainUser), certificate);
-}
-
-struct SecCertificateSource kSecUserAnchorSource = {
-	SecUserAnchorSourceCopyParents,
-	SecUserAnchorSourceContains
-};
-
-// MARK: -
-// MARK: SecMemoryCertificateSource
-/********************************************************
- *********** SecMemoryCertificateSource object ************
- ********************************************************/
-struct SecMemoryCertificateSource {
-	struct SecCertificateSource base;
-	CFMutableSetRef certificates;
-	CFMutableDictionaryRef subjects;
-};
-typedef struct SecMemoryCertificateSource *SecMemoryCertificateSourceRef;
-
-static bool SecMemoryCertificateSourceCopyParents(
-	SecCertificateSourceRef source, SecCertificateRef certificate,
-        void *context, SecCertificateSourceParents callback) {
-	SecMemoryCertificateSourceRef msource =
-		(SecMemoryCertificateSourceRef)source;
-	CFDataRef normalizedIssuer =
-        SecCertificateGetNormalizedIssuerContent(certificate);
-	CFArrayRef parents = (normalizedIssuer) ? CFDictionaryGetValue(msource->subjects,
-		normalizedIssuer) : NULL;
-    /* FIXME filter parents by subjectID if certificate has an
-       authorityKeyIdentifier. */
-    secdebug("trust", "%@ parents -> %@", certificate, parents);
-    callback(context, parents);
-    return true;
-}
-
-static bool SecMemoryCertificateSourceContains(SecCertificateSourceRef source,
-	SecCertificateRef certificate) {
-	SecMemoryCertificateSourceRef msource =
-		(SecMemoryCertificateSourceRef)source;
-	return CFSetContainsValue(msource->certificates, certificate);
-}
-
-static void dictAddValueToArrayForKey(CFMutableDictionaryRef dict,
-	const void *key, const void *value) {
-	if (!key)
-		return;
-
-	CFMutableArrayRef values =
-		(CFMutableArrayRef)CFDictionaryGetValue(dict, key);
-	if (!values) {
-		values = CFArrayCreateMutable(kCFAllocatorDefault, 0,
-			&kCFTypeArrayCallBacks);
-		CFDictionaryAddValue(dict, key, values);
-		CFRelease(values);
-	}
-
-	if (values)
-		CFArrayAppendValue(values, value);
-}
-
-static void SecMemoryCertificateSourceApplierFunction(const void *value,
-	void *context) {
-	SecMemoryCertificateSourceRef msource =
-		(SecMemoryCertificateSourceRef)context;
-	SecCertificateRef certificate = (SecCertificateRef)value;
-
-	/* CFSet's API has no way to combine these 2 operations into 1 sadly. */
-	if (CFSetContainsValue(msource->certificates, certificate))
-		return;
-	CFSetAddValue(msource->certificates, certificate);
-
-	CFDataRef key = SecCertificateGetNormalizedSubjectContent(certificate);
-	dictAddValueToArrayForKey(msource->subjects, key, value);
-}
-
-static SecCertificateSourceRef SecMemoryCertificateSourceCreate(
-	CFArrayRef certificates) {
-	SecMemoryCertificateSourceRef result = (SecMemoryCertificateSourceRef)
-		malloc(sizeof(*result));
-	result->base.copyParents = SecMemoryCertificateSourceCopyParents;
-	result->base.contains = SecMemoryCertificateSourceContains;
-	CFIndex count = CFArrayGetCount(certificates);
-	result->certificates = CFSetCreateMutable(kCFAllocatorDefault, count,
-		&kCFTypeSetCallBacks);
-	result->subjects = CFDictionaryCreateMutable(kCFAllocatorDefault,
-		count, &kCFTypeDictionaryKeyCallBacks,
-		&kCFTypeDictionaryValueCallBacks);
-	CFRange range = { 0, count };
-	CFArrayApplyFunction(certificates, range,
-		SecMemoryCertificateSourceApplierFunction, result);
-
-	return (SecCertificateSourceRef)result;
-}
-
-static void SecMemoryCertificateSourceDestroy(
-	SecCertificateSourceRef source) {
-	SecMemoryCertificateSourceRef msource =
-		(SecMemoryCertificateSourceRef)source;
-	CFRelease(msource->certificates);
-	CFRelease(msource->subjects);
-	free(msource);
-}
-
-// MARK: -
-// MARK: SecCAIssuerCertificateSource
-/********************************************************
- ********* SecCAIssuerCertificateSource object **********
- ********************************************************/
-static bool SecCAIssuerCertificateSourceCopyParents(
-	SecCertificateSourceRef source, SecCertificateRef certificate,
-        void *context, SecCertificateSourceParents callback) {
-    return SecCAIssuerCopyParents(certificate, SecPathBuilderGetQueue((SecPathBuilderRef)context), context, callback);
-}
-
-static bool SecCAIssuerCertificateSourceContains(
-    SecCertificateSourceRef source, SecCertificateRef certificate) {
-	return false;
-}
-
-struct SecCertificateSource kSecCAIssuerSource = {
-	SecCAIssuerCertificateSourceCopyParents,
-	SecCAIssuerCertificateSourceContains
-};
 
 // MARK: -
 // MARK: SecPathBuilder
@@ -600,6 +88,7 @@ struct SecPathBuilder {
     SecCertificateSourceRef certificateSource;
     SecCertificateSourceRef itemCertificateSource;
     SecCertificateSourceRef anchorSource;
+    SecCertificateSourceRef appleAnchorSource;
     CFMutableArrayRef       anchorSources;
     CFIndex                 nextParentSource;
     CFMutableArrayRef       parentSources;
@@ -629,7 +118,7 @@ struct SecPathBuilder {
 
     CFArrayRef              leafDetails;
 
-    CFIndex                 rejectScore;
+    CFIndex                 bestPathScore;
 
     bool                    considerRejected;
     bool                    considerPartials;
@@ -638,6 +127,8 @@ struct SecPathBuilder {
     struct OpaqueSecPVC     path;
     SecCertificatePathRef   bestPath;
     bool                    bestPathIsEV;
+    bool                    bestPathIsSHA2;
+    bool                    denyBestPath;
 
     CFIndex                 activations;
     bool (*state)(SecPathBuilderRef);
@@ -655,10 +146,10 @@ static bool SecPathBuilderReportResult(SecPathBuilderRef builder);
 
 /* Forward declarations. */
 static bool SecPathBuilderIsAnchor(SecPathBuilderRef builder,
-	SecCertificateRef certificate);
+	SecCertificateRef certificate, SecCertificateSourceRef *foundInSource);
 
-/* IDEA: policies could be made cabable of replacing incoming anchors and
-   anchorsOnly argument values.  For example some policies require the
+/* IDEA: policies could be made capable of replacing incoming anchors and
+   anchorsOnly argument values.  For example, some policies require the
    Apple Inc. CA and not any other anchor.  This can be done in
    SecPathBuilderLeafCertificateChecks since this only runs once. */
 static void SecPathBuilderLeafCertificateChecks(SecPathBuilderRef builder,
@@ -676,7 +167,7 @@ static void SecPathBuilderLeafCertificateChecks(SecPathBuilderRef builder,
 
 static void SecPathBuilderInit(SecPathBuilderRef builder,
     CFDataRef clientAuditToken, CFArrayRef certificates,
-    CFArrayRef anchors, bool anchorsOnly,
+    CFArrayRef anchors, bool anchorsOnly, bool keychainsAllowed,
     CFArrayRef policies, CFArrayRef ocspResponses,
     CFArrayRef signedCertificateTimestamps, CFArrayRef trustedLogs,
     CFAbsoluteTime verifyTime, CFArrayRef accessGroups,
@@ -689,8 +180,9 @@ static void SecPathBuilderInit(SecPathBuilderRef builder,
     builder->queue = dispatch_queue_create("builder", DISPATCH_QUEUE_SERIAL);
 
     builder->nextParentSource = 1;
-    builder->considerPartials = false;
+#if !TARGET_OS_WATCH
     builder->canAccessNetwork = true;
+#endif
 
     builder->anchorSources = CFArrayCreateMutable(allocator, 0, NULL);
     builder->parentSources = CFArrayCreateMutable(allocator, 0, NULL);
@@ -700,50 +192,108 @@ static void SecPathBuilderInit(SecPathBuilderRef builder,
     builder->partialPaths = CFArrayCreateMutable(allocator, 0, NULL);
     builder->rejectedPaths = CFArrayCreateMutable(allocator, 0, NULL);
     builder->candidatePaths = CFArrayCreateMutable(allocator, 0, NULL);
-    builder->partialIX = 0;
 
     /* Init the policy verification context. */
     SecPVCInit(&builder->path, builder, policies, verifyTime);
-	builder->bestPath = NULL;
-	builder->bestPathIsEV = false;
-	builder->rejectScore = 0;
 
 	/* Let's create all the certificate sources we might want to use. */
 	builder->certificateSource =
 		SecMemoryCertificateSourceCreate(certificates);
-	if (anchors)
+    if (anchors) {
 		builder->anchorSource = SecMemoryCertificateSourceCreate(anchors);
-	else
-		builder->anchorSource = NULL;
+    }
 
-	/* We always search certificateSource for parents since it includes the
-	   leaf itself and it might be self signed. */
-	CFArrayAppendValue(builder->parentSources, builder->certificateSource);
+    bool allowNonProduction = false;
+    builder->appleAnchorSource = SecMemoryCertificateSourceCreate(SecGetAppleTrustAnchors(allowNonProduction));
+
+
+    /** Parent Sources
+     ** The order here avoids the most expensive methods if the cheaper methods
+     ** produce an acceptable chain: client-provided, keychains, network-fetched.
+     **/
+#if !TARGET_OS_BRIDGE
+    CFArrayAppendValue(builder->parentSources, builder->certificateSource);
+    builder->itemCertificateSource = SecItemCertificateSourceCreate(accessGroups);
+    if (keychainsAllowed) {
+        CFArrayAppendValue(builder->parentSources, builder->itemCertificateSource);
+ #if TARGET_OS_OSX
+        /* On OS X, need additional parent source to search legacy keychain files. */
+        if (kSecLegacyCertificateSource->contains && kSecLegacyCertificateSource->copyParents) {
+            CFArrayAppendValue(builder->parentSources, kSecLegacyCertificateSource);
+        }
+ #endif
+    }
+    if (anchorsOnly) {
+        /* Add the Apple, system, and user anchor certificate db to the search list
+         if we don't explicitly trust them. */
+        CFArrayAppendValue(builder->parentSources, builder->appleAnchorSource);
+        CFArrayAppendValue(builder->parentSources, kSecSystemAnchorSource);
+ #if TARGET_OS_IPHONE
+        CFArrayAppendValue(builder->parentSources, kSecUserAnchorSource);
+ #endif
+    }
+    if (keychainsAllowed && builder->canAccessNetwork) {
+        CFArrayAppendValue(builder->parentSources, kSecCAIssuerSource);
+    }
+#else /* TARGET_OS_BRIDGE */
+    /* Bridge can only access memory sources. */
+    CFArrayAppendValue(builder->parentSources, builder->certificateSource);
+    if (anchorsOnly) {
+        /* Add the Apple, system, and user anchor certificate db to the search list
+         if we don't explicitly trust them. */
+        CFArrayAppendValue(builder->parentSources, builder->appleAnchorSource);
+    }
+#endif /* !TARGET_OS_BRIDGE */
+
+    /** Anchor Sources
+     ** The order here allows a client-provided anchor to overrule
+     ** a user or admin trust setting which can overrule the system anchors.
+     ** Apple's anchors cannot be overriden by a trust setting.
+     **/
+#if !TARGET_OS_BRIDGE
 	if (builder->anchorSource) {
 		CFArrayAppendValue(builder->anchorSources, builder->anchorSource);
 	}
-    builder->itemCertificateSource = SecItemCertificateSourceCreate(accessGroups);
-	CFArrayAppendValue(builder->parentSources, builder->itemCertificateSource);
-    if (anchorsOnly) {
-        /* Add the system and user anchor certificate db to the search list
-           if we don't explicitly trust them. */
-        CFArrayAppendValue(builder->parentSources, &kSecSystemAnchorSource);
-        CFArrayAppendValue(builder->parentSources, &kSecUserAnchorSource);
-    } else {
+    if (!anchorsOnly) {
         /* Only add the system and user anchor certificate db to the
-           anchorSources if we are supposed to trust them. */
-        CFArrayAppendValue(builder->anchorSources, &kSecSystemAnchorSource);
-        CFArrayAppendValue(builder->anchorSources, &kSecUserAnchorSource);
+         anchorSources if we are supposed to trust them. */
+        CFArrayAppendValue(builder->anchorSources, builder->appleAnchorSource);
+ #if TARGET_OS_IPHONE
+        CFArrayAppendValue(builder->anchorSources, kSecUserAnchorSource);
+ #else /* TARGET_OS_OSX */
+        if (keychainsAllowed && kSecLegacyAnchorSource->contains && kSecLegacyAnchorSource->copyParents) {
+            CFArrayAppendValue(builder->anchorSources, kSecLegacyAnchorSource);
+        }
+ #endif
+        CFArrayAppendValue(builder->anchorSources, kSecSystemAnchorSource);
     }
-    CFArrayAppendValue(builder->parentSources, &kSecCAIssuerSource);
+#else /* TARGET_OS_BRIDGE */
+    /* Bridge can only access memory sources. */
+    if (builder->anchorSource) {
+        CFArrayAppendValue(builder->anchorSources, builder->anchorSource);
+    }
+    if (!anchorsOnly) {
+        CFArrayAppendValue(builder->anchorSources, builder->appleAnchorSource);
+    }
+#endif /* !TARGET_OS_BRIDGE */
 
 	/* Now let's get the leaf cert and turn it into a path. */
 	SecCertificateRef leaf =
 		(SecCertificateRef)CFArrayGetValueAtIndex(certificates, 0);
-	SecCertificatePathRef path = SecCertificatePathCreate(NULL, leaf);
-	CFSetAddValue(builder->allPaths, path);
+	SecCertificateSourceRef source = NULL;
+	bool isAnchor = false;
+	CFArrayRef constraints = NULL;
+    if (SecPathBuilderIsAnchor(builder, leaf, &source)) {
+        isAnchor = true;
+    }
+    if (source) {
+        constraints = SecCertificateSourceCopyUsageConstraints(source, leaf);
+    }
+    SecCertificatePathRef path = SecCertificatePathCreate(NULL, leaf, constraints);
+    CFReleaseSafe(constraints);
+    CFSetAddValue(builder->allPaths, path);
 	CFArrayAppendValue(builder->partialPaths, path);
-    if (SecPathBuilderIsAnchor(builder, leaf)) {
+    if (isAnchor) {
         SecCertificatePathSetIsAnchored(path);
         CFArrayAppendValue(builder->candidatePaths, path);
     }
@@ -761,7 +311,6 @@ static void SecPathBuilderInit(SecPathBuilderRef builder,
         CFReleaseSafe(otapkiref);
     }
 
-    builder->activations = 0;
     builder->state = SecPathBuilderGetNext;
     builder->completed = completed;
     builder->context = context;
@@ -769,13 +318,14 @@ static void SecPathBuilderInit(SecPathBuilderRef builder,
 
 SecPathBuilderRef SecPathBuilderCreate(CFDataRef clientAuditToken,
     CFArrayRef certificates, CFArrayRef anchors, bool anchorsOnly,
-    CFArrayRef policies, CFArrayRef ocspResponses,
+    bool keychainsAllowed, CFArrayRef policies, CFArrayRef ocspResponses,
     CFArrayRef signedCertificateTimestamps, CFArrayRef trustedLogs,
     CFAbsoluteTime verifyTime, CFArrayRef accessGroups,
     SecPathBuilderCompleted completed, const void *context) {
     SecPathBuilderRef builder = malloc(sizeof(*builder));
+    memset(builder, 0, sizeof(*builder));
     SecPathBuilderInit(builder, clientAuditToken, certificates,
-        anchors, anchorsOnly, policies, ocspResponses,
+        anchors, anchorsOnly, keychainsAllowed, policies, ocspResponses,
         signedCertificateTimestamps, trustedLogs, verifyTime,
         accessGroups, completed, context);
     return builder;
@@ -784,12 +334,14 @@ SecPathBuilderRef SecPathBuilderCreate(CFDataRef clientAuditToken,
 static void SecPathBuilderDestroy(SecPathBuilderRef builder) {
     secdebug("alloc", "%p", builder);
     dispatch_release_null(builder->queue);
-	if (builder->anchorSource)
-		SecMemoryCertificateSourceDestroy(builder->anchorSource);
-	if (builder->certificateSource)
-		SecMemoryCertificateSourceDestroy(builder->certificateSource);
-    if (builder->itemCertificateSource)
-        SecItemCertificateSourceDestroy(builder->itemCertificateSource);
+    if (builder->anchorSource) {
+        SecMemoryCertificateSourceDestroy(builder->anchorSource); }
+    if (builder->certificateSource) {
+        SecMemoryCertificateSourceDestroy(builder->certificateSource); }
+    if (builder->itemCertificateSource) {
+        SecItemCertificateSourceDestroy(builder->itemCertificateSource); }
+    if (builder->appleAnchorSource) {
+        SecMemoryCertificateSourceDestroy(builder->appleAnchorSource); }
 	CFReleaseSafe(builder->clientAuditToken);
 	CFReleaseSafe(builder->anchorSources);
 	CFReleaseSafe(builder->parentSources);
@@ -798,6 +350,9 @@ static void SecPathBuilderDestroy(SecPathBuilderRef builder) {
 	CFReleaseSafe(builder->rejectedPaths);
 	CFReleaseSafe(builder->candidatePaths);
 	CFReleaseSafe(builder->leafDetails);
+    CFReleaseSafe(builder->ocspResponses);
+    CFReleaseSafe(builder->signedCertificateTimestamps);
+    CFReleaseSafe(builder->trustedLogs);
 
     SecPVCDelete(&builder->path);
 }
@@ -810,17 +365,22 @@ void SecPathBuilderSetCanAccessNetwork(SecPathBuilderRef builder, bool allow) {
     if (builder->canAccessNetwork != allow) {
         builder->canAccessNetwork = allow;
         if (allow) {
-            secdebug("http", "network access re-enabled by policy");
+#if !TARGET_OS_WATCH
+            secinfo("http", "network access re-enabled by policy");
             /* re-enabling network_access re-adds kSecCAIssuerSource as
                a parent source. */
-            CFArrayAppendValue(builder->parentSources, &kSecCAIssuerSource);
+            CFArrayAppendValue(builder->parentSources, kSecCAIssuerSource);
+#else
+            secnotice("http", "network access not allowed on WatchOS");
+            builder->canAccessNetwork = false;
+#endif
         } else {
-            secdebug("http", "network access disabled by policy");
+            secinfo("http", "network access disabled by policy");
             /* disabling network_access removes kSecCAIssuerSource from
                the list of parent sources. */
             CFIndex ix = CFArrayGetFirstIndexOfValue(builder->parentSources,
                 CFRangeMake(0, CFArrayGetCount(builder->parentSources)),
-                &kSecCAIssuerSource);
+                kSecCAIssuerSource);
             if (ix >= 0)
                 CFArrayRemoveValueAtIndex(builder->parentSources, ix);
         }
@@ -842,19 +402,78 @@ CFArrayRef SecPathBuilderCopyTrustedLogs(SecPathBuilderRef builder)
     return CFRetainSafe(builder->trustedLogs);
 }
 
+SecCertificatePathRef SecPathBuilderGetBestPath(SecPathBuilderRef builder)
+{
+    return builder->bestPath;
+}
+
+/* This function assumes that the input source is an anchor source */
+static bool SecPathBuilderIsAnchorPerConstraints(SecPathBuilderRef builder, SecCertificateSourceRef source,
+    SecCertificateRef certificate) {
+    bool result = false;
+    CFArrayRef constraints = NULL;
+    constraints = SecCertificateSourceCopyUsageConstraints(source, certificate);
+
+    /* Unrestricted certificates:
+     *      -those that come from anchor sources with no constraints
+     *      -self-signed certificates with empty contraints arrays
+     */
+    Boolean selfSigned = false;
+    require(errSecSuccess == SecCertificateIsSelfSigned(certificate, &selfSigned), out);
+    if ((NULL == source->copyUsageConstraints) ||
+        (constraints && (CFArrayGetCount(constraints) == 0) && selfSigned)) {
+        secinfo("trust", "unrestricted anchor%s",
+                (NULL == source->copyUsageConstraints) ? " source" : "");
+        result = true;
+        goto out;
+    }
+
+    /* Get the trust settings result for the PVC */
+    require(constraints, out);
+    SecTrustSettingsResult settingsResult = kSecTrustSettingsResultInvalid;
+    settingsResult = SecPVCGetTrustSettingsResult(&builder->path,
+                                                  certificate,
+                                                  constraints);
+    if ((selfSigned && settingsResult == kSecTrustSettingsResultTrustRoot) ||
+        (!selfSigned && settingsResult == kSecTrustSettingsResultTrustAsRoot)) {
+        // For our purposes, this is an anchor.
+        secinfo("trust", "complex trust settings anchor");
+        result = true;
+    }
+
+    if (settingsResult == kSecTrustSettingsResultDeny) {
+        /* We consider denied certs "anchors" because the trust decision
+           is set regardless of building the chain further. The policy
+           validation will handle rejecting this chain. */
+        secinfo("trust", "complex trust settings denied anchor");
+        result = true;
+    }
+
+out:
+    CFReleaseNull(constraints);
+    return result;
+}
+
+/* Source returned in foundInSource has the same lifetime as the builder. */
 static bool SecPathBuilderIsAnchor(SecPathBuilderRef builder,
-	SecCertificateRef certificate) {
-	/* We always look through all anchor sources. */
-	CFIndex count = CFArrayGetCount(builder->anchorSources);
-	CFIndex ix;
-	for (ix = 0; ix < count; ++ix) {
-		SecCertificateSourceRef source = (SecCertificateSourceRef)
-			CFArrayGetValueAtIndex(builder->anchorSources, ix);
-		if (SecCertificateSourceContains(source, certificate)) {
-			return true;
-		}
-	}
-	return false;
+    SecCertificateRef certificate, SecCertificateSourceRef *foundInSource) {
+    /* We look through the anchor sources in order. They are ordered in
+       SecPathBuilderInit so that process anchors override user anchors which
+       override system anchors. */
+    CFIndex count = CFArrayGetCount(builder->anchorSources);
+    CFIndex ix;
+    for (ix = 0; ix < count; ++ix) {
+        SecCertificateSourceRef source = (SecCertificateSourceRef)
+        CFArrayGetValueAtIndex(builder->anchorSources, ix);
+        if (SecCertificateSourceContains(source, certificate)) {
+            if (foundInSource)
+                *foundInSource = source;
+            if (SecPathBuilderIsAnchorPerConstraints(builder, source, certificate)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /* Return false if path is not a partial, if path was a valid candidate it
@@ -887,8 +506,12 @@ static bool SecPathBuilderIsPartial(SecPathBuilderRef builder,
 		if (SecCertificatePathIsAnchored(path)) {
             secdebug("trust", "Adding candidate %@", path);
 			CFArrayAppendValue(builder->candidatePaths, path);
-			return false;
 		}
+        /* The path is not partial if the last cert is self-signed. */
+        if ((SecCertificatePathSelfSignedIndex(path) >= 0) &&
+            (SecCertificatePathSelfSignedIndex(path) == SecCertificatePathGetCount(path)-1)) {
+            return false;
+        }
 	}
 
 	return true;
@@ -903,10 +526,6 @@ static void SecPathBuilderProcessParents(SecPathBuilderRef builder,
     CFIndex rootIX = SecCertificatePathGetCount(partial) - 1;
     CFIndex num_parents = parents ? CFArrayGetCount(parents) : 0;
     CFIndex parentIX;
-    bool is_anchor = SecCertificatePathGetNextSourceIndex(partial) <=
-        CFArrayGetCount(builder->anchorSources);
-    secdebug("trust", "found %" PRIdCFIndex " candidate %s", num_parents,
-             (is_anchor ? "anchors" : "parents"));
     for (parentIX = 0; parentIX < num_parents; ++parentIX) {
         SecCertificateRef parent = (SecCertificateRef)
             CFArrayGetValueAtIndex(parents, parentIX);
@@ -926,7 +545,11 @@ static void SecPathBuilderProcessParents(SecPathBuilderRef builder,
         /* FIXME Add more sanity checks to see that parent really can be
            a parent of partial_root.  subjectKeyID == authorityKeyID,
            signature algorithm matches public key algorithm, etc. */
-        SecCertificatePathRef path = SecCertificatePathCreate(partial, parent);
+        SecCertificateSourceRef source = NULL;
+        bool is_anchor = SecPathBuilderIsAnchor(builder, parent, &source);
+        CFArrayRef constraints = (source) ? SecCertificateSourceCopyUsageConstraints(source, parent) : NULL;
+        SecCertificatePathRef path = SecCertificatePathCreate(partial, parent, constraints);
+        CFReleaseSafe(constraints);
         if (!path)
             continue;
         if (!CFSetContainsValue(builder->allPaths, path)) {
@@ -1091,7 +714,7 @@ static void SecPathBuilderReject(SecPathBuilderRef builder) {
         return;
     }
 
-    CFIndex rejectScore = builder->rejectScore;
+    CFIndex bestPathScore = builder->bestPathScore;
     CFIndex score = SecCertificatePathScore(builder->path.path,
         SecPVCGetVerifyTime(&builder->path));
 
@@ -1099,7 +722,7 @@ static void SecPathBuilderReject(SecPathBuilderRef builder) {
        replace any previously accepted or rejected non EV chains with the
        current one. */
     if (pvc->is_ev && !builder->bestPathIsEV) {
-        rejectScore = 0;
+        bestPathScore = 0;
     }
 
 #if 0
@@ -1114,45 +737,61 @@ static void SecPathBuilderReject(SecPathBuilderRef builder) {
     }
 #endif
 
-    /* Do this last so that changes to rejectScore above will take affect. */
-    if (!builder->bestPath || score > rejectScore) {
+    /* Do this last so that changes to bestPathScore above will take effect. */
+    if (!builder->bestPath || score > bestPathScore) {
         if (builder->bestPath) {
-            secdebug("reject",
-                "replacing %sev %s score: %ld with %sev reject score: %" PRIdCFIndex " %@",
+            secinfo("reject",
+                "replacing %sev %s score: %ld with %sev score: %" PRIdCFIndex " %@",
                 (builder->bestPathIsEV ? "" : "non "),
-                (builder->rejectScore == INTPTR_MAX ? "accept" : "reject"),
-                builder->rejectScore,
+                (builder->bestPathScore > ACCEPT_PATH_SCORE ? "accept" : "reject"),
+                builder->bestPathScore,
                 (pvc->is_ev ? "" : "non "), (long)score, builder->path.path);
         } else {
-            secdebug("reject", "%sev reject score: %" PRIdCFIndex " %@",
+            secinfo("reject", "%sev score: %" PRIdCFIndex " %@",
                 (pvc->is_ev ? "" : "non "), score, builder->path.path);
         }
 
-		builder->rejectScore = score;
+		builder->bestPathScore = score;
         builder->bestPath = pvc->path;
         builder->bestPathIsEV = pvc->is_ev;
+        builder->denyBestPath = SecPVCCheckUsageConstraints(pvc);
 	} else {
-        secdebug("reject", "%sev reject score: %" PRIdCFIndex " lower than %" PRIdCFIndex " %@",
-            (pvc->is_ev ? "" : "non "), score, rejectScore, builder->path.path);
+        secinfo("reject", "%sev score: %" PRIdCFIndex " lower than %" PRIdCFIndex " %@",
+            (pvc->is_ev ? "" : "non "), score, bestPathScore, builder->path.path);
     }
 }
 
 /* All policies accepted the candidate path. */
 static void SecPathBuilderAccept(SecPathBuilderRef builder) {
-    check(builder);
+    if (!builder) { return; }
     SecPVCRef pvc = &builder->path;
-    if (pvc->is_ev || !builder->bestPathIsEV) {
-		secdebug("accept", "replacing %sev accept with %sev %@",
-            (builder->bestPathIsEV ? "" : "non "),
-            (pvc->is_ev ? "" : "non "), builder->path.path);
-        builder->rejectScore = INTPTR_MAX; /* CFIndex is signed long which is INTPTR_T */
-		builder->bestPathIsEV = pvc->is_ev;
+    if (!pvc) { return; }
+    bool isSHA2 = !SecCertificatePathHasWeakHash(pvc->path);
+    bool isOptionallySHA2 = !SecCertificateIsWeakHash(SecPVCGetCertificateAtIndex(pvc, 0));
+    CFIndex bestScore = builder->bestPathScore;
+    /* Score this path. Note that all points awarded or deducted in
+     * SecCertificatePathScore are < 100,000 */
+    CFIndex currScore = (SecCertificatePathScore(pvc->path, pvc->verifyTime) +
+                         ACCEPT_PATH_SCORE  + // 10,000,000 points for accepting
+                         ((pvc->is_ev) ? 1000000 : 0)); //1,000,000 points for EV
+    if (currScore > bestScore) {
+        // current path is better than existing best path
+        secinfo("accept", "replacing %sev %s score: %ld with %sev score: %" PRIdCFIndex " %@",
+                 (builder->bestPathIsEV ? "" : "non "),
+                 (builder->bestPathScore > ACCEPT_PATH_SCORE ? "accept" : "reject"),
+                 builder->bestPathScore,
+                 (pvc->is_ev ? "" : "non "), (long)currScore, builder->path.path);
+
+        builder->bestPathScore = currScore;
+        builder->bestPathIsEV = pvc->is_ev;
+        builder->bestPathIsSHA2 = isSHA2;
         builder->bestPath = pvc->path;
+        builder->denyBestPath = SecPVCCheckUsageConstraints(pvc); /* should always be false */
     }
 
-    /* If we found the best accept we can we want to switch directly to the
+    /* If we found the best accept we can, we want to switch directly to the
        SecPathBuilderComputeDetails state here, since we're done. */
-    if (pvc->is_ev || !pvc->optionally_ev)
+    if ((pvc->is_ev || !pvc->optionally_ev) && (isSHA2 || !isOptionallySHA2))
         builder->state = SecPathBuilderComputeDetails;
     else
         builder->state = SecPathBuilderGetNext;
@@ -1189,7 +828,7 @@ static bool SecPathBuilderComputeDetails(SecPathBuilderRef builder) {
 #if 0
     if (!builder->caller_wants_details) {
         SecPVCSetPath(pvc, builder->bestPath, NULL);
-        pvc->result = builder->rejectScore == INTPTR_MAX;
+        pvc->result = builder->bestPathScore > ACCEPT_PATH_SCORE;
         builder->state = SecPathBuilderReportResult;
         return true;
     }
@@ -1217,8 +856,16 @@ static bool SecPathBuilderComputeDetails(SecPathBuilderRef builder) {
     bool completed = SecPVCPathChecks(pvc);
 
     /* Reject the certificate if it was accepted before but we failed it now. */
-    if (builder->rejectScore == INTPTR_MAX && !pvc->result) {
-        builder->rejectScore = 0;
+    if (builder->bestPathScore > ACCEPT_PATH_SCORE && !pvc->result) {
+        builder->bestPathScore = 0;
+    }
+
+    /* Accept a partial path if certificate is on the allow list
+       and is temporally valid and passed all PVC checks. */
+    if (completed && pvc->is_allowlisted && pvc->result &&
+        builder->bestPathScore < ACCEPT_PATH_SCORE &&
+        SecCertificatePathIsValid(pvc->path, pvc->verifyTime)) {
+        builder->bestPathScore += ACCEPT_PATH_SCORE;
     }
 
     CFReleaseSafe(details);
@@ -1246,34 +893,46 @@ static bool SecPathBuilderReportResult(SecPathBuilderRef builder) {
         if (pvc->rvcs) {
             CFAbsoluteTime nextUpdate = SecPVCGetEarliestNextUpdate(pvc);
             if (nextUpdate == 0) {
+                /* populate revocation info for failed revocation check */
                 CFDictionarySetValue(pvc->info, kSecTrustInfoRevocationKey,
                     kCFBooleanFalse); /* iOS key */
                 CFDictionarySetValue(pvc->info, kSecTrustRevocationChecked,
                     kCFBooleanFalse); /* unified API key */
-            } else {
-                haveRevocationResponse = true;
-                CFDateRef validUntil = CFDateCreate(kCFAllocatorDefault, nextUpdate);
-                CFDictionarySetValue(pvc->info, kSecTrustInfoRevocationValidUntilKey,
-                    validUntil); /* iOS key */
-                CFDictionarySetValue(pvc->info, kSecTrustRevocationValidUntilDate,
-                    validUntil); /* unified API key */
-                CFRelease(validUntil);
-                CFDictionarySetValue(pvc->info, kSecTrustInfoRevocationKey,
-                    kCFBooleanTrue); /* iOS key */
-                CFDictionarySetValue(pvc->info, kSecTrustRevocationChecked,
-                    kCFBooleanTrue); /* unified API key */
             }
         }
     }
 
+    if (pvc->info && pvc->result && pvc->rvcs) {
+        CFAbsoluteTime nextUpdate = SecPVCGetEarliestNextUpdate(pvc);
+        if (nextUpdate != 0) {
+            /* always populate revocation info for successful revocation check */
+            haveRevocationResponse = true;
+            CFDateRef validUntil = CFDateCreate(kCFAllocatorDefault, nextUpdate);
+            CFDictionarySetValue(pvc->info, kSecTrustInfoRevocationValidUntilKey,
+                                 validUntil); /* iOS key */
+            CFDictionarySetValue(pvc->info, kSecTrustRevocationValidUntilDate,
+                                 validUntil); /* unified API key */
+            CFRelease(validUntil);
+            CFDictionarySetValue(pvc->info, kSecTrustInfoRevocationKey,
+                                 kCFBooleanTrue); /* iOS key */
+            CFDictionarySetValue(pvc->info, kSecTrustRevocationChecked,
+                                 kCFBooleanTrue); /* unified API key */
+        }
+    }
+
     if (pvc->info && pvc->result && pvc->response_required && !haveRevocationResponse) {
-        builder->rejectScore = 0;
+        builder->bestPathScore = 0;
         SecPVCSetResultForced(pvc, kSecPolicyCheckRevocationResponseRequired,
             0, kCFBooleanFalse, true);
     }
 
     if (pvc->info && pvc->is_ct && pvc->result) {
         CFDictionarySetValue(pvc->info, kSecTrustInfoCertificateTransparencyKey,
+                             kCFBooleanTrue);
+    }
+
+    if (pvc->info && pvc->is_ct_whitelisted && pvc->result) {
+        CFDictionarySetValue(pvc->info, kSecTrustInfoCertificateTransparencyWhiteListKey,
                              kCFBooleanTrue);
     }
 
@@ -1302,7 +961,7 @@ static bool SecPathBuilderReportResult(SecPathBuilderRef builder) {
 bool SecPathBuilderStep(SecPathBuilderRef builder) {
     if (builder->activations) {
         secdebug("async", "activations: %lu returning true",
-            builder->activations);
+                 builder->activations);
         return true;
     }
 
@@ -1314,21 +973,27 @@ bool SecPathBuilderStep(SecPathBuilderRef builder) {
     if (builder->state) {
         secdebug("async", "waiting for async reply, exiting");
         /* A state returned false, it's waiting for network traffic.  Let's
-           return. */
+         return. */
         return true;
     }
 
     if (builder->activations) {
         /* There is still at least one other running instance of this builder
-           somewhere on the stack, we let that instance take care of sending
-           the client a response. */
+         somewhere on the stack, we let that instance take care of sending
+         the client a response. */
         return false;
     }
 
-    SecTrustResultType result = (builder->rejectScore == INTPTR_MAX
-        ? kSecTrustResultUnspecified : kSecTrustResultRecoverableTrustFailure);
+    SecTrustResultType result  = kSecTrustResultInvalid;
+    if (builder->denyBestPath) {
+        result = kSecTrustResultDeny;
+    } else if (builder->bestPathScore > ACCEPT_PATH_SCORE) {
+        result = kSecTrustResultUnspecified;
+    } else {
+        result = kSecTrustResultRecoverableTrustFailure;
+    }
 
-    secdebug("trust", "completed: %@ details: %@ result: %d",
+    secinfo("trust", "completed: %@ details: %@ result: %d",
         builder->bestPath, builder->path.details, result);
 
     if (builder->completed) {
@@ -1369,12 +1034,19 @@ SecTrustServerEvaluateCompleted(const void *userData,
 }
 
 void
-SecTrustServerEvaluateBlock(CFDataRef clientAuditToken, CFArrayRef certificates, CFArrayRef anchors, bool anchorsOnly, CFArrayRef policies, CFArrayRef responses, CFArrayRef SCTs, CFArrayRef trustedLogs, CFAbsoluteTime verifyTime, __unused CFArrayRef accessGroups, void (^evaluated)(SecTrustResultType tr, CFArrayRef details, CFDictionaryRef info, SecCertificatePathRef chain, CFErrorRef error)) {
+SecTrustServerEvaluateBlock(CFDataRef clientAuditToken, CFArrayRef certificates, CFArrayRef anchors, bool anchorsOnly, bool keychainsAllowed, CFArrayRef policies, CFArrayRef responses, CFArrayRef SCTs, CFArrayRef trustedLogs, CFAbsoluteTime verifyTime, __unused CFArrayRef accessGroups, void (^evaluated)(SecTrustResultType tr, CFArrayRef details, CFDictionaryRef info, SecCertificatePathRef chain, CFErrorRef error)) {
+    /* We need an array containing at least one certificate to proceed. */
+    if (!isArray(certificates) || !(CFArrayGetCount(certificates) > 0)) {
+        CFErrorRef certError = CFErrorCreate(NULL, kCFErrorDomainOSStatus, errSecInvalidCertificate, NULL);
+        evaluated(kSecTrustResultInvalid, NULL, NULL, NULL, certError);
+        CFReleaseSafe(certError);
+        return;
+    }
     SecTrustServerEvaluationCompleted userData = Block_copy(evaluated);
     /* Call the actual evaluator function. */
     SecPathBuilderRef builder = SecPathBuilderCreate(clientAuditToken,
                                                      certificates, anchors,
-                                                     anchorsOnly, policies,
+                                                     anchorsOnly, keychainsAllowed, policies,
                                                      responses, SCTs, trustedLogs,
                                                      verifyTime, accessGroups,
                                                      SecTrustServerEvaluateCompleted, userData);
@@ -1383,10 +1055,10 @@ SecTrustServerEvaluateBlock(CFDataRef clientAuditToken, CFArrayRef certificates,
 
 
 // NO_SERVER Shim code only, xpc interface should call SecTrustServerEvaluateBlock() directly
-SecTrustResultType SecTrustServerEvaluate(CFArrayRef certificates, CFArrayRef anchors, bool anchorsOnly, CFArrayRef policies, CFArrayRef responses, CFArrayRef SCTs, CFArrayRef trustedLogs, CFAbsoluteTime verifyTime, __unused CFArrayRef accessGroups, CFArrayRef *pdetails, CFDictionaryRef *pinfo, SecCertificatePathRef *pchain, CFErrorRef *perror) {
+SecTrustResultType SecTrustServerEvaluate(CFArrayRef certificates, CFArrayRef anchors, bool anchorsOnly, bool keychainsAllowed, CFArrayRef policies, CFArrayRef responses, CFArrayRef SCTs, CFArrayRef trustedLogs, CFAbsoluteTime verifyTime, __unused CFArrayRef accessGroups, CFArrayRef *pdetails, CFDictionaryRef *pinfo, SecCertificatePathRef *pchain, CFErrorRef *perror) {
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     __block SecTrustResultType result = kSecTrustResultInvalid;
-    SecTrustServerEvaluateBlock(NULL, certificates, anchors, anchorsOnly, policies, responses, SCTs, trustedLogs, verifyTime, accessGroups, ^(SecTrustResultType tr, CFArrayRef details, CFDictionaryRef info, SecCertificatePathRef chain, CFErrorRef error) {
+    SecTrustServerEvaluateBlock(NULL, certificates, anchors, anchorsOnly, keychainsAllowed, policies, responses, SCTs, trustedLogs, verifyTime, accessGroups, ^(SecTrustResultType tr, CFArrayRef details, CFDictionaryRef info, SecCertificatePathRef chain, CFErrorRef error) {
         result = tr;
         if (tr == kSecTrustResultInvalid) {
             if (perror) {

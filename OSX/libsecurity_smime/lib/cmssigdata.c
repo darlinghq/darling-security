@@ -56,7 +56,6 @@
 #include <Security/SecPolicyPriv.h>
 #include <utilities/SecCFWrappers.h>
 #include <syslog.h>
-#include <MacTypes.h>
 
 #ifndef NDEBUG
 #define SIGDATA_DEBUG	1
@@ -441,9 +440,9 @@ SecCmsSignedDataEncodeAfterData(SecCmsSignedDataRef sigd)
     /* did we have digest calculation going on? */
     if (cinfo->digcx) {
 	rv = SecCmsDigestContextFinishMultiple(cinfo->digcx, (SecArenaPoolRef)poolp, &(sigd->digests));
+        cinfo->digcx = NULL;
 	if (rv != SECSuccess)
 	    goto loser;		/* error has been set by SecCmsDigestContextFinishMultiple */
-	cinfo->digcx = NULL;
     }
 
     signerinfos = sigd->signerInfos;
@@ -618,8 +617,10 @@ SecCmsSignedDataDecodeAfterData(SecCmsSignedDataRef sigd)
 {
     /* did we have digest calculation going on? */
     if (sigd->contentInfo.digcx) {
-	if (SecCmsDigestContextFinishMultiple(sigd->contentInfo.digcx, (SecArenaPoolRef)sigd->cmsg->poolp, &(sigd->digests)) != SECSuccess)
+        if (SecCmsDigestContextFinishMultiple(sigd->contentInfo.digcx, (SecArenaPoolRef)sigd->cmsg->poolp, &(sigd->digests)) != SECSuccess) {
+            sigd->contentInfo.digcx = NULL;
 	    return SECFailure;	/* error has been set by SecCmsDigestContextFinishMultiple */
+        }
 	sigd->contentInfo.digcx = NULL;
     }
     return SECSuccess;
@@ -634,6 +635,10 @@ SecCmsSignedDataDecodeAfterEnd(SecCmsSignedDataRef sigd)
 {
     SecCmsSignerInfoRef *signerinfos;
     int i;
+
+    if (!sigd) {
+        return SECFailure;
+    }
 
     signerinfos = sigd->signerInfos;
 
@@ -757,7 +762,6 @@ SecCmsSignedDataVerifySignerInfo(SecCmsSignedDataRef sigd, int i,
     /* Find digest and contentType for signerinfo */
     algiddata = SecCmsSignerInfoGetDigestAlg(signerinfo);
     if (algiddata == NULL) {
-        syslog(LOG_ERR,"SecCmsSignedDataVerifySignerInfo: could not get digest algorithm %d", PORT_GetError());
         return errSecInternalError; // shouldn't have happened, this is likely due to corrupted data
     }
     
@@ -769,22 +773,12 @@ SecCmsSignedDataVerifySignerInfo(SecCmsSignedDataRef sigd, int i,
 		 * FIXME: need some error return for this (as well as many 
 		 * other places in this library).
 		 */
-                syslog(LOG_ERR,"SecCmsSignedDataVerifySignerInfo: could not get digest using algorithm id");
 		return errSecDataNotAvailable;
 	}
     contentType = SecCmsContentInfoGetContentTypeOID(cinfo);
 
     /* verify signature */
-#if SECTRUST_OSX
-#warning STU: <rdar://21328501>
-	// timestamp policy is currently unsupported; use codesign policy only
-	#if !NDEBUG
-	syslog(LOG_ERR, "SecCmsSignedDataVerifySignerInfo: using codesign policy without timestamp verification");
-	#endif
-	CFTypeRef timeStampPolicies=SecPolicyCreateWithProperties(kSecPolicyAppleCodeSigning, NULL);
-#else
     CFTypeRef timeStampPolicies=SecPolicyCreateAppleTimeStampingAndRevocationPolicies(policies);
-#endif
     status = SecCmsSignerInfoVerifyWithPolicy(signerinfo, timeStampPolicies, digest, contentType);
     CFReleaseSafe(timeStampPolicies);
 
@@ -793,10 +787,6 @@ SecCmsSignedDataVerifySignerInfo(SecCmsSignedDataRef sigd, int i,
     status2 = SecCmsSignerInfoVerifyCertificate(signerinfo, keychainOrArray,
 	policies, trustRef);
     dprintf("SecCmsSignedDataVerifySignerInfo: status %d status2 %d\n", (int) status, (int)status2);
-    if(status || status2) {
-        syslog(LOG_ERR,"SecCmsSignedDataVerifySignerInfo: status %d status2 %d.", (int) status, (int)status2);
-        syslog(LOG_ERR,"SecCmsSignedDataVerifySignerInfo: verify status %d", signerinfo->verificationStatus);
-    }
     /* The error from SecCmsSignerInfoVerify() supercedes error from SecCmsSignerInfoVerifyCertificate(). */
     if (status)
 	return status;
@@ -968,11 +958,11 @@ SecCmsSignedDataGetDigestByAlgTag(SecCmsSignedDataRef sigd, SECOidTag algtag)
 {
     int idx;
 
-	if(sigd->digests == NULL) {
-		return NULL;
-	}
+    if(sigd == NULL || sigd->digests == NULL) {
+        return NULL;
+    }
     idx = SecCmsAlgArrayGetIndexByAlgTag(sigd->digestAlgorithms, algtag);
-    return sigd->digests[idx];
+    return (idx >= 0) ? sigd->digests[idx] : NULL;
 }
 
 /*
@@ -988,7 +978,8 @@ SecCmsSignedDataSetDigests(SecCmsSignedDataRef sigd,
 {
     int cnt, i, idx;
 
-    if (sigd->digestAlgorithms == NULL) {
+    /* Check input structure and items in structure */
+    if (sigd == NULL || sigd->digestAlgorithms == NULL || sigd->cmsg == NULL || sigd->cmsg->poolp == NULL) {
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
 	return SECFailure;
     }

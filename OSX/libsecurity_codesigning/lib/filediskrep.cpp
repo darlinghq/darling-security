@@ -110,7 +110,7 @@ const Requirements *FileDiskRep::defaultRequirements(const Architecture *, const
 		buffer[length] = '\0';
 		char *cmd = buffer + 2;
 		cmd[strcspn(cmd, " \t\n\r\f")] = '\0';
-		secdebug("filediskrep", "looks like a script for %s", cmd);
+		secinfo("filediskrep", "looks like a script for %s", cmd);
 		if (cmd[1])
 			try {
 				// find path on disk, get designated requirement (if signed)
@@ -125,7 +125,7 @@ const Requirements *FileDiskRep::defaultRequirements(const Architecture *, const
 							return maker.make();
 						}
 			} catch (...) {
-				secdebug("filediskrep", "exception getting host requirement (ignored)");
+				secinfo("filediskrep", "exception getting host requirement (ignored)");
 			}
 	}
 	return NULL;
@@ -136,7 +136,6 @@ string FileDiskRep::format()
 {
 	return "generic";
 }
-
 
 //
 // FileDiskRep::Writers
@@ -155,13 +154,32 @@ DiskRep::Writer *FileDiskRep::writer()
 void FileDiskRep::Writer::component(CodeDirectory::SpecialSlot slot, CFDataRef data)
 {
 	try {
-		fd().setAttr(attrName(CodeDirectory::canonicalSlotName(slot)),
-			CFDataGetBytePtr(data), CFDataGetLength(data));
+        std::string name = attrName(CodeDirectory::canonicalSlotName(slot));
+		fd().setAttr(name, CFDataGetBytePtr(data), CFDataGetLength(data));
+        mWrittenAttributes.insert(name);
 	} catch (const UnixError &error) {
 		if (error.error == ERANGE)
 			MacOSError::throwMe(errSecCSCMSTooLarge);
 		throw;
 	}
+}
+    
+
+void FileDiskRep::Writer::flush()
+{
+    size_t size = fd().listAttr(NULL, 0);
+    std::vector<char> buffer(size);
+    char *s = &buffer[0];
+    char *end = &buffer[size];
+    fd().listAttr(s, size);
+    while (s < end) {
+        std::string name = s;
+        s += strlen(s) + 1;     // skip to next
+        if (name.compare(0, 13, "com.apple.cs.") == 0)  // one of ours
+            if (mWrittenAttributes.find(name) == mWrittenAttributes.end()) {    // not written by this signing operation
+                fd().removeAttr(name);
+        }
+    }
 }
 
 

@@ -60,7 +60,7 @@ OSStatus SecHostLibInit(SecCSFlags flags);
  */
 OSStatus SecHostLibCreateGuest(SecGuestRef host,
 	uint32_t status, const char *path, const char *attributeXML,
-	SecCSFlags flags, SecGuestRef *newGuest) __attribute__((deprecated));
+	SecCSFlags flags, SecGuestRef *newGuest) DEPRECATED_ATTRIBUTE;
 	
 OSStatus SecHostLibCreateGuest2(SecGuestRef host,
 	uint32_t status, const char *path, const void *cdhash, size_t cdhashLength, const char *attributeXML,

@@ -43,6 +43,9 @@
 #endif
 #endif /* USE_KEYSTORE */
 
+#include <CommonCrypto/CommonCryptor.h>
+#include <CommonCrypto/CommonCryptorSPI.h>
+
 
 /* g_keychain_handle is the keybag handle used for encrypting item in the keychain.
  For testing purposes, it can be set to something other than the default, with SecItemServerSetKeychainKeybag */
@@ -83,11 +86,14 @@ static bool hwaes_key_available(void)
 {
     keybag_handle_t handle = bad_keybag_handle;
     keybag_handle_t special_handle = bad_keybag_handle;
-#if TARGET_OS_MAC && !TARGET_OS_EMBEDDED
+#if TARGET_OS_OSX
     special_handle = session_keybag_handle;
 #elif TARGET_OS_EMBEDDED
     special_handle = device_keybag_handle;
+#else
+#error "supported keybag target"
 #endif
+
     kern_return_t kr = aks_get_system(special_handle, &handle);
     if (kr != kIOReturnSuccess) {
 #if TARGET_OS_EMBEDDED
@@ -129,9 +135,12 @@ bool ks_crypt(CFTypeRef operation, keybag_handle_t keybag,
     
     if (kernResult != KERN_SUCCESS) {
         if ((kernResult == kIOReturnNotPermitted) || (kernResult == kIOReturnNotPrivileged)) {
+            const char *substatus = "";
+            if (keyclass == key_class_ck || keyclass == key_class_cku)
+                substatus = " (hiberation ?)";
             /* Access to item attempted while keychain is locked. */
-            return SecError(errSecInteractionNotAllowed, error, CFSTR("ks_crypt: %x failed to '%@' item (class %"PRId32", bag: %"PRId32") Access to item attempted while keychain is locked."),
-                            kernResult, operation, keyclass, keybag);
+            return SecError(errSecInteractionNotAllowed, error, CFSTR("ks_crypt: %x failed to '%@' item (class %"PRId32", bag: %"PRId32") Access to item attempted while keychain is locked%s."),
+                            kernResult, operation, keyclass, keybag, substatus);
         } else if (kernResult == kIOReturnError) {
             /* Item can't be decrypted on this device, ever, so drop the item. */
             return SecError(errSecDecode, error, CFSTR("ks_crypt: %x failed to '%@' item (class %"PRId32", bag: %"PRId32") Item can't be decrypted on this device, ever, so drop the item."),
@@ -469,3 +478,4 @@ bool ks_close_keybag(keybag_handle_t keybag, CFErrorRef *error) {
 #endif /* USE_KEYSTORE */
     return true;
 }
+

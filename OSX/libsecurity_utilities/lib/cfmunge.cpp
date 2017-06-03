@@ -29,6 +29,7 @@
 #include "cfmunge.h"
 #include <security_utilities/cfutilities.h>
 #include <security_utilities/errors.h>
+#include <utilities/SecCFRelease.h>
 
 namespace Security {
 
@@ -242,7 +243,7 @@ CFTypeRef CFMake::makedictionary()
 	if (add(dict))
 		return dict;
 	else {
-		CFRelease(dict);
+		CFReleaseSafe(dict);
 		return NULL;
 	}
 }
@@ -289,7 +290,18 @@ CFTypeRef CFMake::makearray()
 {
 	++format;	// next '['
 	next('!');	// indicates mutable (currently always)
-	CFMutableArrayRef array = makeCFMutableArray(0);
+	CFMutableArrayRef array = NULL;
+	if (next('+')) { // {+%O, => copy array argument, then proceed
+		if (next('%') && next('O')) {
+			CFArrayRef source = va_arg(args, CFArrayRef);
+			array = CFArrayCreateMutableCopy(allocator, 0, source);
+			if (next('}'))
+				return array;
+		} else
+			return NULL;	// bad syntax
+	} else {
+		array = makeCFMutableArray(0);
+	}
 	while (next() != ']') {
 		CFTypeRef value = make();
 		if (value == NULL) {

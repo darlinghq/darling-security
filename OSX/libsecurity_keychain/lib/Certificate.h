@@ -74,15 +74,16 @@ public:
     const CssmData &data();
     CSSM_CERT_TYPE type();
 	CSSM_CERT_ENCODING encoding();
-	CFDataRef sha1Hash();
+    CFDataRef sha1Hash();
+    CFDataRef sha256Hash();
 	CFStringRef commonName();
 	CFStringRef distinguishedName(const CSSM_OID *sourceOid, const CSSM_OID *componentOid);
 	CFStringRef copyFirstEmailAddress();
 	CFArrayRef copyEmailAddresses();
 	CFArrayRef copyDNSNames();
-    const CSSM_X509_NAME_PTR subjectName();
-    const CSSM_X509_NAME_PTR issuerName();
-	const CSSM_X509_ALGORITHM_IDENTIFIER_PTR algorithmID();
+    CSSM_X509_NAME_PTR subjectName();
+    CSSM_X509_NAME_PTR issuerName();
+	CSSM_X509_ALGORITHM_IDENTIFIER_PTR algorithmID();
    	CSSM_CL_HANDLE clHandle();
 	void inferLabel(bool addLabel, CFStringRef *rtnString = NULL);
 	SecPointer<KeyItem> publicKey();
@@ -140,7 +141,8 @@ private:
 	CSSM_DATA_PTR mV1SubjectPublicKeyCStructValue; // Hack to prevent algorithmID() from leaking.
     CSSM_DATA_PTR mV1SubjectNameCStructValue;
     CSSM_DATA_PTR mV1IssuerNameCStructValue;
-	CFDataRef mSha1Hash;
+    CFDataRef mSha1Hash;
+    CFDataRef mSha256Hash;
 	bool mEncodingVerified;
 };
 

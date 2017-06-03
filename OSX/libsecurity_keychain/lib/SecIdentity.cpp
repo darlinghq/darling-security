@@ -35,6 +35,7 @@
 #include <security_keychain/KCCursor.h>
 #include <security_cdsa_utilities/Schema.h>
 #include <security_utilities/simpleprefs.h>
+#include <utilities/SecCFRelease.h>
 #include <sys/param.h>
 #include <syslog.h>
 
@@ -121,29 +122,52 @@ SecIdentityCopyCertificate(
 {
 	BEGIN_SECAPI
 
-	SecPointer<Certificate> certificatePtr(Identity::required(identityRef)->certificate());
-	Required(certificateRef) = certificatePtr->handle();
+	if (!identityRef || !certificateRef) {
+		return errSecParam;
+	}
+	CFTypeID itemType = CFGetTypeID(identityRef);
+	if (itemType == SecIdentityGetTypeID()) {
+		SecPointer<Certificate> certificatePtr(Identity::required(identityRef)->certificate());
+		Required(certificateRef) = certificatePtr->handle();
 
-#if SECTRUST_OSX
-	/* convert outgoing item to a unified SecCertificateRef */
-	CssmData certData = certificatePtr->data();
-	CFDataRef data = NULL;
-	if (certData.Data && certData.Length) {
-		data = CFDataCreate(NULL, certData.Data, certData.Length);
+		/* convert outgoing certificate item to a unified SecCertificateRef */
+		CssmData certData = certificatePtr->data();
+		CFDataRef data = NULL;
+		if (certData.Data && certData.Length) {
+			data = CFDataCreate(NULL, certData.Data, certData.Length);
+		}
+		if (!data) {
+			*certificateRef = NULL;
+			syslog(LOG_ERR, "ERROR: SecIdentityCopyCertificate failed to retrieve certificate data (length=%ld, data=0x%lX)",
+					(long)certData.Length, (uintptr_t)certData.Data);
+			return errSecInternal;
+		}
+		SecCertificateRef tmpRef = *certificateRef;
+		*certificateRef = SecCertificateCreateWithKeychainItem(NULL, data, tmpRef);
+		if (data) {
+			CFRelease(data);
+		}
+		if (tmpRef) {
+			CFRelease(tmpRef);
+		}
 	}
-	if (!data) {
-		*certificateRef = NULL;
-		syslog(LOG_ERR, "ERROR: SecIdentityCopyCertificate failed to retrieve certificate data (length=%ld, data=0x%lX)",
-			(long)certData.Length, (uintptr_t)certData.Data);
-		return errSecInternal;
+	else if (itemType == SecCertificateGetTypeID()) {
+		// rdar://24483382
+		// reconstituting a persistent identity reference could return the certificate
+		SecCertificateRef certificate = (SecCertificateRef)identityRef;
+
+		/* convert outgoing certificate item to a unified SecCertificateRef, if needed */
+		if (SecCertificateIsItemImplInstance(certificate)) {
+			*certificateRef = SecCertificateCreateFromItemImplInstance(certificate);
+		}
+		else {
+			*certificateRef = (SecCertificateRef) CFRetain(certificate);
+		}
+		return errSecSuccess;
 	}
-	SecCertificateRef tmpRef = *certificateRef;
-	*certificateRef = SecCertificateCreateWithKeychainItem(NULL, data, tmpRef);
-	if (data)
-        CFRelease(data);
-	if (tmpRef)
-        CFRelease(tmpRef);
-#endif
+	else {
+		return errSecParam;
+	}
 
 	END_SECAPI
 }
@@ -156,8 +180,7 @@ SecIdentityCopyPrivateKey(
 {
     BEGIN_SECAPI
 
-	SecPointer<KeyItem> keyItemPtr(Identity::required(identityRef)->privateKey());
-	Required(privateKeyRef) = keyItemPtr->handle();
+	Required(privateKeyRef) = (SecKeyRef)CFRetain(Identity::required(identityRef)->privateKeyRef());
 
     END_SECAPI
 }
@@ -188,11 +211,20 @@ SecIdentityCreate(
 {
 	SecIdentityRef identityRef = NULL;
 	OSStatus __secapiresult;
-	SecCertificateRef __itemImplRef=SecCertificateCreateItemImplInstance(certificate);
+	SecCertificateRef __itemImplRef = NULL;
+	if (SecCertificateIsItemImplInstance(certificate)) {
+		__itemImplRef=(SecCertificateRef)CFRetain(certificate);
+	}
+	if (!__itemImplRef && certificate) {
+		__itemImplRef=(SecCertificateRef)SecCertificateCopyKeychainItem(certificate);
+	}
+	if (!__itemImplRef && certificate) {
+		__itemImplRef=SecCertificateCreateItemImplInstance(certificate);
+		(void)SecCertificateSetKeychainItem(certificate,__itemImplRef);
+	}
 	try {
 		SecPointer<Certificate> certificatePtr(Certificate::required(__itemImplRef));
-		SecPointer<KeyItem> keyItemPtr(KeyItem::required(privateKey));
-		SecPointer<Identity> identityPtr(new Identity(keyItemPtr, certificatePtr));
+		SecPointer<Identity> identityPtr(new Identity(privateKey, certificatePtr));
 		identityRef = identityPtr->handle();
 
 		__secapiresult=errSecSuccess;
@@ -201,6 +233,7 @@ SecIdentityCreate(
 	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
 	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
 	catch (...) { __secapiresult=errSecInternalComponent; }
+	if (__itemImplRef) { CFRelease(__itemImplRef); }
 	return identityRef;
 }
 
@@ -220,19 +253,20 @@ SecIdentityCompare(
 			return kCFCompareGreaterThan;
 	}
 
-	BEGIN_SECAPI
+    try {
+        SecPointer<Identity> id1(Identity::required(identity1));
+        SecPointer<Identity> id2(Identity::required(identity2));
 
-	SecPointer<Identity> id1(Identity::required(identity1));
-	SecPointer<Identity> id2(Identity::required(identity2));
+        if (id1 == id2)
+            return kCFCompareEqualTo;
+        else if (id1 < id2)
+            return kCFCompareLessThan;
+        else
+            return kCFCompareGreaterThan;
+    } catch(...)
+    {}
 
-	if (id1 == id2)
-		return kCFCompareEqualTo;
-	else if (id1 < id2)
-		return kCFCompareLessThan;
-	else
-		return kCFCompareGreaterThan;
-
-	END_SECAPI1(kCFCompareGreaterThan);
+    return kCFCompareGreaterThan;
 }
 
 static
@@ -388,25 +422,12 @@ OSStatus _SecIdentityCopyPreferenceMatchingName(
     }
 
 	// create identity reference, given certificate
-#if SECTRUST_OSX
-    status = SecIdentityCreateWithCertificate(NULL, (SecCertificateRef)certItemRef, identity);
-#else
-    try {
-        Item certItem = ItemImpl::required(SecKeychainItemRef(certItemRef));
-        SecPointer<Certificate> certificate(static_cast<Certificate *>(certItem.get()));
-        SecPointer<Identity> identity_ptr(new Identity(keychains, certificate));
-        if (certItemRef) {
-            CFRelease(certItemRef); // retained by identity
-        }
-        Required(identity) = identity_ptr->handle();
-    }
-    catch (const MacOSError &err)   { status=err.osStatus(); }
-    catch (const CommonError &err)  { status=SecKeychainErrFromOSStatus(err.osStatus()); }
-    catch (const std::bad_alloc &)  { status=errSecAllocate; }
-    catch (...)                     { status=errSecInvalidItemRef; }
-#endif
+	status = SecIdentityCreateWithCertificate(NULL, (SecCertificateRef)certItemRef, identity);
+	if (certItemRef) {
+		CFRelease(certItemRef);
+	}
 
-    return status;
+	return status;
 }
 
 SecIdentityRef SecIdentityCopyPreferred(CFStringRef name, CFArrayRef keyUsage, CFArrayRef validIssuers)
@@ -448,8 +469,8 @@ OSStatus SecIdentityCopyPreference(
     Boolean logging = false;
     if (val && CFGetTypeID(val) == CFBooleanGetTypeID()) {
         logging = CFBooleanGetValue((CFBooleanRef)val);
-        CFRelease(val);
     }
+     CFReleaseNull(val);
 
     OSStatus status = errSecItemNotFound;
     CFArrayRef names = _SecIdentityCopyPossiblePaths(name);
@@ -725,7 +746,7 @@ OSStatus SecIdentityDeletePreferenceItemWithNameAndKeyUsage(
 	// cut things off at that point if we're still finding items (if they can't
 	// be deleted for some reason, we'd never break out of the loop.)
 
-	OSStatus status;
+	OSStatus status = errSecInternalError;
 	SecKeychainItemRef item = NULL;
 	int count = 0, maxUsages = 12;
 	while (++count <= maxUsages &&

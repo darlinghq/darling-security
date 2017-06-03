@@ -29,6 +29,7 @@
 #include <security_utilities/mach++.h>
 #include <Security/cssmapple.h>
 #include <Security/SecBase.h>
+#include <Security/SecBasePriv.h>
 
 namespace Security {
 
@@ -36,12 +37,26 @@ namespace Security {
 CssmError::CssmError(CSSM_RETURN err) : error(err)
 {
     SECURITY_EXCEPTION_THROW_CSSM(this, err);
+
+    snprintf(whatBuffer, whatBufferSize, "CSSM Exception: %d %s", err, cssmErrorString(err));
+    switch(err) {
+        case CSSMERR_CL_UNKNOWN_TAG:
+#ifndef NDEBUG
+            secinfo("security_exception", "%s", what());
+            LogBacktrace();
+#endif
+            break;
+        default:
+            secnotice("security_exception", "%s", what());
+            LogBacktrace();
+            break;
+    }
 }
 
 
 const char *CssmError::what() const throw ()
 {
-	return "CSSM exception";
+    return whatBuffer;
 }
 
 

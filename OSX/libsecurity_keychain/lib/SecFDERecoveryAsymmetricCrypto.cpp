@@ -65,7 +65,7 @@ CFDataRef SecFDERecoveryUnwrapCRSKWithPrivKey(SecKeychainRef keychain, const FVP
 	catch (const CommonError &err) { __secapiresult=SecKeychainErrFromOSStatus(err.osStatus()); }
 	catch (const std::bad_alloc &) { __secapiresult=errSecAllocate; }
 	catch (...) { __secapiresult=errSecInternalComponent; }
-	secdebug("FDERecovery", "SecFDERecoveryUnwrapCRSKWithPrivKey: %d", (int)__secapiresult);
+	secinfo("FDERecovery", "SecFDERecoveryUnwrapCRSKWithPrivKey: %d", (int)__secapiresult);
 	return result;
 }
 
@@ -115,7 +115,7 @@ static void encodePrivateKeyHeader(const CssmData &inBlob, CFDataRef certificate
 	
 	outHeader.encryptedBlobSize = (uint32_t)encrypt.encrypt(inBlob, clearBuf, remData.get());
 	if (outHeader.encryptedBlobSize > sizeof(outHeader.encryptedBlob))
-		secdebug("FDERecovery", "encodePrivateKeyHeader: encrypted blob too big: %d", outHeader.encryptedBlobSize);
+		secinfo("FDERecovery", "encodePrivateKeyHeader: encrypted blob too big: %d", outHeader.encryptedBlobSize);
 }
 
 CFDataRef decodePrivateKeyHeader(SecKeychainRef keychain, const FVPrivateKeyHeader &inHeader)
@@ -136,12 +136,13 @@ CFDataRef decodePrivateKeyHeader(SecKeychainRef keychain, const FVPrivateKeyHead
     CSSM_CC_HANDLE cc = 0;
 	
 	SecKeychainSearchRef _searchRef;
-	throwIfError(SecKeychainSearchCreateFromAttributes(keychain, CSSM_DL_DB_RECORD_PRIVATE_KEY, &attrList, &_searchRef));
+	throwIfError(SecKeychainSearchCreateFromAttributes(keychain, (SecItemClass) CSSM_DL_DB_RECORD_PRIVATE_KEY, &attrList, &_searchRef));
 	CFRef<SecKeychainSearchRef> searchRef(_searchRef);
 	
 	SecKeychainItemRef _item;
-	if (SecKeychainSearchCopyNext(searchRef, &_item))
-		return false;
+    if (SecKeychainSearchCopyNext(searchRef, &_item) != 0) {
+		return NULL;  // XXX possibly should throw here?
+    }
 	
 	CFRef<SecKeyRef> keyItem(reinterpret_cast<SecKeyRef>(_item));
 	throwIfError(SecKeyGetCSPHandle(keyItem, &cspHandle));
@@ -160,8 +161,8 @@ CFDataRef decodePrivateKeyHeader(SecKeychainRef keychain, const FVPrivateKeyHead
 		CssmAutoData clearBuf(allocator);
 		CssmAutoData remData(allocator);
 		size_t bytesDecrypted;
-		CSSM_RETURN crx = CSSM_DecryptData(cc, &cipherBuf, 1, &clearBuf.get(), 1, (CSSM_SIZE*)&bytesDecrypted, &remData.get());
-		secdebug("FDERecovery", "decodePrivateKeyHeader: CSSM_DecryptData result: %d", crx);
+		CSSM_RETURN crx = CSSM_DecryptData(cc, &cipherBuf, 1, &clearBuf.get(), 1, &bytesDecrypted, &remData.get());
+		secinfo("FDERecovery", "decodePrivateKeyHeader: CSSM_DecryptData result: %d", crx);
 		throwIfError(crx);
 //		throwIfError(CSSM_DecryptData(cc, &cipherBuf, 1, &clearBuf.get(), 1, &bytesDecrypted, &remData.get()));
 		clearBuf.length(bytesDecrypted);

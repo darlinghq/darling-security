@@ -32,7 +32,7 @@
 #include <security_utilities/threading.h>
 #include <security_utilities/mach++.h>
 #include <security_utilities/unix++.h>
-#include <ocspd.h>			/* MIG interface */
+#include <security_ocspd/ocspd.h>			/* MIG interface */
 #include <Security/SecBase.h>
 class ocspdGlobals
 {

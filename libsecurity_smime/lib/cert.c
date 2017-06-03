@@ -567,7 +567,7 @@ SECStatus CERT_ImportCerts(SecKeychainRef keychain, SECCertUsage usage, unsigned
 	    rv = SecCertificateAddToKeychain(cert, keychain);
 	    if (rv)
 	    {
-		if (rv == errSecDuplicateItem)
+		if (rv == errKCDuplicateItem)
 		    rv = errSecSuccess;
 		else
 		{

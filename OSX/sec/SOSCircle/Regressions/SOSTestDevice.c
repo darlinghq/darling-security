@@ -31,6 +31,7 @@
 #include <Security/SecureObjectSync/SOSCloudCircle.h>
 #include <Security/SecureObjectSync/SOSEngine.h>
 #include <Security/SecureObjectSync/SOSPeer.h>
+#include <Security/SecureObjectSync/SOSViews.h>
 #include <Security/SecBase64.h>
 #include <Security/SecItem.h>
 #include <Security/SecItemPriv.h>
@@ -75,7 +76,9 @@ void SOSTestDeviceDestroyEngine(CFMutableDictionaryRef testDevices) {
     CFArrayForEach(deviceIDs, ^(const void *value) {
         CFStringRef sourceID = (CFStringRef)value;
         SOSTestDeviceRef source = (SOSTestDeviceRef)CFDictionaryGetValue(testDevices, sourceID);
-        SOSEngineClearCache(SOSDataSourceGetSharedEngine(source->ds, NULL));
+        SOSEngineRef engine = SOSDataSourceGetSharedEngine(source->ds, NULL);
+        SOSEngineClearCache(engine);
+        SOSEngineDispose(engine);
     });
 }
 
@@ -146,11 +149,14 @@ SOSTestDeviceRef SOSTestDeviceCreateWithDbNamed(CFAllocatorRef allocator, CFStri
     return td;
 }
 
-SOSTestDeviceRef SOSTestDeviceCreateWithTestDataSource(CFAllocatorRef allocator, CFStringRef engineID) {
+SOSTestDeviceRef SOSTestDeviceCreateWithTestDataSource(CFAllocatorRef allocator, CFStringRef engineID,
+                                                       void(^prepop)(SOSDataSourceRef ds)) {
     setup("create device");
     SOSTestDeviceRef td = SOSTestDeviceCreateInternal(allocator, engineID);
 
     td->ds = SOSTestDataSourceCreate();
+    if (prepop)
+        prepop(td->ds);
     CFErrorRef error = NULL;
     ok(td->ds->engine = SOSEngineCreate(td->ds, &error), "create engine: %@", error);
     SOSEngineCircleChanged(td->ds->engine, engineID, NULL, NULL);
@@ -158,14 +164,14 @@ SOSTestDeviceRef SOSTestDeviceCreateWithTestDataSource(CFAllocatorRef allocator,
     return td;
 }
 
+
 CFSetRef SOSViewsCopyTestV0Default() {
     const void *values[] = { kSOSViewKeychainV0 };
     return CFSetCreate(kCFAllocatorDefault, values, array_size(values), &kCFTypeSetCallBacks);
 }
 
-CFSetRef SOSViewsCopyTestV2Default() {
-    const void *values[] = { kSOSViewWiFi, kSOSViewAutofillPasswords, kSOSViewSafariCreditCards, kSOSViewiCloudIdentity, kSOSViewBackupBagV0, kSOSViewOtherSyncable, kSOSViewPCSMasterKey, kSOSViewPCSiCloudDrive, kSOSViewPCSPhotos, kSOSViewPCSCloudKit, kSOSViewPCSEscrow, kSOSViewPCSFDE, kSOSViewPCSMailDrop, kSOSViewPCSiCloudBackup, kSOSViewPCSNotes, kSOSViewPCSiMessage, kSOSViewPCSFeldspar, kSOSViewAppleTV, kSOSViewHomeKit };
-    return CFSetCreate(kCFAllocatorDefault, values, array_size(values), &kCFTypeSetCallBacks);
+CFSetRef SOSViewsCopyTestV2Default() { // this was originally listing all the views - not just the defaults - but those used to be the default.  So we'll programatically get all - the actual test depends on that.
+    return SOSViewCopyViewSet(kViewSetAll);
 }
 
 SOSTestDeviceRef SOSTestDeviceSetPeerIDs(SOSTestDeviceRef td, CFArrayRef peerIDs, CFIndex version, CFSetRef defaultViews) {
@@ -220,6 +226,30 @@ SOSTestDeviceRef SOSTestDeviceSetMute(SOSTestDeviceRef td, bool mute) {
 
 bool SOSTestDeviceIsMute(SOSTestDeviceRef td) {
     return td->mute;
+}
+
+bool SOSTestDeviceSetEngineState(SOSTestDeviceRef td, CFDataRef derEngineState) {
+    CFErrorRef localError = NULL;
+    SOSTestEngineSaveWithDER(td->ds->engine, derEngineState, &localError);
+    return true;
+}
+
+bool SOSTestDeviceEngineSave(SOSTestDeviceRef td, CFErrorRef *error) {
+    __block bool rx = false;
+    if (!SOSDataSourceWithAPI(td->ds, true, error, ^(SOSTransactionRef txn, bool *commit) {
+        rx = SOSTestEngineSave(td->ds->engine, txn, error);
+    }))
+        fail("ds transaction %@", error ? *error : NULL);
+    return rx;
+}
+
+bool SOSTestDeviceEngineLoad(SOSTestDeviceRef td, CFErrorRef *error) {
+    __block bool rx = false;
+    if (!SOSDataSourceWithAPI(td->ds, true, error, ^(SOSTransactionRef txn, bool *commit) {
+        rx = SOSTestEngineLoad(td->ds->engine, txn, error);
+    }))
+        fail("ds transaction %@", error ? *error : NULL);
+    return rx;
 }
 
 CFDataRef SOSTestDeviceCreateMessage(SOSTestDeviceRef td, CFStringRef peerID) {
@@ -341,14 +371,32 @@ bool SOSTestDeviceAddGenericItems(SOSTestDeviceRef td, CFIndex count, CFStringRe
     return didAdd;
 }
 
-CFMutableDictionaryRef SOSTestDeviceListCreate(bool realDb, CFIndex version, CFArrayRef deviceIDs) {
+void SOSTestDeviceAddV0EngineStateWithData(SOSDataSourceRef ds, CFDataRef engineStateData) {
+    __block CFErrorRef error = NULL;
+    const CFStringRef kSOSEngineState = CFSTR("engine-state");
+
+    if (!SOSDataSourceWithAPI(ds, true, &error, ^(SOSTransactionRef txn, bool *commit) {
+        SOSObjectRef object = SOSDataSourceCreateV0EngineStateWithData(ds, engineStateData);
+
+        // Note that state doesn't use SOSDataSourceMergeObject
+        SOSDataSourceSetStateWithKey(ds, txn, kSOSEngineState, kSecAttrAccessibleAlwaysPrivate, engineStateData, &error);
+        CFReleaseSafe(object);
+        CFReleaseNull(error);
+    }))
+        fail("ds transaction %@", error);
+
+    CFReleaseNull(error);
+}
+
+CFMutableDictionaryRef SOSTestDeviceListCreate(bool realDb, CFIndex version, CFArrayRef deviceIDs,
+                                               void(^prepop)(SOSDataSourceRef ds)) {
     CFMutableDictionaryRef testDevices = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
     CFStringRef deviceID;
     CFSetRef defaultViews = realDb ? SOSViewsCopyTestV2Default() : SOSViewsCopyTestV0Default();
     CFArrayForEachC(deviceIDs, deviceID) {
         SOSTestDeviceRef device;
         if (!realDb) {
-            device = SOSTestDeviceCreateWithTestDataSource(kCFAllocatorDefault, deviceID);
+            device = SOSTestDeviceCreateWithTestDataSource(kCFAllocatorDefault, deviceID, prepop);
         } else {
             device = SOSTestDeviceCreateWithDbNamed(kCFAllocatorDefault, deviceID, deviceID);
         }
@@ -470,7 +518,7 @@ void SOSTestDeviceListTestSync(const char *name, const char *test_directive, con
     va_start(args, post);
     // Optionally prefix each peer with name to make them more unique.
     CFArrayRef deviceIDs = CFArrayCreateForVC(kCFAllocatorDefault, &kCFTypeArrayCallBacks, args);
-    CFMutableDictionaryRef testDevices = SOSTestDeviceListCreate(use_db, version, deviceIDs);
+    CFMutableDictionaryRef testDevices = SOSTestDeviceListCreate(use_db, version, deviceIDs, NULL);
     CFReleaseSafe(deviceIDs);
     SOSTestDeviceListSync(name, test_directive, test_reason, testDevices, pre, post);
     SOSTestDeviceListInSync(name, test_directive, test_reason, testDevices);
