@@ -48,6 +48,9 @@
 #error "unknown keystore status for this platform"
 #endif
 
+#undef TARGET_HAS_KEYSTORE
+#define TARGET_HAS_KEYSTORE 0
+
 #if !TARGET_HAS_KEYSTORE
 
 #include <IOKit/IOReturn.h>

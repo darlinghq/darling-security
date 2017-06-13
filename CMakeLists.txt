@@ -6,4 +6,11 @@ add_definitions(
 	-DOSSPINLOCK_USE_INLINED=0
 )
 
+include_directories(
+	${CMAKE_CURRENT_SOURCE_DIR}/keychain
+	${CMAKE_CURRENT_SOURCE_DIR}/base
+	${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_asn1
+	${CMAKE_CURRENT_SOURCE_DIR}/trust
+)
+
 add_subdirectory(OSX)

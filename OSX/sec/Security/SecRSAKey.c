@@ -548,8 +548,8 @@ static CFTypeRef SecRSAPrivateKeyCopyOperationResult(SecKeyRef key, SecKeyOperat
 
                     // Encrypt buffer and write it to output data.
                     result = CFDataCreateMutableWithScratch(kCFAllocatorDefault, ccrsa_block_size(ccrsa_ctx_public(fullkey)));
-                    ccerr = ccrsa_priv_crypt(fullkey, (cc_unit *)CFDataGetMutableBytePtr((CFMutableDataRef)result),
-                                             (const cc_unit *)CFDataGetBytePtr(in1));
+                    //ccerr = ccrsa_priv_crypt(fullkey, (cc_unit *)CFDataGetMutableBytePtr((CFMutableDataRef)result),
+                    //                         (const cc_unit *)CFDataGetBytePtr(in1));
                 } else {
                     // Operation is supported.
                     result = kCFBooleanTrue;
@@ -561,8 +561,8 @@ static CFTypeRef SecRSAPrivateKeyCopyOperationResult(SecKeyRef key, SecKeyOperat
                 if (mode == kSecKeyOperationModePerform) {
                     // Decrypt buffer and write it to output data.
                     result = CFDataCreateMutableWithScratch(NULL, ccrsa_block_size(fullkey));
-                    ccerr = ccrsa_priv_crypt(fullkey, (cc_unit *)CFDataGetMutableBytePtr((CFMutableDataRef)result),
-                                             (const cc_unit *)CFDataGetBytePtr(in1));
+                    //ccerr = ccrsa_priv_crypt(fullkey, (cc_unit *)CFDataGetMutableBytePtr((CFMutableDataRef)result),
+                      //                       (const cc_unit *)CFDataGetBytePtr(in1));
                 } else {
                     // Operation is supported.
                     result = kCFBooleanTrue;
