@@ -17,6 +17,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/OSX/utilities
 	${CMAKE_CURRENT_SOURCE_DIR}/OSX/utilities/src
 	${CMAKE_CURRENT_SOURCE_DIR}/trust
+	${CMAKE_CURRENT_SOURCE_DIR}/internal-include
 )
 
 add_subdirectory(OSX)

@@ -30,7 +30,7 @@
 #include "AppleCSPContext.h"
 #include "AppleCSPUtils.h"
 #include "AppleCSPKeys.h"
-#include "RSA_DSA_Keys.h"
+#include "RSA_DSA_keys.h"
 #include "opensshCoding.h"
 #include "cspdebugging.h"
 #include <CommonCrypto/CommonDigest.h>
