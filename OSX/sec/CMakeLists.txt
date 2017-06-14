@@ -2,6 +2,10 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/ipc
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/SecureObjectSync
+	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/CKBridge
+	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/Tool
+	${CMAKE_CURRENT_SOURCE_DIR}/Security
+	${CMAKE_CURRENT_SOURCE_DIR}/securityd
 )
 
 add_definitions(
@@ -20,6 +24,87 @@ add_library(libSecOtrOSX OBJECT
 	Security/SecOTRUtils.c
 )
 make_fat(libSecOtrOSX)
+
+add_library(libSecureObjectSync OBJECT
+	SOSCircle/Tool/accountCirclesViewsPrint.c
+	SOSCircle/SecureObjectSync/SOSBackupInformation.c
+	SOSCircle/SecureObjectSync/SOSAccount.c
+	SOSCircle/SecureObjectSync/SOSAccountBackup.c
+	SOSCircle/SecureObjectSync/SOSAccountCircles.c
+	SOSCircle/SecureObjectSync/SOSAccountSync.c
+	SOSCircle/SecureObjectSync/SOSAccountCloudParameters.c
+	SOSCircle/SecureObjectSync/SOSAccountCredentials.c
+	SOSCircle/SecureObjectSync/SOSAccountDer.c
+	SOSCircle/SecureObjectSync/SOSKeyedPubKeyIdentifier.c
+	SOSCircle/SecureObjectSync/SOSAccountFullPeerInfo.c
+	SOSCircle/SecureObjectSync/SOSAccountHSAJoin.c
+	SOSCircle/SecureObjectSync/SOSAccountLog.c
+	SOSCircle/SecureObjectSync/SOSAccountPeers.c
+	SOSCircle/SecureObjectSync/SOSAccountPersistence.c
+	SOSCircle/SecureObjectSync/SOSAccountRingUpdate.c
+	SOSCircle/SecureObjectSync/SOSAccountRings.c
+	SOSCircle/SecureObjectSync/SOSRingRecovery.c
+	SOSCircle/SecureObjectSync/SOSAccountTransaction.c
+	SOSCircle/SecureObjectSync/SOSAccountUpdate.c
+	SOSCircle/SecureObjectSync/SOSAccountViewSync.c
+	SOSCircle/SecureObjectSync/SOSBackupEvent.c
+	SOSCircle/SecureObjectSync/SOSBackupSliceKeyBag.c
+	SOSCircle/SecureObjectSync/SOSCircle.c
+	SOSCircle/SecureObjectSync/SOSCircleDer.c
+	SOSCircle/SecureObjectSync/SOSCircleV2.c
+	SOSCircle/CKBridge/SOSCloudKeychainConstants.c
+	SOSCircle/CKBridge/SOSCloudKeychainClient.c
+	SOSCircle/SecureObjectSync/SOSCoder.c
+	SOSCircle/SecureObjectSync/SOSDigestVector.c
+	SOSCircle/SecureObjectSync/SOSECWrapUnwrap.c
+	SOSCircle/SecureObjectSync/SOSFullPeerInfo.c
+	SOSCircle/SecureObjectSync/SOSGenCount.c
+	SOSCircle/SecureObjectSync/SOSInternal.c
+	SOSCircle/SecureObjectSync/SOSKVSKeys.c
+	SOSCircle/SecureObjectSync/SOSManifest.c
+	SOSCircle/SecureObjectSync/SOSMessage.c
+	SOSCircle/SecureObjectSync/SOSPeer.c
+	SOSCircle/SecureObjectSync/SOSPeerCoder.c
+	SOSCircle/SecureObjectSync/SOSPeerInfo.c
+	SOSCircle/SecureObjectSync/SOSPeerInfoCollections.c
+	SOSCircle/SecureObjectSync/SOSPeerInfoDER.c
+	SOSCircle/SecureObjectSync/SOSRecoveryKeyBag.c
+	SOSCircle/SecureObjectSync/SOSPeerInfoRingState.c
+	SOSCircle/SecureObjectSync/SOSPeerInfoSecurityProperties.c
+	SOSCircle/SecureObjectSync/SOSPeerInfoV2.c
+	SOSCircle/SecureObjectSync/SOSAccountGhost.c
+	SOSCircle/SecureObjectSync/SOSRingBackup.c
+	SOSCircle/SecureObjectSync/SOSAccountGetSet.c
+	SOSCircle/SecureObjectSync/SOSRingBasic.c
+	SOSCircle/SecureObjectSync/SOSRingConcordanceTrust.c
+	Security/SecRecoveryKey.m
+	SOSCircle/SecureObjectSync/SOSRingDER.c
+	SOSCircle/SecureObjectSync/SOSAccountRecovery.c
+	SOSCircle/SecureObjectSync/SOSRingPeerInfoUtils.c
+	SOSCircle/SecureObjectSync/SOSRingTypes.c
+	SOSCircle/SecureObjectSync/SOSRingUtils.c
+	SOSCircle/SecureObjectSync/SOSRingV0.c
+	SOSCircle/SecureObjectSync/SOSSysdiagnose.c
+	SOSCircle/SecureObjectSync/SOSTransport.c
+	SOSCircle/SecureObjectSync/SOSTransportBackupPeer.c
+	SOSCircle/SecureObjectSync/SOSTransportCircle.c
+	SOSCircle/SecureObjectSync/SOSTransportCircleKVS.c
+	SOSCircle/SecureObjectSync/SOSTransportKeyParameter.c
+	SOSCircle/SecureObjectSync/SOSTransportKeyParameterKVS.c
+	SOSCircle/SecureObjectSync/SOSTransportMessage.c
+	SOSCircle/SecureObjectSync/SOSTransportMessageIDS.c
+	SOSCircle/SecureObjectSync/SOSTransportMessageKVS.c
+	SOSCircle/SecureObjectSync/SOSUserKeygen.c
+	SOSCircle/SecureObjectSync/SOSViews.c
+	SOSCircle/Tool/secToolFileIO.c
+	SOSCircle/Tool/secViewDisplay.c
+)
+make_fat(libSecureObjectSync)
+
+add_library(liblogging OBJECT
+	Security/SecLogging.c
+)
+make_fat(liblogging)
 
 add_definitions(
 	-DECITEM_SHIM_OSX=1
@@ -63,3 +148,7 @@ add_library(libSecTrustOSX OBJECT
 )
 make_fat(libSecTrustOSX)
 
+add_library(libsecipc_client OBJECT
+	ipc/client.c
+)
+make_fat(libsecipc_client)
