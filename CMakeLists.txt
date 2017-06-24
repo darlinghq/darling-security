@@ -1,9 +1,14 @@
 project(Security)
 
 add_compile_options(
+	-nostdinc
+	-nostdinc++
 	-Wno-gcc-compat
 	-Wno-ignored-attributes
+	-Wno-unused-command-line-argument
+	-Wno-c++11-extensions
 )
+
 add_definitions(
 	-DNDEBUG=1
 	-D__KEYCHAINCORE__=1

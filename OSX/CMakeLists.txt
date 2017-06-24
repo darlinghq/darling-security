@@ -1,3 +1,4 @@
 add_subdirectory(libsecurity_asn1)
 add_subdirectory(sec)
 add_subdirectory(libsecurity_apple_csp)
+add_subdirectory(libsecurity_apple_cspdl)
