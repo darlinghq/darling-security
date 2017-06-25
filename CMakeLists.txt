@@ -1,5 +1,7 @@
 project(Security)
 
+set(CMAKE_CXX_STANDARD 14)
+
 add_compile_options(
 	-nostdinc
 	-nostdinc++
