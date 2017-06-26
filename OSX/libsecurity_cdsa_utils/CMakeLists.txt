@@ -1,0 +1,15 @@
+include_directories(
+	${CMAKE_CURRENT_SOURCE_DIR}/lib
+)
+
+add_library(libsecurity_cdsa_utils OBJECT
+	lib/cuPem.cpp
+	lib/cuEnc64.c
+	lib/cuCdsaUtils.cpp
+	lib/cuDbUtils.cpp
+	lib/cuOidParser.cpp
+	lib/cuPrintCert.cpp
+	lib/cuTimeStr.cpp
+	lib/cuFileIo.c
+)
+make_fat(libsecurity_cdsa_utils)
