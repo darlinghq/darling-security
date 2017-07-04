@@ -9,6 +9,7 @@ add_compile_options(
 	-Wno-ignored-attributes
 	-Wno-unused-command-line-argument
 	-Wno-c++11-extensions
+	-Wno-error=c++11-narrowing
 )
 
 add_definitions(
@@ -23,6 +24,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_asn1
 	${CMAKE_CURRENT_SOURCE_DIR}/OSX/utilities
 	${CMAKE_CURRENT_SOURCE_DIR}/OSX/utilities/src
+	${CMAKE_CURRENT_SOURCE_DIR}/sectask
 	${CMAKE_CURRENT_SOURCE_DIR}/trust
 	${CMAKE_CURRENT_SOURCE_DIR}/internal-include
 )
