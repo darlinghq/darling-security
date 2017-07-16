@@ -4,7 +4,7 @@ include_directories(
 
 add_library(libsecurity_authorization OBJECT
 	lib/trampolineServer.cpp
-	lib/Authorization.cpp
+	lib/Authorization++.cpp
 	lib/Authorization.c
 	../authd/authutilities.c
 	lib/trampolineClient.cpp

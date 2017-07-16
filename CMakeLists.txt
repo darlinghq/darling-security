@@ -19,6 +19,10 @@ add_definitions(
 )
 
 include_directories(
+	${CMAKE_CURRENT_SOURCE_DIR}/OSX/trustd
+	${CMAKE_CURRENT_SOURCE_DIR}/OSX/authd
+	${CMAKE_CURRENT_SOURCE_DIR}/OSX/security_dotmac_tp/lib
+	${CMAKE_CURRENT_SOURCE_DIR}/cssm
 	${CMAKE_CURRENT_SOURCE_DIR}/keychain
 	${CMAKE_CURRENT_SOURCE_DIR}/base
 	${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_asn1
@@ -27,6 +31,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/sectask
 	${CMAKE_CURRENT_SOURCE_DIR}/trust
 	${CMAKE_CURRENT_SOURCE_DIR}/internal-include
+	${CMAKE_CURRENT_SOURCE_DIR}/gen/include
 )
 
 add_subdirectory(OSX)

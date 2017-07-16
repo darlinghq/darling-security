@@ -25,7 +25,7 @@ add_library(libsecurity_cryptkit OBJECT
 	lib/feeRandom.c
 	lib/giantIntegers.c
 	lib/giantPort_PPC.c
-	lib/giantPort_PPC_Gnu.s
+	lib/giantPort_PPC_Gnu.S
 	lib/platform.c
 )
 make_fat(libsecurity_cryptkit)
