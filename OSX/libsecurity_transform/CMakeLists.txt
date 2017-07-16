@@ -1,0 +1,36 @@
+add_definitions(
+	-DCOM_APPLE_SECURITY_SANE_INCLUDES
+)
+
+add_library(libsecurity_transform OBJECT
+	lib/c++utils.cpp
+	lib/Source.cpp
+	lib/EncryptTransform.cpp
+	lib/SecSignVerifyTransform.c
+	lib/GroupTransform.cpp
+	lib/SecCustomTransform.cpp
+	lib/SecExternalSourceTransform.cpp
+	lib/StreamSource.cpp
+	lib/SecGroupTransform.cpp
+	lib/misc.c
+	lib/SecEncryptTransform.cpp
+	lib/Digest.cpp
+	lib/SecMaskGenerationFunctionTransform.c
+	lib/LinkedList.cpp
+	lib/CoreFoundationBasics.cpp
+	lib/SingleShotSource.cpp
+	lib/CEncryptDecrypt.c
+	lib/SecNullTransform.cpp
+	lib/NullTransform.cpp
+	lib/EncodeDecodeTransforms.c
+	lib/SecTransform.cpp
+	lib/Transform.cpp
+	lib/TransformFactory.cpp
+	lib/EncryptTransformUtilities.cpp
+	lib/SecTransformReadTransform.cpp
+	lib/Monitor.cpp
+	lib/SecDigestTransform.cpp
+	lib/SecCollectTransform.cpp
+	lib/Utilities.cpp
+)
+make_fat(libsecurity_transform)

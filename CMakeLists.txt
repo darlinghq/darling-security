@@ -19,6 +19,7 @@ add_definitions(
 )
 
 include_directories(
+	${CMAKE_CURRENT_SOURCE_DIR}/securityd/securityd_service/KeyStore
 	${CMAKE_CURRENT_SOURCE_DIR}/OSX/trustd
 	${CMAKE_CURRENT_SOURCE_DIR}/OSX/authd
 	${CMAKE_CURRENT_SOURCE_DIR}/OSX/security_dotmac_tp/lib

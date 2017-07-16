@@ -85,3 +85,13 @@ add_library(libsecurity_keychain OBJECT
 	lib/tsaDERUtilities.c
 )
 make_fat(libsecurity_keychain)
+
+add_library(libsecurity_keychain_DER OBJECT
+	libDER/libDER/DER_Decode.c
+	libDER/libDER/DER_Encode.c
+	libDER/libDER/DER_Keys.c
+	libDER/libDER/DER_Digest.c
+	libDER/libDER/oids.c
+	libDER/libDER/DER_CertCrl.c
+)
+make_fat(libsecurity_keychain_DER)
