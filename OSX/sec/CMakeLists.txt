@@ -25,7 +25,7 @@ add_library(libSecOtrOSX OBJECT
 )
 make_fat(libSecOtrOSX)
 
-add_library(libSecureObjectSync OBJECT
+add_darling_static_library(libSecureObjectSync
 	SOSCircle/Tool/accountCirclesViewsPrint.c
 	SOSCircle/SecureObjectSync/SOSBackupInformation.c
 	SOSCircle/SecureObjectSync/SOSAccount.c
@@ -99,7 +99,7 @@ add_library(libSecureObjectSync OBJECT
 	SOSCircle/Tool/secToolFileIO.c
 	SOSCircle/Tool/secViewDisplay.c
 )
-make_fat(libSecureObjectSync)
+#make_fat(libSecureObjectSync)
 
 add_library(liblogging OBJECT
 	Security/SecLogging.c
@@ -110,7 +110,7 @@ add_definitions(
 	-DECITEM_SHIM_OSX=1
 )
 
-add_library(libSecItemShimOSX OBJECT
+add_darling_static_library(libSecItemShimOSX
 	Security/SecItemBackup.c
 	Security/SecKeyAdaptors.c
 	Security/SecCFAllocator.c
@@ -126,9 +126,9 @@ add_library(libSecItemShimOSX OBJECT
 	Security/SecItemConstants.c
 	Security/SecPasswordGenerate.c
 )
-make_fat(libSecItemShimOSX)
+#make_fat(libSecItemShimOSX)
 
-add_library(libSecTrustOSX OBJECT
+add_darling_static_library(libSecTrustOSX
 	Security/SecCertificateRequest.c
 	Security/SecCertificate.c
 	Security/SecDigest.c
@@ -146,7 +146,7 @@ add_library(libSecTrustOSX OBJECT
 	../utilities/src/SecInternalRelease.c
 	Security/SecSignatureVerificationSupport.c
 )
-make_fat(libSecTrustOSX)
+#make_fat(libSecTrustOSX)
 
 add_library(libsecipc_client OBJECT
 	ipc/client.c

@@ -3,7 +3,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/libDER
 )
 
-add_library(libsecurity_keychain OBJECT
+add_darling_static_library(libsecurity_keychain
 	lib/ACL.cpp
 	lib/Access.cpp
 	lib/CCallbackMgr.cp
@@ -84,7 +84,34 @@ add_library(libsecurity_keychain OBJECT
 	lib/defaultcreds.cpp
 	lib/tsaDERUtilities.c
 )
-make_fat(libsecurity_keychain)
+set(auto_sources
+	Admin.cpp
+	auto_gdb_interface.cpp
+	auto_impl_utilities.c
+	auto_weak.cpp
+	auto_zone.cpp
+	Bitmap.cpp
+	BlockRef.cpp
+	ClearStack.cpp
+	Definitions.cpp
+	Environment.cpp
+	InUseEnumerator.cpp
+	Large.cpp
+	PointerHash.cpp
+	Region.cpp
+	Subzone.cpp
+	SubzonePartition.cpp
+	Thread.cpp
+	ThreadLocalCollector.cpp
+	WriteBarrier.cpp
+	ZoneCollectionChecking.cpp
+	ZoneCollectors.cpp
+	ZoneCompaction.cpp
+	Zone.cpp
+	ZoneDump.cpp
+)
+
+#make_fat(libsecurity_keychain)
 
 add_library(libsecurity_keychain_DER OBJECT
 	libDER/libDER/DER_Decode.c

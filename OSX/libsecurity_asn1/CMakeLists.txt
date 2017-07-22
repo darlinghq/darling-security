@@ -2,7 +2,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-add_library(libsecurity_asn1 OBJECT
+add_darling_static_library(libsecurity_asn1
 	lib/X509Templates.c
 	lib/keyTemplates.c
 	lib/SecAsn1Templates.c
@@ -27,4 +27,4 @@ add_library(libsecurity_asn1 OBJECT
 	lib/SecAsn1Coder.c
 	lib/secasn1u.c
 )
-make_fat(libsecurity_asn1)
+#make_fat(libsecurity_asn1)

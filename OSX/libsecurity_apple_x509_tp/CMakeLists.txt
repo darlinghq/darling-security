@@ -2,7 +2,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/lib
 )
 
-add_library(libsecurity_apple_x509_tp OBJECT
+add_darling_static_library(libsecurity_apple_x509_tp
 	lib/TPDatabase.cpp
 	lib/TPCertInfo.cpp
 	lib/AppleTP.cpp
@@ -22,4 +22,4 @@ add_library(libsecurity_apple_x509_tp OBJECT
 	lib/tpOcspCertVfy.cpp
 	lib/tpCredRequest.cpp
 )
-make_fat(libsecurity_apple_x509_tp)
+#make_fat(libsecurity_apple_x509_tp)

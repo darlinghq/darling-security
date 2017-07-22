@@ -16,6 +16,7 @@ add_definitions(
 	-DNDEBUG=1
 	-D__KEYCHAINCORE__=1
 	-DOSSPINLOCK_USE_INLINED=0
+	-DDTRACE_PROBES_DISABLED
 )
 
 include_directories(

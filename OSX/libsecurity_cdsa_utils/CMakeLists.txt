@@ -2,7 +2,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/lib
 )
 
-add_library(libsecurity_cdsa_utils OBJECT
+add_darling_static_library(libsecurity_cdsa_utils
 	lib/cuPem.cpp
 	lib/cuEnc64.c
 	lib/cuCdsaUtils.cpp
@@ -12,4 +12,4 @@ add_library(libsecurity_cdsa_utils OBJECT
 	lib/cuTimeStr.cpp
 	lib/cuFileIo.c
 )
-make_fat(libsecurity_cdsa_utils)
+#make_fat(libsecurity_cdsa_utils)
