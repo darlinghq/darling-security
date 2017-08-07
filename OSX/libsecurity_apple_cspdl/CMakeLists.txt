@@ -9,16 +9,16 @@ add_definitions(
 	-DASC_CSP_ENABLE
 )
 
-add_library(libsecurity_apple_cspdl OBJECT
-	lib/SSCSPSession.cpp
-	lib/SSDLSession.cpp
-	lib/SSKey.cpp
-	lib/SSContext.cpp
-	lib/SSCSPDLSession.cpp
-	lib/CSPDLPlugin.cpp
-	lib/SSDatabase.cpp
-	lib/CSPDLDatabase.cpp
-	lib/SSFactory.cpp
-	lib/AppleCSPDLBuiltin.cpp
+add_darling_static_library(security_apple_cspdl FAT
+	SOURCES
+		lib/SSCSPSession.cpp
+		lib/SSDLSession.cpp
+		lib/SSKey.cpp
+		lib/SSContext.cpp
+		lib/SSCSPDLSession.cpp
+		lib/CSPDLPlugin.cpp
+		lib/SSDatabase.cpp
+		lib/CSPDLDatabase.cpp
+		lib/SSFactory.cpp
+		lib/AppleCSPDLBuiltin.cpp
 )
-make_fat(libsecurity_apple_cspdl)

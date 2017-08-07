@@ -2,29 +2,29 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-add_darling_static_library(libsecurity_asn1
-	lib/X509Templates.c
-	lib/keyTemplates.c
-	lib/SecAsn1Templates.c
-	lib/osKeyTemplates.c
-	lib/nsprPortX.c
-	lib/nameTemplates.c
-	lib/pkcs7Templates.c
-	lib/plarena.c
-	lib/secasn1e.c
-	lib/SecNssCoder.cpp
-	lib/oidsalg.c
-	lib/ocspTemplates.c
-	lib/certExtensionTemplates.c
-	lib/secport.c
-	lib/nssUtils.c
-	lib/pkcs12Templates.c
-	lib/csrTemplates.c
-	lib/oidsattr.c
-	lib/secErrorStr.c
-	lib/oidsocsp.c
-	lib/secasn1d.c
-	lib/SecAsn1Coder.c
-	lib/secasn1u.c
+add_darling_static_library(security_asn1 FAT
+	SOURCES
+		lib/X509Templates.c
+		lib/keyTemplates.c
+		lib/SecAsn1Templates.c
+		lib/osKeyTemplates.c
+		lib/nsprPortX.c
+		lib/nameTemplates.c
+		lib/pkcs7Templates.c
+		lib/plarena.c
+		lib/secasn1e.c
+		lib/SecNssCoder.cpp
+		lib/oidsalg.c
+		lib/ocspTemplates.c
+		lib/certExtensionTemplates.c
+		lib/secport.c
+		lib/nssUtils.c
+		lib/pkcs12Templates.c
+		lib/csrTemplates.c
+		lib/oidsattr.c
+		lib/secErrorStr.c
+		lib/oidsocsp.c
+		lib/secasn1d.c
+		lib/SecAsn1Coder.c
+		lib/secasn1u.c
 )
-#make_fat(libsecurity_asn1)

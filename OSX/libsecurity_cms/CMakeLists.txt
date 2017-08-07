@@ -1,6 +1,6 @@
-add_library(libsecurity_cms OBJECT
-	lib/CMSDecoder.cpp
-	lib/CMSEncoder.cpp
-	lib/CMSUtils.cpp
+add_darling_static_library(security_cms FAT
+	SOURCES
+		lib/CMSDecoder.cpp
+		lib/CMSEncoder.cpp
+		lib/CMSUtils.cpp
 )
-make_fat(libsecurity_cms)

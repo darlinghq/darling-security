@@ -2,28 +2,28 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/lib
 )
 
-add_library(libsecurity_cdsa_client OBJECT
-	lib/dlclient.cpp
-	lib/mdsclient.cpp
-	lib/tpclient.cpp
-	lib/cssmclient.cpp
-	lib/cryptoclient.cpp
-	lib/aclclient.cpp
-	lib/DLDBList.cpp
-	lib/clclient.cpp
-	lib/signclient.cpp
-	lib/genkey.cpp
-	lib/macclient.cpp
-	lib/wrapkey.cpp
-	lib/keychainacl.cpp
-	lib/dliterators.cpp
-	lib/mds_standard.cpp
-	lib/dl_standard.cpp
-	lib/securestorage.cpp
-	lib/keyclient.cpp
-	lib/dlquery.cpp
-	lib/cspclient.cpp
-	lib/dlclientpriv.cpp
-	lib/multidldb.cpp
+add_darling_static_library(security_cdsa_client FAT
+	SOURCES
+		lib/dlclient.cpp
+		lib/mdsclient.cpp
+		lib/tpclient.cpp
+		lib/cssmclient.cpp
+		lib/cryptoclient.cpp
+		lib/aclclient.cpp
+		lib/DLDBList.cpp
+		lib/clclient.cpp
+		lib/signclient.cpp
+		lib/genkey.cpp
+		lib/macclient.cpp
+		lib/wrapkey.cpp
+		lib/keychainacl.cpp
+		lib/dliterators.cpp
+		lib/mds_standard.cpp
+		lib/dl_standard.cpp
+		lib/securestorage.cpp
+		lib/keyclient.cpp
+		lib/dlquery.cpp
+		lib/cspclient.cpp
+		lib/dlclientpriv.cpp
+		lib/multidldb.cpp
 )
-make_fat(libsecurity_cdsa_client)

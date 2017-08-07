@@ -12,143 +12,143 @@ add_definitions(
 	-DSEC_IOS_ON_OSX=1
 )
 
-add_library(libSecOtrOSX OBJECT
-	Security/SecOTRDHKey.c
-	Security/SecOTRFullIdentity.c
-	Security/SecOTRMath.c
-	Security/SecOTRPacketData.c
-	Security/SecOTRPackets.c
-	Security/SecOTRPublicIdentity.c
-	Security/SecOTRSession.c
-	Security/SecOTRSessionAKE.c
-	Security/SecOTRUtils.c
+add_darling_static_library(SecOtrOSX FAT
+	SOURCES
+		Security/SecOTRDHKey.c
+		Security/SecOTRFullIdentity.c
+		Security/SecOTRMath.c
+		Security/SecOTRPacketData.c
+		Security/SecOTRPackets.c
+		Security/SecOTRPublicIdentity.c
+		Security/SecOTRSession.c
+		Security/SecOTRSessionAKE.c
+		Security/SecOTRUtils.c
 )
-make_fat(libSecOtrOSX)
 
-add_darling_static_library(libSecureObjectSync
-	SOSCircle/Tool/accountCirclesViewsPrint.c
-	SOSCircle/SecureObjectSync/SOSBackupInformation.c
-	SOSCircle/SecureObjectSync/SOSAccount.c
-	SOSCircle/SecureObjectSync/SOSAccountBackup.c
-	SOSCircle/SecureObjectSync/SOSAccountCircles.c
-	SOSCircle/SecureObjectSync/SOSAccountSync.c
-	SOSCircle/SecureObjectSync/SOSAccountCloudParameters.c
-	SOSCircle/SecureObjectSync/SOSAccountCredentials.c
-	SOSCircle/SecureObjectSync/SOSAccountDer.c
-	SOSCircle/SecureObjectSync/SOSKeyedPubKeyIdentifier.c
-	SOSCircle/SecureObjectSync/SOSAccountFullPeerInfo.c
-	SOSCircle/SecureObjectSync/SOSAccountHSAJoin.c
-	SOSCircle/SecureObjectSync/SOSAccountLog.c
-	SOSCircle/SecureObjectSync/SOSAccountPeers.c
-	SOSCircle/SecureObjectSync/SOSAccountPersistence.c
-	SOSCircle/SecureObjectSync/SOSAccountRingUpdate.c
-	SOSCircle/SecureObjectSync/SOSAccountRings.c
-	SOSCircle/SecureObjectSync/SOSRingRecovery.c
-	SOSCircle/SecureObjectSync/SOSAccountTransaction.c
-	SOSCircle/SecureObjectSync/SOSAccountUpdate.c
-	SOSCircle/SecureObjectSync/SOSAccountViewSync.c
-	SOSCircle/SecureObjectSync/SOSBackupEvent.c
-	SOSCircle/SecureObjectSync/SOSBackupSliceKeyBag.c
-	SOSCircle/SecureObjectSync/SOSCircle.c
-	SOSCircle/SecureObjectSync/SOSCircleDer.c
-	SOSCircle/SecureObjectSync/SOSCircleV2.c
-	SOSCircle/CKBridge/SOSCloudKeychainConstants.c
-	SOSCircle/CKBridge/SOSCloudKeychainClient.c
-	SOSCircle/SecureObjectSync/SOSCoder.c
-	SOSCircle/SecureObjectSync/SOSDigestVector.c
-	SOSCircle/SecureObjectSync/SOSECWrapUnwrap.c
-	SOSCircle/SecureObjectSync/SOSFullPeerInfo.c
-	SOSCircle/SecureObjectSync/SOSGenCount.c
-	SOSCircle/SecureObjectSync/SOSInternal.c
-	SOSCircle/SecureObjectSync/SOSKVSKeys.c
-	SOSCircle/SecureObjectSync/SOSManifest.c
-	SOSCircle/SecureObjectSync/SOSMessage.c
-	SOSCircle/SecureObjectSync/SOSPeer.c
-	SOSCircle/SecureObjectSync/SOSPeerCoder.c
-	SOSCircle/SecureObjectSync/SOSPeerInfo.c
-	SOSCircle/SecureObjectSync/SOSPeerInfoCollections.c
-	SOSCircle/SecureObjectSync/SOSPeerInfoDER.c
-	SOSCircle/SecureObjectSync/SOSRecoveryKeyBag.c
-	SOSCircle/SecureObjectSync/SOSPeerInfoRingState.c
-	SOSCircle/SecureObjectSync/SOSPeerInfoSecurityProperties.c
-	SOSCircle/SecureObjectSync/SOSPeerInfoV2.c
-	SOSCircle/SecureObjectSync/SOSAccountGhost.c
-	SOSCircle/SecureObjectSync/SOSRingBackup.c
-	SOSCircle/SecureObjectSync/SOSAccountGetSet.c
-	SOSCircle/SecureObjectSync/SOSRingBasic.c
-	SOSCircle/SecureObjectSync/SOSRingConcordanceTrust.c
-	Security/SecRecoveryKey.m
-	SOSCircle/SecureObjectSync/SOSRingDER.c
-	SOSCircle/SecureObjectSync/SOSAccountRecovery.c
-	SOSCircle/SecureObjectSync/SOSRingPeerInfoUtils.c
-	SOSCircle/SecureObjectSync/SOSRingTypes.c
-	SOSCircle/SecureObjectSync/SOSRingUtils.c
-	SOSCircle/SecureObjectSync/SOSRingV0.c
-	SOSCircle/SecureObjectSync/SOSSysdiagnose.c
-	SOSCircle/SecureObjectSync/SOSTransport.c
-	SOSCircle/SecureObjectSync/SOSTransportBackupPeer.c
-	SOSCircle/SecureObjectSync/SOSTransportCircle.c
-	SOSCircle/SecureObjectSync/SOSTransportCircleKVS.c
-	SOSCircle/SecureObjectSync/SOSTransportKeyParameter.c
-	SOSCircle/SecureObjectSync/SOSTransportKeyParameterKVS.c
-	SOSCircle/SecureObjectSync/SOSTransportMessage.c
-	SOSCircle/SecureObjectSync/SOSTransportMessageIDS.c
-	SOSCircle/SecureObjectSync/SOSTransportMessageKVS.c
-	SOSCircle/SecureObjectSync/SOSUserKeygen.c
-	SOSCircle/SecureObjectSync/SOSViews.c
-	SOSCircle/Tool/secToolFileIO.c
-	SOSCircle/Tool/secViewDisplay.c
+add_darling_static_library(SecureObjectSync FAT
+	SOURCES
+		SOSCircle/Tool/accountCirclesViewsPrint.c
+		SOSCircle/SecureObjectSync/SOSBackupInformation.c
+		SOSCircle/SecureObjectSync/SOSAccount.c
+		SOSCircle/SecureObjectSync/SOSAccountBackup.c
+		SOSCircle/SecureObjectSync/SOSAccountCircles.c
+		SOSCircle/SecureObjectSync/SOSAccountSync.c
+		SOSCircle/SecureObjectSync/SOSAccountCloudParameters.c
+		SOSCircle/SecureObjectSync/SOSAccountCredentials.c
+		SOSCircle/SecureObjectSync/SOSAccountDer.c
+		SOSCircle/SecureObjectSync/SOSKeyedPubKeyIdentifier.c
+		SOSCircle/SecureObjectSync/SOSAccountFullPeerInfo.c
+		SOSCircle/SecureObjectSync/SOSAccountHSAJoin.c
+		SOSCircle/SecureObjectSync/SOSAccountLog.c
+		SOSCircle/SecureObjectSync/SOSAccountPeers.c
+		SOSCircle/SecureObjectSync/SOSAccountPersistence.c
+		SOSCircle/SecureObjectSync/SOSAccountRingUpdate.c
+		SOSCircle/SecureObjectSync/SOSAccountRings.c
+		SOSCircle/SecureObjectSync/SOSRingRecovery.c
+		SOSCircle/SecureObjectSync/SOSAccountTransaction.c
+		SOSCircle/SecureObjectSync/SOSAccountUpdate.c
+		SOSCircle/SecureObjectSync/SOSAccountViewSync.c
+		SOSCircle/SecureObjectSync/SOSBackupEvent.c
+		SOSCircle/SecureObjectSync/SOSBackupSliceKeyBag.c
+		SOSCircle/SecureObjectSync/SOSCircle.c
+		SOSCircle/SecureObjectSync/SOSCircleDer.c
+		SOSCircle/SecureObjectSync/SOSCircleV2.c
+		SOSCircle/CKBridge/SOSCloudKeychainConstants.c
+		SOSCircle/CKBridge/SOSCloudKeychainClient.c
+		SOSCircle/SecureObjectSync/SOSCoder.c
+		SOSCircle/SecureObjectSync/SOSDigestVector.c
+		SOSCircle/SecureObjectSync/SOSECWrapUnwrap.c
+		SOSCircle/SecureObjectSync/SOSFullPeerInfo.c
+		SOSCircle/SecureObjectSync/SOSGenCount.c
+		SOSCircle/SecureObjectSync/SOSInternal.c
+		SOSCircle/SecureObjectSync/SOSKVSKeys.c
+		SOSCircle/SecureObjectSync/SOSManifest.c
+		SOSCircle/SecureObjectSync/SOSMessage.c
+		SOSCircle/SecureObjectSync/SOSPeer.c
+		SOSCircle/SecureObjectSync/SOSPeerCoder.c
+		SOSCircle/SecureObjectSync/SOSPeerInfo.c
+		SOSCircle/SecureObjectSync/SOSPeerInfoCollections.c
+		SOSCircle/SecureObjectSync/SOSPeerInfoDER.c
+		SOSCircle/SecureObjectSync/SOSRecoveryKeyBag.c
+		SOSCircle/SecureObjectSync/SOSPeerInfoRingState.c
+		SOSCircle/SecureObjectSync/SOSPeerInfoSecurityProperties.c
+		SOSCircle/SecureObjectSync/SOSPeerInfoV2.c
+		SOSCircle/SecureObjectSync/SOSAccountGhost.c
+		SOSCircle/SecureObjectSync/SOSRingBackup.c
+		SOSCircle/SecureObjectSync/SOSAccountGetSet.c
+		SOSCircle/SecureObjectSync/SOSRingBasic.c
+		SOSCircle/SecureObjectSync/SOSRingConcordanceTrust.c
+		Security/SecRecoveryKey.m
+		SOSCircle/SecureObjectSync/SOSRingDER.c
+		SOSCircle/SecureObjectSync/SOSAccountRecovery.c
+		SOSCircle/SecureObjectSync/SOSRingPeerInfoUtils.c
+		SOSCircle/SecureObjectSync/SOSRingTypes.c
+		SOSCircle/SecureObjectSync/SOSRingUtils.c
+		SOSCircle/SecureObjectSync/SOSRingV0.c
+		SOSCircle/SecureObjectSync/SOSSysdiagnose.c
+		SOSCircle/SecureObjectSync/SOSTransport.c
+		SOSCircle/SecureObjectSync/SOSTransportBackupPeer.c
+		SOSCircle/SecureObjectSync/SOSTransportCircle.c
+		SOSCircle/SecureObjectSync/SOSTransportCircleKVS.c
+		SOSCircle/SecureObjectSync/SOSTransportKeyParameter.c
+		SOSCircle/SecureObjectSync/SOSTransportKeyParameterKVS.c
+		SOSCircle/SecureObjectSync/SOSTransportMessage.c
+		SOSCircle/SecureObjectSync/SOSTransportMessageIDS.c
+		SOSCircle/SecureObjectSync/SOSTransportMessageKVS.c
+		SOSCircle/SecureObjectSync/SOSUserKeygen.c
+		SOSCircle/SecureObjectSync/SOSViews.c
+		SOSCircle/Tool/secToolFileIO.c
+		SOSCircle/Tool/secViewDisplay.c
 )
-#make_fat(libSecureObjectSync)
 
-add_library(liblogging OBJECT
-	Security/SecLogging.c
+add_darling_static_library(logging FAT
+	SOURCES
+		Security/SecLogging.c
 )
-make_fat(liblogging)
 
 add_definitions(
-	-DECITEM_SHIM_OSX=1
+	-DSECITEM_SHIM_OSX=1
 )
 
-add_darling_static_library(libSecItemShimOSX
-	Security/SecItemBackup.c
-	Security/SecKeyAdaptors.c
-	Security/SecCFAllocator.c
-	Security/SecItem.c
-	Security/SecRSAKey.c
-	Security/SecDH.c
-	Security/SecCTKKey.c
-	SOSCircle/SecureObjectSync/SOSCloudCircle.c
-	Security/SecAccessControl.c
-	Security/SecKey.c
-	Security/SecuritydXPC.c
-	Security/SecECKey.c
-	Security/SecItemConstants.c
-	Security/SecPasswordGenerate.c
+add_darling_static_library(SecItemShimOSX FAT
+	SOURCES
+		Security/SecItemBackup.c
+		Security/SecKeyAdaptors.c
+		Security/SecCFAllocator.c
+		Security/SecItem.c
+		Security/SecRSAKey.c
+		Security/SecDH.c
+		Security/SecCTKKey.c
+		SOSCircle/SecureObjectSync/SOSCloudCircle.c
+		Security/SecAccessControl.c
+		Security/SecKey.c
+		Security/SecuritydXPC.c
+		Security/SecECKey.c
+		Security/SecItemConstants.c
+		Security/SecPasswordGenerate.c
 )
-#make_fat(libSecItemShimOSX)
 
-add_darling_static_library(libSecTrustOSX
-	Security/SecCertificateRequest.c
-	Security/SecCertificate.c
-	Security/SecDigest.c
-	Security/SecBase64.c
-	Security/SecCertificatePath.c
-	Security/SecKey.c
-	Security/SecKeyAdaptors.c
-	Security/SecPolicy.c
-	Security/SecPolicyLeafCallbacks.c
-	Security/SecTrust.c
-	Security/SecTrustStore.c
-	Security/SecECKey.c
-	Security/SecRSAKey.c
-	Security/SecServerEncryptionSupport.c
-	../utilities/src/SecInternalRelease.c
-	Security/SecSignatureVerificationSupport.c
+add_darling_static_library(SecTrustOSX FAT
+	SOURCES
+		Security/SecCertificateRequest.c
+		Security/SecCertificate.c
+		Security/SecDigest.c
+		Security/SecBase64.c
+		Security/SecCertificatePath.c
+		Security/SecKey.c
+		Security/SecKeyAdaptors.c
+		Security/SecPolicy.c
+		Security/SecPolicyLeafCallbacks.c
+		Security/SecTrust.c
+		Security/SecTrustStore.c
+		Security/SecECKey.c
+		Security/SecRSAKey.c
+		Security/SecServerEncryptionSupport.c
+		../utilities/src/SecInternalRelease.c
+		Security/SecSignatureVerificationSupport.c
 )
-#make_fat(libSecTrustOSX)
 
-add_library(libsecipc_client OBJECT
-	ipc/client.c
+add_darling_static_library(secipc_client FAT
+	SOURCES
+		ipc/client.c
 )
-make_fat(libsecipc_client)

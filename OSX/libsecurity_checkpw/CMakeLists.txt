@@ -1,4 +1,4 @@
-add_library(libsecurity_checkpw OBJECT
-	lib/checkpw.c
+add_darling_static_library(security_checkpw FAT
+	SOURCES
+		lib/checkpw.c
 )
-make_fat(libsecurity_checkpw)

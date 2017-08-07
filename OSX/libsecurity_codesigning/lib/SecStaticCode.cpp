@@ -222,7 +222,7 @@ OSStatus SecCodeMapMemory(SecStaticCodeRef codeRef, SecCSFlags flags)
 	checkFlags(flags);
 	SecPointer<SecStaticCode> code = SecStaticCode::requiredStatic(codeRef);
 	if (const CodeDirectory *cd = code->codeDirectory(false)) {
-		fsignatures args = { code->diskRep()->signingBase(), (void *)cd, cd->length() };
+		fsignatures args = { static_cast<off_t>(code->diskRep()->signingBase()), (void *)cd, cd->length() };
 		UnixError::check(::fcntl(code->diskRep()->fd(), F_ADDSIGS, &args));
 	} else
 		MacOSError::throwMe(errSecCSUnsigned);

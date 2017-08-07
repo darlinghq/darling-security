@@ -3,14 +3,15 @@ project(Security)
 set(CMAKE_CXX_STANDARD 14)
 
 add_compile_options(
-	-nostdinc
-	-nostdinc++
 	-Wno-gcc-compat
 	-Wno-ignored-attributes
-	-Wno-unused-command-line-argument
+	#-Wno-unused-command-line-argument
 	-Wno-c++11-extensions
 	-Wno-error=c++11-narrowing
 )
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -nostdinc")
 
 add_definitions(
 	-DNDEBUG=1
