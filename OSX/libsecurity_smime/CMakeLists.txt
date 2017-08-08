@@ -2,6 +2,8 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/lib
 )
 
+add_definitions(-DcmsSimpleContentInfoTemplate=SecCmsContentInfoTemplate)
+
 add_darling_static_library(security_smime FAT
 	SOURCES
 		lib/cert.c

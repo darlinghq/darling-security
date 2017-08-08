@@ -43,6 +43,7 @@
 #include <Security/SecAccessControl.h>
 #include <Security/SecAccessControlPriv.h>
 #include <securityd/SecItemSchema.h>
+#include <ACMDefs.h>
 
 // MARK: type converters
 

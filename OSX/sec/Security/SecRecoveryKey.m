@@ -13,6 +13,7 @@
 #import <AssertMacros.h>
 
 #import <Security/SecureObjectSync/SOSCloudCircle.h>
+#import <Foundation/NSObject.h>
 
 #import "SecCFAllocator.h"
 #import "SecPasswordGenerate.h"

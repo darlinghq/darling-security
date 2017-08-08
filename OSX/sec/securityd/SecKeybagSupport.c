@@ -42,6 +42,7 @@
 #include <MobileKeyBag/MobileKeyBag.h>
 #endif
 #endif /* USE_KEYSTORE */
+#include <ACMDefs.h>
 
 #include <CommonCrypto/CommonCryptor.h>
 #include <CommonCrypto/CommonCryptorSPI.h>

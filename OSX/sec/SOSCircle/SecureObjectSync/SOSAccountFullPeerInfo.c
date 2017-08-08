@@ -61,7 +61,7 @@ static SecKeyRef GeneratePermanentFullECKey_internal(int keySize, CFStringRef na
                                                                      kSecAttrKeySizeInBits,  key_size_num,
                                                                      kSecPrivateKeyAttrs,    priv_key_attrs,
                                                                      kSecAttrAccessible,     accessibility,
-                                                                     kSecAttrAccessGroup,    kSOSInternalAccessGroup,
+                                                                     kSecAttrAccessGroup,    CFSTR("com.apple.security.sos") /* kSOSInternalAccessGroup */,
                                                                      kSecAttrLabel,          name,
                                                                      kSecAttrSynchronizable, sync,
                                                                      kSecUseTombstones,      kCFBooleanTrue,

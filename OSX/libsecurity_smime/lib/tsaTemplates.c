@@ -42,7 +42,7 @@ typedef struct {
 } SimpleContentInfo;
 
 // SecCmsContentInfoTemplate
-static const SecAsn1Template cmsSimpleContentInfoTemplate[] = {
+/*static*/ const SecAsn1Template cmsSimpleContentInfoTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(SimpleContentInfo) },
     { SEC_ASN1_OBJECT_ID, offsetof(SimpleContentInfo, contentType) },
     { SEC_ASN1_EXPLICIT | SEC_ASN1_CONSTRUCTED | SEC_ASN1_CONTEXT_SPECIFIC | 0,

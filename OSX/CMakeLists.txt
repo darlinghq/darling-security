@@ -56,6 +56,9 @@ add_framework(Security
 		xar
 		sqlite3
 		CoreFoundation
+		CryptoTokenKit
+		IOKit
+		SystemConfiguration
 
 		# Static libraries
 		security_asn1	
@@ -82,7 +85,7 @@ add_framework(Security
 		security_cryptkit
 		security_cssm
 		security_filedb
-		#security_keychain
+		security_keychain
 		security_keychain_DER
 		security_manifest
 		security_mds
@@ -95,7 +98,8 @@ add_framework(Security
 		security_translocate
 		security_utilities
 		securityd_client
+		securityd
 		utilities
 )
 
-set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-undefined,dynamic_lookup")
+set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip -Wl,-undefined,dynamic_lookup")

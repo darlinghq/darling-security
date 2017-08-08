@@ -6,10 +6,48 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/SOSCircle/Tool
 	${CMAKE_CURRENT_SOURCE_DIR}/Security
 	${CMAKE_CURRENT_SOURCE_DIR}/securityd
+	${CMAKE_CURRENT_SOURCE_DIR}/SharedWebCredential
 )
 
 add_definitions(
 	-DSEC_IOS_ON_OSX=1
+	-DNO_SERVER=1
+	-DOS_STATE_API_REQUEST=1
+	-DOS_STATE_DATA_PROTOCOL_BUFFER=1
+)
+
+add_darling_static_library(securityd FAT
+	SOURCES
+		securityd/asynchttp.c
+		securityd/iCloudTrace.c
+		securityd/nameconstraints.c
+		securityd/OTATrustUtilities.c
+		securityd/personalization.c
+		securityd/policytree.c
+		securityd/SecCAIssuerCache.c
+		securityd/SecCAIssuerRequest.c
+		securityd/SecCertificateSource.c
+		securityd/SecDbItem.c
+		securityd/SecDbKeychainItem.c
+		securityd/SecDbQuery.c
+		securityd/SecItemBackupServer.c
+		securityd/SecItemDataSource.c
+		securityd/SecItemDb.c
+		securityd/SecItemSchema.c
+		securityd/SecItemServer.c
+		securityd/SecKeybagSupport.c
+		securityd/SecLogSettingsServer.c
+		securityd/SecOCSPCache.c
+		securityd/SecOCSPRequest.c
+		securityd/SecOCSPResponse.c
+		securityd/SecOTRRemote.c
+		securityd/SecPolicyServer.c
+		securityd/SecRevocationDb.c
+		securityd/SecTrustLoggingServer.c
+		securityd/SecTrustServer.c
+		securityd/SecTrustStoreServer.c
+		securityd/SOSCloudCircleServer.c
+		securityd/spi.c
 )
 
 add_darling_static_library(SecOtrOSX FAT
@@ -56,7 +94,9 @@ add_darling_static_library(SecureObjectSync FAT
 		SOSCircle/CKBridge/SOSCloudKeychainConstants.c
 		SOSCircle/CKBridge/SOSCloudKeychainClient.c
 		SOSCircle/SecureObjectSync/SOSCoder.c
+		SOSCircle/SecureObjectSync/SOSChangeTracker.c
 		SOSCircle/SecureObjectSync/SOSDigestVector.c
+		SOSCircle/SecureObjectSync/SOSEngine.c
 		SOSCircle/SecureObjectSync/SOSECWrapUnwrap.c
 		SOSCircle/SecureObjectSync/SOSFullPeerInfo.c
 		SOSCircle/SecureObjectSync/SOSGenCount.c
