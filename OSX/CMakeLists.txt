@@ -55,7 +55,7 @@ add_framework(Security
 		z
 		xar
 		sqlite3
-		CoreFoundation
+		${CoreFoundation}
 		CryptoTokenKit
 		IOKit
 		SystemConfiguration
