@@ -1653,3 +1653,7 @@ _SecRKCopyBackupPublicKey
 _SecRKCopyBackupFullKey
 _SecRKRegisterBackupPublicKey
 _SecRKCreateRecoveryKeyString
+
+// Not standard but CFNetwork wants them
+_cuDec64
+_cuEnc64

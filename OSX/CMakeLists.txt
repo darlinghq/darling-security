@@ -102,4 +102,4 @@ add_framework(Security
 		utilities
 )
 
-set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip -Wl,-undefined,dynamic_lookup")
+set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip -Wl,-undefined,dynamic_lookup -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in")
