@@ -37,4 +37,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/gen/include
 )
 
+# Security.framework
 add_subdirectory(OSX)
+# securityd
+add_subdirectory(securityd)
