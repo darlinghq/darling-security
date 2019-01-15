@@ -25,3 +25,9 @@ add_darling_static_library(securityd_client FAT
 		mig/cshostingClient.cpp
 		mig/cshostingServer.cpp
 )
+
+add_darling_static_library(securityd_server FAT
+	SOURCES
+		mig/ucspNotifyReceiver.cpp
+		mig/ucspServer.cpp
+)

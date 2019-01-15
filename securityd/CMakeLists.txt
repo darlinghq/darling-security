@@ -1,3 +1,5 @@
+add_subdirectory(securityd_service)
+
 set(MIG_USER_SOURCE_SUFFIX "User.cpp")
 set(MIG_SERVER_SOURCE_SUFFIX "Server.cpp")
 
@@ -7,8 +9,10 @@ mig(mig/self.defs
 
 include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
+	${CMAKE_CURRENT_SOURCE_DIR}/src
 	${CMAKE_CURRENT_BINARY_DIR}/mig
 	${CMAKE_CURRENT_SOURCE_DIR}/../OSX/libsecurityd/lib
+	${CMAKE_CURRENT_SOURCE_DIR}/../../SecurityTokend/lib
 )
 
 add_darling_executable(securityd_exe
@@ -56,10 +60,10 @@ add_darling_executable(securityd_exe
 make_fat(securityd_exe)
 target_link_libraries(securityd_exe sqlite3 z auto objc DiagnosticMessagesClient security_codesigning
 	security_utilities securityd_client securityd_server security_cdsa_utilities security_cdsa_client
-	bsm utilities IOKit CoreFoundation Security security_tokend_client)
+	bsm.0 utilities IOKit CoreFoundation Security security_tokend_client securitydservice_client)
 
 set_target_properties(securityd_exe PROPERTIES OUTPUT_NAME "securityd")
 
-# TODO: Permissions
+# TODO: Permissions, suid/whatever
 install(TARGETS securityd_exe DESTINATION /usr/sbin/securityd)
 install(FILES securityd/etc/com.apple.securityd.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
