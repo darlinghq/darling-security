@@ -60,10 +60,12 @@ add_darling_executable(securityd_exe
 make_fat(securityd_exe)
 target_link_libraries(securityd_exe sqlite3 z auto objc DiagnosticMessagesClient security_codesigning
 	security_utilities securityd_client securityd_server security_cdsa_utilities security_cdsa_client
-	bsm.0 utilities IOKit CoreFoundation Security security_tokend_client securitydservice_client)
+	bsm.0 utilities IOKit CoreFoundation Security security_tokend_client securitydservice_client PCSC)
 
 set_target_properties(securityd_exe PROPERTIES OUTPUT_NAME "securityd")
 
+set_property(TARGET securityd_exe APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip ")
+
 # TODO: Permissions, suid/whatever
-install(TARGETS securityd_exe DESTINATION /usr/sbin/securityd)
-install(FILES securityd/etc/com.apple.securityd.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
+install(TARGETS securityd_exe DESTINATION libexec/darling/usr/sbin)
+install(FILES etc/com.apple.securityd.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
