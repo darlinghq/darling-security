@@ -333,7 +333,11 @@ static bool doesFileExist(
 	
 	/* it's there...how does it look? */
 	mode_t fileType = sb.st_mode & S_IFMT;
+#ifndef DARLING
 	if((fileType == S_IFREG) && (sb.st_uid == forUid)) {
+#else
+        if(fileType == S_IFREG) {
+#endif
 		return true;
 	}
 	if(!purge) {
