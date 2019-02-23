@@ -61,11 +61,11 @@ add_framework(Security
 		SystemConfiguration
 
 		# Static libraries
-		security_asn1	
+		security_asn1
 		SecItemShimOSX
 		SecOtrOSX
 		SecTrustOSX
-		SecureObjectSync	
+		SecureObjectSync
 		logging
 		secipc_client
 		security_apple_csp
@@ -100,6 +100,29 @@ add_framework(Security
 		securityd_client
 		securityd
 		utilities
+	RESOURCES
+		cssm.mdsinfo			libsecurity_cssm/mds/cssm.mdsinfo
+		sd_cspdl_common.mdsinfo		libsecurity_sd_cspdl/mds/sd_cspdl_common.mdsinfo
+		tp_primary.mdsinfo		libsecurity_apple_x509_tp/mds/tp_primary.mdsinfo
+		tp_common.mdsinfo		libsecurity_apple_x509_tp/mds/tp_common.mdsinfo
+		tp_policyOids.mdsinfo		libsecurity_apple_x509_tp/mds/tp_policyOids.mdsinfo
+		cl_primary.mdsinfo		libsecurity_apple_x509_cl/mds/cl_primary.mdsinfo
+		cl_common.mdsinfo		libsecurity_apple_x509_cl/mds/cl_common.mdsinfo
+		csp_capabilities_common.mds	libsecurity_apple_csp/mds/csp_capabilities_common.mds
+		csp_capabilities.mdsinfo	libsecurity_apple_csp/mds/csp_capabilities.mdsinfo
+		csp_common.mdsinfo		libsecurity_apple_csp/mds/csp_common.mdsinfo
+		csp_primary.mdsinfo		libsecurity_apple_csp/mds/csp_primary.mdsinfo
+		cspdl_csp_capabilities.mdsinfo	libsecurity_apple_cspdl/mds/cspdl_csp_capabilities.mdsinfo
+		cspdl_common.mdsinfo		libsecurity_apple_cspdl/mds/cspdl_common.mdsinfo
+		cspdl_csp_primary.mdsinfo	libsecurity_apple_cspdl/mds/cspdl_csp_primary.mdsinfo
+		cspdl_dl_primary.mdsinfo	libsecurity_apple_cspdl/mds/cspdl_dl_primary.mdsinfo
+		dl_primary.mdsinfo		libsecurity_apple_file_dl/mds/dl_primary.mdsinfo
+		dl_common.mdsinfo		libsecurity_apple_file_dl/mds/dl_common.mdsinfo
+
+		#dotmac_tp_primary.mdsinfo	security_dotmac_tp/mds/dotmac_tp_primary.mdsinfo
+		#dotmac_policyOids.mdsinfo	security_dotmac_tp/mds/dotmac_policyOids.mdsinfo
+		#dotmac_tp_common.mdsinfo	security_dotmac_tp/mds/dotmac_tp_common.mdsinfo
+
 )
 
 set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip -Wl,-undefined,dynamic_lookup -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/../SEC_MANUAL.exp")
