@@ -127,6 +127,7 @@ IOPowerWatcher::setupDarkWake()
 IOPowerWatcher::IOPowerWatcher() :
     mKernelPort(0), mIOPMconn(NULL), mIOPMqueue(NULL), mDarkWakeGroup(NULL), mUserActiveHandle(NULL)
 {
+#ifndef DARLING
 	if (!(mKernelPort = ::IORegisterForSystemPower(this, &mPortRef, ioCallback, &mHandle)))
 		UnixError::throwMe(EINVAL);	// no clue
 
@@ -140,6 +141,7 @@ IOPowerWatcher::IOPowerWatcher() :
 	mDarkWakeGroup = dispatch_group_create();
 	dispatch_group_enter(mDarkWakeGroup);
 	dispatch_async(mIOPMqueue, ^ { setupDarkWake(); });
+#endif
 }
 
 IOPowerWatcher::~IOPowerWatcher()
@@ -239,7 +241,9 @@ void IOPowerWatcher::ioCallback(void *refCon, io_service_t service,
 //
 PortPowerWatcher::PortPowerWatcher()
 {
+#ifndef DARLING
     port(IONotificationPortGetMachPort(mPortRef));
+#endif
 }
 
 boolean_t PortPowerWatcher::handle(mach_msg_header_t *in)

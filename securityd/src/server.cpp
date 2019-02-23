@@ -58,8 +58,10 @@ Server::Server(CodeSignatures &signatures, const char *bootstrapName)
 	// make me eternal (in the object mesh)
 	ref();
 
+#ifndef DARLING
     // engage the subsidiary port handler for sleep notifications
 	add(sleepWatcher);
+#endif
 }
 
 
