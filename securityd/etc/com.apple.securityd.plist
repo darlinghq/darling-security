@@ -23,7 +23,7 @@
 		</dict>
 	</dict>
 	<key>RunAtLoad</key>
-	<true/>
+	<false/>
 	<key>LaunchOnlyOnce</key>
 	<false/>
 	<key>BeginTransactionAtShutdown</key>
