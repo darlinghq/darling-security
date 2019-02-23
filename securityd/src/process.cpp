@@ -40,7 +40,7 @@
 // Construct a Process object.
 //
 Process::Process(TaskPort taskPort,	const ClientSetupInfo *info, const CommonCriteria::AuditToken &audit)
- :  mTaskPort(taskPort), mByteFlipped(false), mPid(audit.pid()), mUid(audit.euid()), mGid(audit.egid())
+ :  mTaskPort(taskPort), mByteFlipped(false), mPid(mTaskPort.pid()), mUid(0), mGid(0)
 {
 	StLock<Mutex> _(*this);
 	

@@ -51,6 +51,7 @@ AuditMonitor::~AuditMonitor()
 //
 void AuditMonitor::action()
 {
+#ifndef DARLING
 	au_sdev_handle_t *dev = au_sdev_open(AU_SDEVF_ALLSESSIONS);
 	int event;
 	auditinfo_addr_t aia;
@@ -69,4 +70,7 @@ void AuditMonitor::action()
 		if (kern_return_t rc = self_client_handleSession(mRelay, mach_task_self(), event, aia.ai_asid))
 			Syslog::error("self-send failed (mach error %d)", rc);
 	}
+#else
+	for (;;) pause();
+#endif
 }
