@@ -41,3 +41,5 @@ include_directories(
 add_subdirectory(OSX)
 # securityd
 add_subdirectory(securityd)
+
+install(DIRECTORY DESTINATION libexec/darling/System/Library/Security)
