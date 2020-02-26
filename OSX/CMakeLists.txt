@@ -59,6 +59,8 @@ add_framework(Security
 		CryptoTokenKit
 		IOKit
 		SystemConfiguration
+		LocalAuthentication
+		DiagnosticMessagesClient
 
 		# Static libraries
 		security_asn1
@@ -100,6 +102,7 @@ add_framework(Security
 		securityd_client
 		securityd
 		utilities
+		aks
 	RESOURCES
 		cssm.mdsinfo			libsecurity_cssm/mds/cssm.mdsinfo
 		sd_cspdl_common.mdsinfo		libsecurity_sd_cspdl/mds/sd_cspdl_common.mdsinfo

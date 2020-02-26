@@ -7,7 +7,7 @@ add_darling_static_library(security_keychain FAT
 	SOURCES
 		lib/ACL.cpp
 		lib/Access.cpp
-		lib/CCallbackMgr.cp
+		lib/CCallbackMgr.cpp
 		lib/Certificate.cpp
 		lib/CertificateRequest.cpp
 		lib/CertificateValues.cpp
