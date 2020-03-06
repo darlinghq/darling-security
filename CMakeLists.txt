@@ -3,21 +3,16 @@ project(Security)
 set(CMAKE_CXX_STANDARD 14)
 
 add_compile_options(
-	-Wno-gcc-compat
-	-Wno-ignored-attributes
-	#-Wno-unused-command-line-argument
-	-Wno-c++11-extensions
-	-Wno-error=c++11-narrowing
+	-w
 )
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -nostdinc")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -nostdinc")
 
 add_definitions(
 	-DNDEBUG=1
 	-D__KEYCHAINCORE__=1
 	-DOSSPINLOCK_USE_INLINED=0
 	-DDTRACE_PROBES_DISABLED
+
+	-nostdinc
 )
 
 include_directories(
