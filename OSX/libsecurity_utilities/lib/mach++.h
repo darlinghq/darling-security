@@ -192,7 +192,24 @@ private:
     
 protected:
 	char *makeName(const char *s) const
-	{ return strncpy(nameBuffer, s, BOOTSTRAP_MAX_NAME_LEN); }
+	{
+		// NOTE(@facekapow):
+		// if you ever decide to update from Apple's upstream of
+		// libsecurity, try to keep this code as-is!
+		// do **not** do `return strncpy(nameBuffer, s, BOOTSTRAP_MAX_NAME_LEN)`.
+		// make sure to return `nameBuffer` explicitly.
+		//
+		// for a detailed rationale, see darlinghq/darling#708
+		// but basically, the tl;dr is: the condensed form (i.e. `return strncpy(...)`)
+		// returns a `NULL` pointer, for some inexplicable reason, and was causing
+		// a segfault later on (because it is *impossible* for this method to return `NULL`
+		// and the code that uses it knows this and treats it as such)
+		//
+		// this fix causes the method to function correctly, so try not to mess
+		// with it too much
+		strncpy(nameBuffer, s, BOOTSTRAP_MAX_NAME_LEN);
+		return nameBuffer;
+	}
 };
 
 
