@@ -90,6 +90,7 @@ typedef CF_ENUM(int, SSLProtocol) {
     kTLSProtocol11      = 7,				/* TLS 1.1 */
     kTLSProtocol12      = 8,				/* TLS 1.2 */
     kDTLSProtocol1      = 9,                /* DTLS 1.0 */
+    kTLSProtocol13 = 10, /* backporting this, will be in latest security */
 
     /* DEPRECATED on iOS */
     kSSLProtocol2       = 1,				/* SSL 2.0 */
