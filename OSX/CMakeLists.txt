@@ -41,6 +41,7 @@ add_framework(Security
 
 	SOURCES
 		lib/dummy.cpp
+		lib/version.c
 		Breadcrumb/SecBreadcrumb.c
 		../../coretls/coretls_cfhelpers/tls_helpers.c
 		../../coretls/coretls_cfhelpers/tls_helpers_identity.c
@@ -55,7 +56,7 @@ add_framework(Security
 		z
 		xar
 		sqlite3
-		${CoreFoundation}
+		CoreFoundation
 		CryptoTokenKit
 		IOKit
 		SystemConfiguration
@@ -128,4 +129,4 @@ add_framework(Security
 
 )
 
-set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip -Wl,-undefined,dynamic_lookup -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/../SEC_MANUAL.exp")
+set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/../SEC_MANUAL.exp")
