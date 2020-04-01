@@ -92,7 +92,7 @@ const char *prog_name;
 
 
 /* Forward declarations of static functions. */
-static int help(int argc, char * const *argv);
+/*static*/ int help(int argc, char * const *argv);
 
 /*
  * The command array itself.
@@ -739,7 +739,7 @@ match_command(const char *command, const char *name)
 }
 
 /* The help command. */
-static int
+/*static*/ int
 help(int argc, char * const *argv)
 {
 	const command *c;

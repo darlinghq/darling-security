@@ -33,7 +33,9 @@
 #include <Security/SecureObjectSync/SOSCloudCircleInternal.h>
 #include <Security/SecRecoveryKey.h>
 
+#ifndef DARLING
 #import <CoreCDP/CoreCDP.h>
+#endif
 
 
 #include "secToolFileIO.h"
@@ -41,6 +43,7 @@
 int
 recovery_key(int argc, char * const *argv)
 {
+#ifndef DARLING
     int ch, result = 0;
     CFErrorRef error = NULL;
     BOOL hadError = false;
@@ -148,4 +151,8 @@ recovery_key(int argc, char * const *argv)
         printerr(CFSTR("Error: %@\n"), error);
 
     return result;
+#else
+    puts("Not supported under Darling due to missing CoreCDP");
+    return 1;
+#endif
 }

@@ -192,3 +192,6 @@ add_darling_static_library(secipc_client FAT
 	SOURCES
 		ipc/client.c
 )
+
+add_subdirectory(Security/Tool)
+#add_subdirectory(SOSCircle/Tool)

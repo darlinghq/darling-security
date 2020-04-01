@@ -52,7 +52,7 @@ command_bubble(__unused int argc, __unused char * const * argv)
 
         NSArray *services = @[@"com.apple.cloudd.sync", @"com.apple.mailq.sync"];
 
-        if (_SecSyncBubbleTransfer((__bridge CFArrayRef)services, uid, &error)) {
+        if (_SecSyncBubbleTransfer((__bridge CFArrayRef)services, /*uid,*/ &error)) {
             errx(1, "%s", [[NSString stringWithFormat:@"sync bubble populated\n"] UTF8String]);
         } else {
             errx(1, "%s", [[NSString stringWithFormat:@"sync bubble failed to inflate: %@\n", error] UTF8String]);

@@ -23,6 +23,7 @@
 
 
 #include <SecurityTool/security_tool_commands.h>
+#error
 
 SECURITY_COMMAND(
 	"sync", keychain_sync,

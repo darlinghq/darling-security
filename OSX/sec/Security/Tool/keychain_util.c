@@ -29,7 +29,7 @@
 #include <ACMAclDefs.h>
 #include <libaks_acl_cf_keys.h>
 
-#include "security.h"
+#include "Security.h"
 #include "keychain_util.h"
 #include "SecAccessControlPriv.h"
 

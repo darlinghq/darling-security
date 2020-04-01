@@ -39,3 +39,5 @@ add_darling_static_library(utilities FAT
 		SecurityTool/not_on_this_platorm.c
 		SecurityTool/readline.c
 )
+
+add_subdirectory(SecurityTool)
