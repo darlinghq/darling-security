@@ -192,14 +192,26 @@ add_darling_static_library(secipc_client FAT
 	SOURCES
 		ipc/client.c
 )
+
 add_darling_executable(secipc_server ipc/server.c)
-target_link_libraries(secipc_server system Security CoreFoundation
-    SecTrustOSX securityd xpc sqlite3 utilities CFNetwork SecItemShimOSX
+target_link_libraries(secipc_server system CoreFoundation
+    SecTrustOSX securityd xpc sqlite3 utilities_sec_item_shim CFNetwork SecItemShimOSX
     security_keychain_DER SecureObjectSync z IOKit secipc_client
     LocalAuthentication objc CryptoTokenKit SystemConfiguration
-    security_asn1 bsm.0 AppleSystemInfo)
-install(TARGETS secipc_server DESTINATION libexec/darling/usr/libexec RENAME securityd)
-install(FILES ipc/com.apple.securityd.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
+    security_asn1 bsm.0 AppleSystemInfo Security)
+install(TARGETS secipc_server DESTINATION libexec/darling/usr/libexec RENAME secd)
+install(FILES ipc/com.apple.secd.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
+
+add_darling_executable(trustd_server ipc/server.c)
+target_compile_definitions(trustd_server PRIVATE TRUSTD_SERVER)
+target_link_libraries(trustd_server system CoreFoundation
+    SecTrustOSX securityd xpc sqlite3 utilities_sec_item_shim CFNetwork SecItemShimOSX
+    security_keychain_DER SecureObjectSync z IOKit secipc_client
+    LocalAuthentication objc CryptoTokenKit SystemConfiguration
+    security_asn1 bsm.0 AppleSystemInfo Security)
+install(TARGETS trustd_server DESTINATION libexec/darling/usr/libexec RENAME trustd)
+install(FILES ../trustd/com.apple.trustd.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
+install(FILES ../trustd/com.apple.trustd.agent.plist DESTINATION libexec/darling/System/Library/LaunchAgents)
 
 add_subdirectory(Security/Tool)
 #add_subdirectory(SOSCircle/Tool)
