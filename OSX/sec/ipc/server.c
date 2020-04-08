@@ -78,6 +78,7 @@
 #include <stdlib.h>
 #include <sys/queue.h>
 #include <sys/sysctl.h>
+#include <sys/stat.h>
 #include <syslog.h>
 #include <xpc/private.h>
 #include <xpc/xpc.h>
@@ -871,7 +872,11 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
             }
             case sec_device_is_internal_id:
             {
+#ifndef DARLING
                 bool retval = SecIsDeviceInternal(NULL);
+#else
+                bool retval = true;
+#endif
                 xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, retval);
                 break;
             }
@@ -2132,7 +2137,7 @@ int main(int argc, char *argv[])
  Secd doesn't realize DB connections get invalidated when network home directory users logout
  and their home gets unmounted. Exit secd, start fresh when user logs back in.
 */
-#if !TARGET_OS_IPHONE
+#if !TARGET_OS_IPHONE && !defined(DARLING)
     int sessionstatechanged_tok;
     notify_register_dispatch(kSA_SessionStateChangedNotification, &sessionstatechanged_tok, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(int token __unused) {
         // we could be a process running as root.

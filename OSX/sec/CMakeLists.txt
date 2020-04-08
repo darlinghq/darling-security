@@ -192,6 +192,14 @@ add_darling_static_library(secipc_client FAT
 	SOURCES
 		ipc/client.c
 )
+add_darling_executable(secipc_server ipc/server.c)
+target_link_libraries(secipc_server system Security CoreFoundation
+    SecTrustOSX securityd xpc sqlite3 utilities CFNetwork SecItemShimOSX
+    security_keychain_DER SecureObjectSync z IOKit secipc_client
+    LocalAuthentication objc CryptoTokenKit SystemConfiguration
+    security_asn1 bsm.0 AppleSystemInfo)
+install(TARGETS secipc_server DESTINATION libexec/darling/usr/libexec RENAME securityd)
+install(FILES ipc/com.apple.securityd.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
 
 add_subdirectory(Security/Tool)
 #add_subdirectory(SOSCircle/Tool)
