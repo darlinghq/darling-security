@@ -194,8 +194,8 @@ add_darling_static_library(secipc_client FAT
 )
 add_darling_executable(secipc_server ipc/server.c)
 target_link_libraries(secipc_server system Security CoreFoundation
-    SecTrustOSX securityd xpc sqlite3 utilities CFNetwork SecItemShimOSX
-    security_keychain_DER SecureObjectSync z IOKit secipc_client
+    SecTrustOSX secipc_client securityd xpc sqlite3 utilities CFNetwork SecItemShimOSX
+    security_keychain_DER SecureObjectSync z IOKit
     LocalAuthentication objc CryptoTokenKit SystemConfiguration
     security_asn1 bsm.0 AppleSystemInfo)
 install(TARGETS secipc_server DESTINATION libexec/darling/usr/libexec RENAME securityd)
