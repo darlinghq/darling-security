@@ -15,7 +15,7 @@ add_darling_static_library(utilities FAT
 		src/SecDb.c
 		src/SecCoreCrypto.c
 		src/SecAppleAnchor.c
-		src/iOSforOSX-SecAttr.c
+		#src/iOSforOSX-SecAttr.c
 		src/SecTrace.c
 		src/der_plist_internal.c
 		src/SecSCTUtils.c
