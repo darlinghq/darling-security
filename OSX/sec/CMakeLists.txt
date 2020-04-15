@@ -193,24 +193,26 @@ add_darling_static_library(secipc_client FAT
 		ipc/client.c
 )
 
-add_darling_executable(secipc_server ipc/server.c)
+add_darling_executable(secipc_server ipc/server.c ipc/client.c)
 set_target_properties(secipc_server PROPERTIES OUTPUT_NAME "secd")
-target_link_libraries(secipc_server system CoreFoundation
-    SecTrustOSX securityd xpc sqlite3 utilities_sec_item_shim CFNetwork SecItemShimOSX
-    security_keychain_DER SecureObjectSync z IOKit secipc_client
+target_link_libraries(secipc_server system Security CoreFoundation
+    SecTrustOSX securityd xpc sqlite3 utilities CFNetwork SecItemShimOSX
+    security_keychain_DER SecureObjectSync z IOKit #security_smime
     LocalAuthentication objc CryptoTokenKit SystemConfiguration
-    security_asn1 bsm.0 AppleSystemInfo Security)
+	security_asn1 bsm.0 AppleSystemInfo cxx)
+#target_link_options(secipc_server BEFORE PRIVATE "-Wl,-all_load")
 install(TARGETS secipc_server DESTINATION libexec/darling/usr/libexec)
 install(FILES ipc/com.apple.secd.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
 
-add_darling_executable(trustd_server ipc/server.c)
+add_darling_executable(trustd_server ipc/server.c ipc/client.c)
 set_target_properties(trustd_server PROPERTIES OUTPUT_NAME "trustd")
 target_compile_definitions(trustd_server PRIVATE TRUSTD_SERVER)
-target_link_libraries(trustd_server system CoreFoundation
-    SecTrustOSX securityd xpc sqlite3 utilities_sec_item_shim CFNetwork SecItemShimOSX
-    security_keychain_DER SecureObjectSync z IOKit secipc_client
-    LocalAuthentication objc CryptoTokenKit SystemConfiguration
-    security_asn1 bsm.0 AppleSystemInfo Security)
+target_link_libraries(trustd_server system Security CoreFoundation
+	SecTrustOSX securityd xpc sqlite3 utilities CFNetwork SecItemShimOSX
+	security_keychain_DER SecureObjectSync z IOKit #security_smime
+	LocalAuthentication objc CryptoTokenKit SystemConfiguration
+	security_asn1 bsm.0 AppleSystemInfo cxx)
+#target_link_options(trustd_server BEFORE PRIVATE "-Wl,-all_load")
 install(TARGETS trustd_server DESTINATION libexec/darling/usr/libexec)
 install(FILES ../trustd/com.apple.trustd.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
 install(FILES ../trustd/com.apple.trustd.agent.plist DESTINATION libexec/darling/System/Library/LaunchAgents)
