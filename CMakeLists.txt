@@ -31,6 +31,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/internal-include
 	${CMAKE_CURRENT_SOURCE_DIR}/gen/include
 	${CMAKE_SOURCE_DIR}/src/frameworks/CryptoTokenKit/include/
+	${CMAKE_SOURCE_DIR}/src/frameworks/LocalAuthentication/include/
 )
 
 # Security.framework
