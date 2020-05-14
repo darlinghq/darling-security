@@ -12,7 +12,6 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}/src
 	${CMAKE_CURRENT_BINARY_DIR}/mig
 	${CMAKE_CURRENT_SOURCE_DIR}/../OSX/libsecurityd/lib
-	${CMAKE_CURRENT_SOURCE_DIR}/../../SecurityTokend/lib
 )
 
 add_darling_executable(securityd_exe
