@@ -83,6 +83,14 @@ size_t SingleDiskRep::signingLimit()
 }
 
 //
+// No executable segment in non-machO files.
+//
+size_t SingleDiskRep::execSegLimit(const Architecture *)
+{
+	return 0;
+}
+
+//
 // A lazily opened read-only file descriptor for the path.
 //
 FileDesc &SingleDiskRep::fd()
@@ -98,6 +106,12 @@ FileDesc &SingleDiskRep::fd()
 void SingleDiskRep::flush()
 {
 	mFd.close();
+}
+
+//Check the magic darwinup xattr
+bool SingleDiskRep::appleInternalForcePlatform() const
+{
+	return mFd.hasExtendedAttribute("com.apple.root.installed");
 }
 
 //

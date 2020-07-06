@@ -27,6 +27,7 @@
 #define _CSSMKRSPI_H_  1
 
 #include <Security/cssmtype.h>
+#include <Security/cssmkrapi.h> /* CSSM_KRSP_HANDLE */
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,7 +38,7 @@ extern "C" {
 
 /* Data types for Key Recovery SPI */
 
-typedef struct cssm_spi_kr_funcs {
+typedef struct DEPRECATED_IN_MAC_OS_X_VERSION_10_7_AND_LATER cssm_spi_kr_funcs {
     CSSM_RETURN (CSSMKRI *RegistrationRequest)
         (CSSM_KRSP_HANDLE KRSPHandle,
          CSSM_CC_HANDLE KRRegistrationContextHandle,

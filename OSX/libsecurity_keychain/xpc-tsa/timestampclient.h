@@ -35,11 +35,11 @@ void sendTSARequest(CFDataRef tsaReq, const char *tsaURL, TSARequestCompletionBl
 
 @interface TimeStampClient : NSObject
 {
-    id delegate;
+    __weak id delegate;
     NSURL *url;
     NSMutableURLRequest *urlRequest;
 }
-@property (retain) id delegate;
+@property (weak) id delegate;
 @property (retain) id url;
 @property (retain) id urlRequest;
 

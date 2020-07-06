@@ -31,6 +31,7 @@
 #if SEC_OS_OSX
 
 #include <Security/cssmtype.h>
+#include <Security/x509defs.h> /* CSSM_X509_RDN_PTR */
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
@@ -90,7 +91,7 @@
  *           nameAssigner            [0]     DirectoryString OPTIONAL,
  *           partyName               [1]     DirectoryString }
  */
-#if SEC_OS_OSX
+
 typedef enum __CE_GeneralNameType {
 	GNT_OtherName = 0,
 	GNT_RFC822Name,
@@ -103,21 +104,7 @@ typedef enum __CE_GeneralNameType {
 	GNT_RegisteredID
 } CE_GeneralNameType;
 
-#elif SEC_OS_IPHONE
-
-typedef enum {
-	GNT_OtherName = 0,
-	GNT_RFC822Name,
-	GNT_DNSName,
-	GNT_X400Address,
-	GNT_DirectoryName,
-	GNT_EdiPartyName,
-	GNT_URI,
-	GNT_IPAddress,
-	GNT_RegisteredID
-} SecCEGeneralNameType;
-
-#endif /* SEC_OS_IPHONE */
+#define SecCEGeneralNameType CE_GeneralNameType
 
 #if SEC_OS_OSX
 

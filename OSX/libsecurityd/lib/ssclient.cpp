@@ -43,7 +43,6 @@ namespace SecurityServer {
 UnixPlusPlus::StaticForkMonitor ClientSession::mHasForked;
 ModuleNexus<ClientSession::Global> ClientSession::mGlobal;
 const char *ClientSession::mContactName;
-SecGuestRef ClientSession::mDedicatedGuest = kSecNoGuest;
 
 
 //
@@ -93,14 +92,7 @@ void ClientSession::activate()
         secinfo("SSclnt", "Thread registered with %s", mContactName);
 	}
 	
-	// if the thread's guest state has changed, tell securityd
-	if (thread.currentGuest != thread.lastGuest) {
-		IPCN(ucsp_client_setGuest(UCSP_ARGS, thread.currentGuest, kSecCSDefaultFlags));
-		thread.lastGuest = thread.currentGuest;
-		secinfo("SSclnt", "switched guest state to 0x%x", thread.currentGuest);
-	}
 }
-
 
 //
 // The contactName method allows the caller to explicitly override the bootstrap
@@ -131,7 +123,7 @@ ClientSession::Global::Global()
 	serverPort = findSecurityd();
     
 	mach_port_t originPort = MACH_PORT_NULL;
-	IPCN(ucsp_client_verifyPrivileged2(serverPort.port(), mig_get_reply_port(), &securitydCreds, &rcode, &originPort));
+	IPCBASIC(ucsp_client_verifyPrivileged2(serverPort.port(), mig_get_reply_port(), &securitydCreds, &rcode, &originPort));
 	if (originPort != serverPort.port())
 		CssmError::throwMe(CSSM_ERRCODE_VERIFICATION_FAILURE);
 	mach_port_mod_refs(mach_task_self(), originPort, MACH_PORT_RIGHT_SEND, -1);
@@ -143,7 +135,7 @@ ClientSession::Global::Global()
     // cannot use UCSP_ARGS here because it uses mGlobal() -> deadlock
     Thread &thread = this->thread();
 	
-	IPCN(ucsp_client_setup(serverPort, thread.replyPort, &securitydCreds, &rcode,
+	IPCBASIC(ucsp_client_setup(serverPort, thread.replyPort, &securitydCreds, &rcode,
 		mach_task_self(), info, extForm));
     thread.registered = true;	// as a side-effect of setup call above
 	IFDEBUG(serverPort.requestNotify(thread.replyPort));
@@ -199,7 +191,7 @@ void ClientSession::childCheckIn(Port serverPort, Port taskPort)
 	if (originPort != securitydPort.port())
 		CssmError::throwMe(CSSM_ERRCODE_VERIFICATION_FAILURE);
 	mach_port_mod_refs(mach_task_self(), originPort, MACH_PORT_RIGHT_SEND, -1);
-	check(ucsp_client_childCheckIn(securitydPort, serverPort, taskPort));
+	check(ucsp_client_childCheckIn(securitydPort, serverPort, MACH_PORT_NULL));
 }
 
 

@@ -35,6 +35,13 @@
 extern "C" {
 #endif
 
+/*
+ Private SecStaticCodeCreate* SecCS flags.
+ */
+CF_ENUM(uint32_t) {
+	kSecCSForceOnlineNotarizationCheck = 1 << 0,
+};
+
 
 /*
 	@function SecCodeSetCallback
@@ -73,7 +80,7 @@ OSStatus SecStaticCodeSetValidationConditions(SecStaticCodeRef code, CFDictionar
 	
 /*
 	@function SecStaticCodeCancelValidation
- 	Ask for an ongoing static validation using this (static) code object to be cancelled as soon as feasible.
+ 	Ask for an ongoing static validation using this (static) code object to be canceled as soon as feasible.
  	if no validation is pending, this does nothing.
  	Since validation is synchronous, this call must be made from another thread.
  	This call will return immediately. If a validation operation is terminated due to it,

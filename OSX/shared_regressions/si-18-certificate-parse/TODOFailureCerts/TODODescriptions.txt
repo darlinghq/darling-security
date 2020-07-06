@@ -1,0 +1,13 @@
+parse_fail_too_big.cer succeeds because we ignore extra data after the cert.
+
+parse_fail_basic_constraints_notCA_pathlen.cer
+We don’t enforce (from RFC 5280):
+   CAs MUST NOT include the pathLenConstraint field unless the cA
+   boolean is asserted and the key usage extension asserts the
+   keyCertSign bit.
+
+parse_fail_ec_not_on_curve.cer
+We don’t check that the point is on the curve until we use the key (e.g. for verifying a signature).
+
+spki_fail_tag_4.cer
+SecECPublicKeyInit doesn’t read the parameters of the algorithm ID.

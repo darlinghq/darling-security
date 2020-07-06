@@ -1,4 +1,4 @@
-#include <test/testmore.h>
+#include <regressions/test/testmore.h>
 
 DISABLED_ONE_TEST(ssl_39_echo)
 
@@ -19,9 +19,9 @@ ONE_TEST(ssl_42_ciphers)
 OFF_ONE_TEST(ssl_43_ciphers)
 
 ONE_TEST(ssl_44_crashes)
-ONE_TEST(ssl_45_tls12)
+OFF_ONE_TEST(ssl_45_tls12)
 ONE_TEST(ssl_46_SSLGetSupportedCiphers)
-ONE_TEST(ssl_47_falsestart)
+OFF_ONE_TEST(ssl_47_falsestart)
 ONE_TEST(ssl_48_split)
 // This one require a version of coreTLS that support SNI server side. (> coreTLS-17 ?)
 OFF_ONE_TEST(ssl_49_sni)

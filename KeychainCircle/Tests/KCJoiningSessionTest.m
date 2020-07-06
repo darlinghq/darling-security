@@ -14,19 +14,21 @@
 #import <KeychainCircle/KCAESGCMDuplexSession.h>
 
 #include <Security/SecBase.h>
-#include <Security/SecureObjectSync/SOSFullPeerInfo.h>
-#include <Security/SecureObjectSync/SOSPeerInfoInternal.h>
+#include "keychain/SecureObjectSync/SOSFullPeerInfo.h"
+#include "keychain/SecureObjectSync/SOSPeerInfoInternal.h"
 
 #include <CommonCrypto/CommonRandomSPI.h>
 
 
 __unused static SOSFullPeerInfoRef SOSNSFullPeerInfoCreate(NSDictionary* gestalt,
-                                                  NSData* backupKey, SecKeyRef signingKey,
-                                                  NSError**error)
+                                                           NSData* backupKey, SecKeyRef signingKey,
+                                                           SecKeyRef octagonSigningKey,
+                                                           SecKeyRef octagonEncryptionKey,
+                                                           NSError**error)
 {
     CFErrorRef errorRef = NULL;
 
-    SOSFullPeerInfoRef result = SOSFullPeerInfoCreate(NULL, (__bridge CFDictionaryRef) gestalt, (__bridge CFDataRef) backupKey, signingKey, &errorRef);
+    SOSFullPeerInfoRef result = SOSFullPeerInfoCreate(NULL, (__bridge CFDictionaryRef) gestalt, (__bridge CFDataRef) backupKey, signingKey, octagonSigningKey, octagonEncryptionKey, &errorRef);
 
     if (errorRef && error) {
         *error = (__bridge_transfer NSError*) errorRef;
@@ -54,19 +56,6 @@ static SecKeyRef GenerateFullECKey(int keySize, NSError** error) {
 }
 
 
-__unused static SOSFullPeerInfoRef SOSCreateFullPeerInfoFromName(NSString* name, SecKeyRef* outSigningKey, NSError** error)
-{
-    if (outSigningKey == NULL)
-        return NULL;
-
-    *outSigningKey = GenerateFullECKey(256, error);
-    if (*outSigningKey == NULL)
-        return NULL;
-
-    return SOSNSFullPeerInfoCreate(@{(__bridge NSString*)kPIUserDefinedDeviceNameKey:name}, nil, *outSigningKey, error);
-}
-
-
 @interface KCJoiningRequestTestDelegate : NSObject <KCJoiningRequestSecretDelegate, KCJoiningRequestCircleDelegate>
 @property (readwrite) NSString* sharedSecret;
 
@@ -86,12 +75,18 @@ __unused static SOSFullPeerInfoRef SOSCreateFullPeerInfoFromName(NSString* name,
 - (NSString*) secret;
 - (NSString*) verificationFailed: (bool) codeChanged;
 - (SOSPeerInfoRef) copyPeerInfoError: (NSError**) error;
-- (bool) processCircleJoinData: (NSData*) circleJoinData error: (NSError**)error ;
+- (bool) processCircleJoinData: (NSData*) circleJoinData version:(PiggyBackProtocolVersion)version error: (NSError**)error ;
 - (bool) processAccountCode: (NSString*) accountCode error: (NSError**)error;
 
 @end
 
 @implementation KCJoiningRequestTestDelegate
+
+- (void)dealloc {
+    if(_peerInfo) {
+        CFRelease(_peerInfo);
+    }
+}
 
 + (id) requestDelegateWithSecret:(NSString*) secret {
     return [[KCJoiningRequestTestDelegate alloc] initWithSecret:secret
@@ -114,11 +109,17 @@ __unused static SOSFullPeerInfoRef SOSCreateFullPeerInfoFromName(NSString* name,
     self = [super init];
 
     SecKeyRef signingKey = GenerateFullECKey(256, NULL);
+    SecKeyRef octagonSigningKey = GenerateFullECKey(384, NULL);
+    SecKeyRef octagonEncryptionKey = GenerateFullECKey(384, NULL);
 
-    self.peerInfo = SOSPeerInfoCreate(NULL, (__bridge CFDictionaryRef) @{(__bridge NSString*)kPIUserDefinedDeviceNameKey:@"Fakey"}, NULL, signingKey, NULL);
+    SOSPeerInfoRef newPeerInfo = SOSPeerInfoCreate(NULL, (__bridge CFDictionaryRef) @{(__bridge NSString*)kPIUserDefinedDeviceNameKey:@"Fakey"}, NULL, signingKey, octagonSigningKey, octagonEncryptionKey, NULL);
 
-    if (self.peerInfo == NULL)
+    if (newPeerInfo == NULL) {
         return nil;
+    }
+    self.peerInfo = newPeerInfo;
+    CFRelease(newPeerInfo);
+    newPeerInfo = NULL;
 
     self.sharedSecret = secret;
     self.incorrectSecret = incorrectSecret;
@@ -144,10 +145,14 @@ __unused static SOSFullPeerInfoRef SOSCreateFullPeerInfoFromName(NSString* name,
 }
 
 - (SOSPeerInfoRef) copyPeerInfoError: (NSError**) error {
-    return self.peerInfo;
+    if(!self.peerInfo) {
+        return NULL;
+    }
+
+    return (SOSPeerInfoRef) CFRetain(self.peerInfo);
 }
 
-- (bool) processCircleJoinData: (NSData*) circleJoinData error: (NSError**)error {
+- (bool) processCircleJoinData: (NSData*) circleJoinData version:(PiggyBackProtocolVersion)version error: (NSError**)error {
     self->_circleJoinData = circleJoinData;
     return true;
 }
@@ -249,6 +254,9 @@ __unused static SOSFullPeerInfoRef SOSCreateFullPeerInfoFromName(NSString* name,
     return [NSData dataWithBytes: joinDataBuffer length: sizeof(joinDataBuffer) ];
 }
 
+-(NSData*) circleGetInitialSyncViews:(SOSInitialSyncFlags)flags error:(NSError**) error{
+    return [NSData data];
+}
 
 @end
 

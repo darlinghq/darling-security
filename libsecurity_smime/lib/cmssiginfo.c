@@ -49,6 +49,10 @@
 #include <security_asn1/secerr.h>
 #include <security_asn1/secport.h>
 
+#if USE_CDSA_CRYPTO
+#include <Security/SecKeychain.h>
+#endif
+
 #include <Security/SecIdentity.h>
 #include <Security/SecCertificateInternal.h>
 #include <Security/SecInternal.h>
@@ -56,6 +60,9 @@
 #include <utilities/SecCFWrappers.h>
 #include <CoreFoundation/CFTimeZone.h>
 #include <Security/SecBasePriv.h>
+#include <Security/SecItem.h>
+
+#include <libDER/asn1Types.h>
 
 
 #define HIDIGIT(v) (((v) / 10) + '0')    
@@ -72,61 +79,18 @@
 static OSStatus
 DER_UTCTimeToCFDate(const SecAsn1Item * utcTime, CFAbsoluteTime *date)
 {
-    char *string = (char *)utcTime->Data;
-    int year, month, mday, hour, minute, second, hourOff, minOff;
-
-    /* Verify time is formatted properly and capture information */
-    second = 0;
-    hourOff = 0;
-    minOff = 0;
-    CAPTURE(year,string+0,loser);
-    if (year < 50) {
-        /* ASSUME that year # is in the 2000's, not the 1900's */
-        year += 2000;
-    } else {
-        year += 1900;
-    }
-    CAPTURE(month,string+2,loser);
-    if ((month == 0) || (month > 12)) goto loser;
-    CAPTURE(mday,string+4,loser);
-    if ((mday == 0) || (mday > 31)) goto loser;
-    CAPTURE(hour,string+6,loser);
-    if (hour > 23) goto loser;
-    CAPTURE(minute,string+8,loser);
-    if (minute > 59) goto loser;
-    if (ISDIGIT(string[10])) {
-        CAPTURE(second,string+10,loser);
-        if (second > 59) goto loser;
-        string += 2;
-    }
-    if (string[10] == '+') {
-        CAPTURE(hourOff,string+11,loser);
-        if (hourOff > 23) goto loser;
-        CAPTURE(minOff,string+13,loser);
-        if (minOff > 59) goto loser;
-    } else if (string[10] == '-') {
-        CAPTURE(hourOff,string+11,loser);
-        if (hourOff > 23) goto loser;
-        hourOff = -hourOff;
-        CAPTURE(minOff,string+13,loser);
-        if (minOff > 59) goto loser;
-        minOff = -minOff;
-    } else if (string[10] != 'Z') {
-        goto loser;
+    CFErrorRef error = NULL;
+    /* <rdar://problem/55316705> CMS attributes don't correctly encode/decode times (always use UTCTime) */
+    CFAbsoluteTime result = SecAbsoluteTimeFromDateContentWithError(ASN1_UTC_TIME, utcTime->Data, utcTime->Length, &error);
+    if (error) {
+        CFReleaseNull(error);
+        return SECFailure;
     }
 
-    if (hourOff == 0 && minOff == 0) {
-        *date = CFAbsoluteTimeForGregorianZuluMoment(year, month, mday, hour, minute, second);
-    } else {
-        CFTimeZoneRef tz = CFTimeZoneCreateWithTimeIntervalFromGMT(kCFAllocatorDefault, (hourOff * 60 + minOff) * 60);
-        *date = CFAbsoluteTimeForGregorianMoment(tz, year, month, mday, hour, minute, second);
-        CFReleaseSafe(tz);
+    if (date) {
+        *date = result;
     }
-
     return SECSuccess;
-
-loser:
-    return SECFailure;
 }
 
 static OSStatus
@@ -136,20 +100,24 @@ DER_CFDateToUTCTime(CFAbsoluteTime date, SecAsn1Item * utcTime)
 
     utcTime->Length = 13;
     utcTime->Data = d = PORT_Alloc(13);
-    if (!utcTime->Data)
-	return SECFailure;
+    if (!utcTime->Data) {
+        return SECFailure;
+    }
     
     __block int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
     __block bool result;
     SecCFCalendarDoWithZuluCalendar(^(CFCalendarRef zuluCalendar) {
         result = CFCalendarDecomposeAbsoluteTime(zuluCalendar, date, "yMdHms", &year, &month, &day, &hour, &minute, &second);
     });
-    if (!result)
+    if (!result) {
         return SECFailure;
+    }
 
-    /* UTC time does not handle the years before 1950 */
-    if (year < 1950)
+    /* UTC time does not handle the years before 1950 or after 2049 */
+    /* <rdar://problem/55316705> CMS attributes don't correctly encode/decode times (always use UTCTime) */
+    if (year < 1950 || year > 2049) {
         return SECFailure;
+    }
 
     /* remove the century since it's added to the year by the
        CFAbsoluteTimeGetGregorianDate routine, but is not needed for UTC time */
@@ -189,11 +157,21 @@ SecCmsSignerInfoCreate(SecCmsSignedDataRef sigd, SecIdentityRef identity, SECOid
     SecCmsSignerInfoRef signerInfo = NULL;
     SecCertificateRef cert = NULL;
     SecPrivateKeyRef signingKey = NULL;
+    CFDictionaryRef keyAttrs = NULL;
 
     if (SecIdentityCopyCertificate(identity, &cert))
 	goto loser;
     if (SecIdentityCopyPrivateKey(identity, &signingKey))
 	goto loser;
+
+    /* In some situations, the "Private Key" in the identity is actually a public key. Check. */
+    keyAttrs = SecKeyCopyAttributes(signingKey);
+    if (!keyAttrs)
+        goto loser;
+    CFTypeRef class = CFDictionaryGetValue(keyAttrs, kSecAttrKeyClass);
+    if (!class || (CFGetTypeID(class) != CFStringGetTypeID()) || !CFEqual(class, kSecAttrKeyClassPrivate)) {
+        goto loser;
+    }
 
     signerInfo = nss_cmssignerinfo_create(sigd, SecCmsSignerIDIssuerSN, cert, NULL, NULL, signingKey, digestalgtag);
 
@@ -202,6 +180,8 @@ loser:
 	CFRelease(cert);
     if (signingKey)
 	CFRelease(signingKey);
+    if (keyAttrs)
+        CFRelease(keyAttrs);
 
     return signerInfo;
 }
@@ -287,11 +267,21 @@ loser:
 void
 SecCmsSignerInfoDestroy(SecCmsSignerInfoRef si)
 {
-    if (si->cert != NULL)
-	CERT_DestroyCertificate(si->cert);
+    if (si->cert != NULL) {
+        CERT_DestroyCertificate(si->cert);
+    }
 
-    if (si->certList != NULL) 
-	CFRelease(si->certList);
+    if (si->certList != NULL) {
+        CFRelease(si->certList);
+    }
+
+    if (si->hashAgilityAttrValue != NULL) {
+        CFRelease(si->hashAgilityAttrValue);
+    }
+
+    if (si->hashAgilityV2AttrValues != NULL) {
+        CFRelease(si->hashAgilityV2AttrValues);
+    }
 
     /* XXX storage ??? */
 }
@@ -334,12 +324,34 @@ SecCmsSignerInfoSign(SecCmsSignerInfoRef signerinfo, SecAsn1Item * digest, SecAs
         privkey = signerinfo->signingKey;
         signerinfo->signingKey = NULL;
         cert = signerinfo->cert;
+#if USE_CDSA_CRYPTO
+	if (SecCertificateGetAlgorithmID(cert,&algID)) {
+	    PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+	    goto loser;
+        }
+#else
         _algID = SecCertificateGetPublicKeyAlgorithmID(cert);
         algID = &_algID;
+#endif
         break;
     case SecCmsSignerIDSubjectKeyID:
         privkey = signerinfo->signingKey;
         signerinfo->signingKey = NULL;
+#if 0
+        spki = SECKEY_CreateSubjectPublicKeyInfo(signerinfo->pubKey);
+        SECKEY_DestroyPublicKey(signerinfo->pubKey);
+        signerinfo->pubKey = NULL;
+        SECOID_CopyAlgorithmID(NULL, &freeAlgID, &spki->algorithm);
+        SECKEY_DestroySubjectPublicKeyInfo(spki);
+        algID = &freeAlgID;
+#else
+#if USE_CDSA_CRYPTO
+	if (SecKeyGetAlgorithmID(signerinfo->pubKey,&algID)) {
+	    PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
+	    goto loser;
+        }
+#endif
+#endif
 	CFRelease(signerinfo->pubKey);
         signerinfo->pubKey = NULL;
         break;
@@ -355,6 +367,19 @@ SecCmsSignerInfoSign(SecCmsSignerInfoRef signerinfo, SecAsn1Item * digest, SecAs
         PORT_SetError(SEC_ERROR_INVALID_ALGORITHM);
         goto loser;
     }
+
+#if USE_CDSA_CRYPTO
+    if (signerinfo->signerIdentifier.identifierType == SecCmsSignerIDSubjectKeyID) {
+      SECOID_DestroyAlgorithmID(&freeAlgID, PR_FALSE);
+    }
+#endif
+#if 0
+    // @@@ Not yet
+    /* Fortezza MISSI have weird signature formats.  
+     * Map them to standard DSA formats 
+     */
+    pubkAlgTag = PK11_FortezzaMapSig(pubkAlgTag);
+#endif
 
     if (signerinfo->authAttr != NULL) {
 	SecAsn1Item encoded_attrs;
@@ -399,6 +424,10 @@ SecCmsSignerInfoSign(SecCmsSignerInfoRef signerinfo, SecAsn1Item * digest, SecAs
 	                &encoded_attrs) == NULL)
 	    goto loser;
 
+#if USE_CDSA_CRYPTO
+	rv = SEC_SignData(&signature, encoded_attrs.Data, encoded_attrs.Length, 
+	                  privkey, digestalgtag, pubkAlgTag);
+#else
         signature.Length = SecKeyGetSize(privkey, kSecKeySignatureSize);
         signature.Data = PORT_ZAlloc(signature.Length);
         if (!signature.Data) {
@@ -410,6 +439,7 @@ SecCmsSignerInfoSign(SecCmsSignerInfoRef signerinfo, SecAsn1Item * digest, SecAs
             PORT_ZFree(signature.Data, signature.Length);
             signature.Length = 0;
         }
+#endif
 
 	PORT_FreeArena(tmppoolp, PR_FALSE); /* awkward memory management :-( */
 	tmppoolp = 0;
@@ -455,6 +485,7 @@ loser:
     return SECFailure;
 }
 
+#if !USE_CDSA_CRYPTO
 static CFArrayRef
 SecCmsSignerInfoCopySigningCertificates(SecCmsSignerInfoRef signerinfo)
 {
@@ -499,8 +530,20 @@ SecCmsSignerInfoCopySigningCertificates(SecCmsSignerInfoRef signerinfo)
             CFRelease(cert);
         }
     }
+
+    if ((CFArrayGetCount(certs) == 0) &&
+        (signerinfo->signerIdentifier.identifierType == SecCmsSignerIDSubjectKeyID))
+    {
+        SecCertificateRef cert = CERT_FindCertificateBySubjectKeyID(signerinfo->signedData->certs,
+                                                                    signerinfo->signerIdentifier.id.subjectKeyID);
+        if (cert) {
+            CFArrayAppendValue(certs, cert);
+            CFRelease(cert);
+        }
+    }
     return certs;
 }
+#endif
 
 OSStatus
 SecCmsSignerInfoVerifyCertificate(SecCmsSignerInfoRef signerinfo, SecKeychainRef keychainOrArray,
@@ -509,9 +552,15 @@ SecCmsSignerInfoVerifyCertificate(SecCmsSignerInfoRef signerinfo, SecKeychainRef
     CFAbsoluteTime stime;
     OSStatus rv;
 
+#if USE_CDSA_CRYPTO
+    SecCertificateRef cert;
+    
+    if ((cert = SecCmsSignerInfoGetSigningCertificate(signerinfo, keychainOrArray)) == NULL) {
+#else
     CFArrayRef certs;
 
     if ((certs = SecCmsSignerInfoCopySigningCertificates(signerinfo)) == NULL) {
+#endif
 	signerinfo->verificationStatus = SecCmsVSSigningCertNotFound;
 	return SECFailure;
     }
@@ -523,15 +572,28 @@ SecCmsSignerInfoVerifyCertificate(SecCmsSignerInfoRef signerinfo, SecKeychainRef
     if (SecCmsSignerInfoGetSigningTime(signerinfo, &stime) != SECSuccess)
 	stime = CFAbsoluteTimeGetCurrent();
 
+
+#if USE_CDSA_CRYPTO
+    rv = CERT_VerifyCert(keychainOrArray, cert, policies, stime, trustRef);
+#else
     rv = CERT_VerifyCert(keychainOrArray, certs, policies, stime, trustRef);
     CFRelease(certs);
+#endif
     if (rv || !trustRef)
     {
 	if (PORT_GetError() == SEC_ERROR_UNTRUSTED_CERT)
 	{
 		/* Signature or digest level verificationStatus errors should supercede certificate level errors, so only change the verificationStatus if the status was GoodSignature. */
+#if 0
+#warning DEBUG - SecCmsSignerInfoVerifyCertificate trusts everything!
+		if (signerinfo->verificationStatus == SecCmsVSGoodSignature) {
+			 syslog(LOG_ERR, "SecCmsSignerInfoVerifyCertificate ignoring SEC_ERROR_UNTRUSTED_CERT");
+			 rv = SECSuccess;
+		}
+#else
 		if (signerinfo->verificationStatus == SecCmsVSGoodSignature)
 			signerinfo->verificationStatus = SecCmsVSSigningCertNotTrusted;
+#endif
 	}
     }
 
@@ -555,91 +617,91 @@ SecCmsSignerInfoVerify(SecCmsSignerInfoRef signerinfo, SecAsn1Item * digest, Sec
     PLArenaPool *poolp;
 
     if (signerinfo == NULL)
-	return SECFailure;
+        return SECFailure;
 
     /* SecCmsSignerInfoGetSigningCertificate will fail if 2nd parm is NULL and */
     /* cert has not been verified */
     if ((cert = SecCmsSignerInfoGetSigningCertificate(signerinfo, NULL)) == NULL) {
-	vs = SecCmsVSSigningCertNotFound;
-	goto loser;
+        vs = SecCmsVSSigningCertNotFound;
+        goto loser;
     }
 
-    publickey = SecCertificateCopyPublicKey(cert);
+    publickey = SecCertificateCopyKey(cert);
     if (publickey == NULL)
         goto loser;
 
     if (!SecCmsArrayIsEmpty((void **)signerinfo->authAttr)) {
-	if (contentType) {
-	    /*
-	     * Check content type
-	     *
-	     * RFC2630 sez that if there are any authenticated attributes,
-	     * then there must be one for content type which matches the
-	     * content type of the content being signed, and there must
-	     * be one for message digest which matches our message digest.
-	     * So check these things first.
-	     */
-	    if ((attr = SecCmsAttributeArrayFindAttrByOidTag(signerinfo->authAttr,
-					SEC_OID_PKCS9_CONTENT_TYPE, PR_TRUE)) == NULL)
-	    {
-		vs = SecCmsVSMalformedSignature;
-		goto loser;
-	    }
-		
-	    if (SecCmsAttributeCompareValue(attr, contentType) == PR_FALSE) {
-		vs = SecCmsVSMalformedSignature;
-		goto loser;
-	    }
-	}
+        if (contentType) {
+            /*
+             * Check content type
+             *
+             * RFC2630 sez that if there are any authenticated attributes,
+             * then there must be one for content type which matches the
+             * content type of the content being signed, and there must
+             * be one for message digest which matches our message digest.
+             * So check these things first.
+             */
+            if ((attr = SecCmsAttributeArrayFindAttrByOidTag(signerinfo->authAttr,
+                                                             SEC_OID_PKCS9_CONTENT_TYPE, PR_TRUE)) == NULL)
+            {
+                vs = SecCmsVSMalformedSignature;
+                goto loser;
+            }
 
-	/*
-	 * Check digest
-	 */
-	if ((attr = SecCmsAttributeArrayFindAttrByOidTag(signerinfo->authAttr, SEC_OID_PKCS9_MESSAGE_DIGEST, PR_TRUE)) == NULL)
-	{
-	    vs = SecCmsVSMalformedSignature;
-	    goto loser;
-	}
-	if (SecCmsAttributeCompareValue(attr, digest) == PR_FALSE) {
-	    vs = SecCmsVSDigestMismatch;
-	    goto loser;
-	}
+            if (SecCmsAttributeCompareValue(attr, contentType) == PR_FALSE) {
+                vs = SecCmsVSMalformedSignature;
+                goto loser;
+            }
+        }
 
-	if ((poolp = PORT_NewArena (1024)) == NULL) {
-	    vs = SecCmsVSProcessingError;
-	    goto loser;
-	}
+        /*
+         * Check digest
+         */
+        if ((attr = SecCmsAttributeArrayFindAttrByOidTag(signerinfo->authAttr, SEC_OID_PKCS9_MESSAGE_DIGEST, PR_TRUE)) == NULL)
+        {
+            vs = SecCmsVSMalformedSignature;
+            goto loser;
+        }
+        if (SecCmsAttributeCompareValue(attr, digest) == PR_FALSE) {
+            vs = SecCmsVSDigestMismatch;
+            goto loser;
+        }
 
-	/*
-	 * Check signature
-	 *
-	 * The signature is based on a digest of the DER-encoded authenticated
-	 * attributes.  So, first we encode and then we digest/verify.
-	 * we trust the decoder to have the attributes in the right (sorted) order
-	 */
-	encoded_attrs.Data = NULL;
-	encoded_attrs.Length = 0;
+        if ((poolp = PORT_NewArena (1024)) == NULL) {
+            vs = SecCmsVSProcessingError;
+            goto loser;
+        }
 
-	if (SecCmsAttributeArrayEncode(poolp, &(signerinfo->authAttr), &encoded_attrs) == NULL ||
-		encoded_attrs.Data == NULL || encoded_attrs.Length == 0)
-	{
-	    vs = SecCmsVSProcessingError;
-	    goto loser;
-	}
+        /*
+         * Check signature
+         *
+         * The signature is based on a digest of the DER-encoded authenticated
+         * attributes.  So, first we encode and then we digest/verify.
+         * we trust the decoder to have the attributes in the right (sorted) order
+         */
+        encoded_attrs.Data = NULL;
+        encoded_attrs.Length = 0;
+
+        if (SecCmsAttributeArrayEncode(poolp, &(signerinfo->authAttr), &encoded_attrs) == NULL ||
+            encoded_attrs.Data == NULL || encoded_attrs.Length == 0)
+        {
+            vs = SecCmsVSProcessingError;
+            goto loser;
+        }
         if (errSecSuccess == SecKeyDigestAndVerify(publickey, &signerinfo->digestAlg, encoded_attrs.Data, encoded_attrs.Length, signerinfo->encDigest.Data, signerinfo->encDigest.Length))
             vs = SecCmsVSGoodSignature;
         else
             vs = SecCmsVSBadSignature;
 
-	PORT_FreeArena(poolp, PR_FALSE);	/* awkward memory management :-( */
+        PORT_FreeArena(poolp, PR_FALSE);	/* awkward memory management :-( */
 
     } else {
-	SecAsn1Item * sig;
+        SecAsn1Item * sig;
 
-	/* No authenticated attributes. The signature is based on the plain message digest. */
-	sig = &(signerinfo->encDigest);
-	if (sig->Length == 0)
-	    goto loser;
+        /* No authenticated attributes. The signature is based on the plain message digest. */
+        sig = &(signerinfo->encDigest);
+        if (sig->Length == 0)
+            goto loser;
 
         if (SecKeyVerifyDigest(publickey, &signerinfo->digestAlg, digest->Data, digest->Length, sig->Data, sig->Length))
             vs = SecCmsVSBadSignature;
@@ -648,28 +710,28 @@ SecCmsSignerInfoVerify(SecCmsSignerInfoRef signerinfo, SecAsn1Item * digest, Sec
     }
 
     if (vs == SecCmsVSBadSignature) {
-	/*
-	 * XXX Change the generic error into our specific one, because
-	 * in that case we get a better explanation out of the Security
-	 * Advisor.  This is really a bug in our error strings (the
-	 * "generic" error has a lousy/wrong message associated with it
-	 * which assumes the signature verification was done for the
-	 * purposes of checking the issuer signature on a certificate)
-	 * but this is at least an easy workaround and/or in the
-	 * Security Advisor, which specifically checks for the error
-	 * SEC_ERROR_PKCS7_BAD_SIGNATURE and gives more explanation
-	 * in that case but does not similarly check for
-	 * SEC_ERROR_BAD_SIGNATURE.  It probably should, but then would
-	 * probably say the wrong thing in the case that it *was* the
-	 * certificate signature check that failed during the cert
-	 * verification done above.  Our error handling is really a mess.
-	 */
-	if (PORT_GetError() == SEC_ERROR_BAD_SIGNATURE)
-	    PORT_SetError(SEC_ERROR_PKCS7_BAD_SIGNATURE);
+        /*
+         * XXX Change the generic error into our specific one, because
+         * in that case we get a better explanation out of the Security
+         * Advisor.  This is really a bug in our error strings (the
+         * "generic" error has a lousy/wrong message associated with it
+         * which assumes the signature verification was done for the
+         * purposes of checking the issuer signature on a certificate)
+         * but this is at least an easy workaround and/or in the
+         * Security Advisor, which specifically checks for the error
+         * SEC_ERROR_PKCS7_BAD_SIGNATURE and gives more explanation
+         * in that case but does not similarly check for
+         * SEC_ERROR_BAD_SIGNATURE.  It probably should, but then would
+         * probably say the wrong thing in the case that it *was* the
+         * certificate signature check that failed during the cert
+         * verification done above.  Our error handling is really a mess.
+         */
+        if (PORT_GetError() == SEC_ERROR_BAD_SIGNATURE)
+            PORT_SetError(SEC_ERROR_PKCS7_BAD_SIGNATURE);
     }
 
     if (publickey != NULL)
-	CFRelease(publickey);
+        CFRelease(publickey);
 
     signerinfo->verificationStatus = vs;
 
@@ -677,7 +739,7 @@ SecCmsSignerInfoVerify(SecCmsSignerInfoRef signerinfo, SecAsn1Item * digest, Sec
 
 loser:
     if (publickey != NULL)
-	SECKEY_DestroyPublicKey (publickey);
+        SECKEY_DestroyPublicKey (publickey);
 
     signerinfo->verificationStatus = vs;
 
@@ -798,6 +860,148 @@ SecCmsSignerInfoGetAppleCodesigningHashAgility(SecCmsSignerInfoRef sinfo, CFData
     return errSecAllocate;
 }
 
+/* AgileHash ::= SEQUENCE {
+     hashType OBJECT IDENTIFIER,
+     hashValues OCTET STRING }
+*/
+typedef struct {
+    SecAsn1Item digestOID;
+    SecAsn1Item digestValue;
+} CMSAppleAgileHash;
+
+static const SecAsn1Template CMSAppleAgileHashTemplate[] = {
+    { SEC_ASN1_SEQUENCE,
+        0, NULL, sizeof(CMSAppleAgileHash) },
+    { SEC_ASN1_OBJECT_ID,
+        offsetof(CMSAppleAgileHash, digestOID), },
+    { SEC_ASN1_OCTET_STRING,
+        offsetof(CMSAppleAgileHash, digestValue), },
+    { 0, }
+};
+
+static OSStatus CMSAddAgileHashToDictionary(CFMutableDictionaryRef dictionary, SecAsn1Item *DERAgileHash) {
+    PLArenaPool *tmppoolp = NULL;
+    OSStatus status = errSecSuccess;
+    CMSAppleAgileHash agileHash;
+    CFDataRef digestValue = NULL;
+    CFNumberRef digestTag = NULL;
+
+    tmppoolp = PORT_NewArena(1024);
+    if (tmppoolp == NULL) {
+        return errSecAllocate;
+    }
+
+    if ((status = SEC_ASN1DecodeItem(tmppoolp, &agileHash, CMSAppleAgileHashTemplate, DERAgileHash)) != errSecSuccess) {
+        goto loser;
+    }
+
+    int64_t tag = SECOID_FindOIDTag(&agileHash.digestOID);
+    digestTag = CFNumberCreate(NULL, kCFNumberSInt64Type, &tag);
+    digestValue = CFDataCreate(NULL, agileHash.digestValue.Data, agileHash.digestValue.Length);
+    CFDictionaryAddValue(dictionary, digestTag, digestValue);
+
+loser:
+    CFReleaseNull(digestValue);
+    CFReleaseNull(digestTag);
+    if (tmppoolp) {
+        PORT_FreeArena(tmppoolp, PR_FALSE);
+    }
+    return status;
+}
+
+/*!
+ @function
+ @abstract Return the data in the signed Codesigning Hash Agility V2 attribute.
+ @param sinfo SignerInfo data for this signer, pointer to a CFDictionaryRef for attribute values
+ @discussion Returns a CFDictionaryRef containing the values of the attribute
+ @result A return value of errSecInternal is an error trying to look up the oid.
+ A status value of success with null result data indicates the attribute was not present.
+ */
+OSStatus
+SecCmsSignerInfoGetAppleCodesigningHashAgilityV2(SecCmsSignerInfoRef sinfo, CFDictionaryRef *sdict)
+{
+    SecCmsAttribute *attr;
+
+    if (sinfo == NULL || sdict == NULL) {
+        return errSecParam;
+    }
+
+    *sdict = NULL;
+
+    if (sinfo->hashAgilityV2AttrValues != NULL) {
+        *sdict = sinfo->hashAgilityV2AttrValues;    /* cached copy */
+        return SECSuccess;
+    }
+
+    attr = SecCmsAttributeArrayFindAttrByOidTag(sinfo->authAttr, SEC_OID_APPLE_HASH_AGILITY_V2, PR_TRUE);
+
+    /* attribute not found */
+    if (attr == NULL) {
+        return SECSuccess;
+    }
+
+    /* attrValues SET OF AttributeValue
+     * AttributeValue ::= ANY
+     */
+    SecAsn1Item **values = attr->values;
+    if (values == NULL) { /* There must be values */
+        return errSecDecode;
+    }
+
+    CFMutableDictionaryRef agileHashValues = CFDictionaryCreateMutable(NULL, SecCmsArrayCount((void **)values),
+                                                                       &kCFTypeDictionaryKeyCallBacks,
+                                                                       &kCFTypeDictionaryValueCallBacks);
+    while (*values != NULL) {
+        (void)CMSAddAgileHashToDictionary(agileHashValues, *values++);
+    }
+    if (CFDictionaryGetCount(agileHashValues) != SecCmsArrayCount((void **)attr->values)) {
+        CFReleaseNull(agileHashValues);
+        return errSecDecode;
+    }
+
+    sinfo->hashAgilityV2AttrValues = agileHashValues;    /* make cached copy */
+    if (sinfo->hashAgilityV2AttrValues) {
+        *sdict = sinfo->hashAgilityV2AttrValues;
+        return SECSuccess;
+    }
+    return errSecAllocate;
+}
+
+/*
+ * SecCmsSignerInfoGetAppleExpirationTime - return the expiration time,
+ *                      in UTCTime format, of a CMS signerInfo.
+ *
+ * sinfo - signerInfo data for this signer
+ *
+ * Returns a pointer to XXXX (what?)
+ * A return value of NULL is an error.
+ */
+OSStatus
+SecCmsSignerInfoGetAppleExpirationTime(SecCmsSignerInfoRef sinfo, CFAbsoluteTime *etime)
+{
+    SecCmsAttribute *attr = NULL;
+    SecAsn1Item * value = NULL;
+
+    if (sinfo == NULL || etime == NULL) {
+        return SECFailure;
+    }
+
+    if (sinfo->expirationTime != 0) {
+        *etime = sinfo->expirationTime;    /* cached copy */
+        return SECSuccess;
+    }
+
+    attr = SecCmsAttributeArrayFindAttrByOidTag(sinfo->authAttr, SEC_OID_APPLE_EXPIRATION_TIME, PR_TRUE);
+    if (attr == NULL || (value = SecCmsAttributeGetValue(attr)) == NULL) {
+        return SECFailure;
+    }
+    if (DER_UTCTimeToCFDate(value, etime) != SECSuccess) {
+        return SECFailure;
+    }
+    sinfo->expirationTime = *etime;    /* make cached copy */
+    return SECSuccess;
+}
+
 /*
  * Return the signing cert of a CMS signerInfo.
  *
@@ -814,6 +1018,31 @@ SecCmsSignerInfoGetSigningCertificate(SecCmsSignerInfoRef signerinfo, SecKeychai
     /* @@@ Make sure we search though all the certs in the cms message itself as well, it's silly
        to require them to be added to a keychain first. */
 
+#if USE_CDSA_CRYPTO
+    SecCmsSignerIdentifier *sid;
+
+    /*
+     * This cert will also need to be freed, but since we save it
+     * in signerinfo for later, we do not want to destroy it when
+     * we leave this function -- we let the clean-up of the entire
+     * cinfo structure later do the destroy of this cert.
+     */
+    sid = &signerinfo->signerIdentifier;
+    switch (sid->identifierType) {
+    case SecCmsSignerIDIssuerSN:
+	cert = CERT_FindCertByIssuerAndSN(keychainOrArray, sid->id.issuerAndSN);
+	break;
+    case SecCmsSignerIDSubjectKeyID:
+	cert = CERT_FindCertBySubjectKeyID(keychainOrArray, sid->id.subjectKeyID);
+	break;
+    default:
+	cert = NULL;
+	break;
+    }
+
+    /* cert can be NULL at that point */
+    signerinfo->cert = cert;	/* earmark it */
+#else
     SecAsn1Item **cert_datas = signerinfo->signedData->rawCerts;
     SecAsn1Item *cert_data;
     if (cert_datas) while ((cert_data = *cert_datas) != NULL) {
@@ -845,6 +1074,11 @@ SecCmsSignerInfoGetSigningCertificate(SecCmsSignerInfoRef signerinfo, SecKeychai
         cert = CERT_FindCertificateByIssuerAndSN(signerinfo->signedData->certs, signerinfo->signerIdentifier.id.issuerAndSN);
         signerinfo->cert = cert;
     }
+    if (!signerinfo->cert && (signerinfo->signerIdentifier.identifierType == SecCmsSignerIDSubjectKeyID)) {
+        cert = CERT_FindCertificateBySubjectKeyID(signerinfo->signedData->certs, signerinfo->signerIdentifier.id.subjectKeyID);
+        signerinfo->cert = cert;
+    }
+#endif
 
     return cert;
 }
@@ -868,6 +1102,9 @@ SecCmsSignerInfoGetSignerCommonName(SecCmsSignerInfoRef sinfo)
     if ((signercert = SecCmsSignerInfoGetSigningCertificate(sinfo, NULL)) == NULL)
 	return NULL;
 
+#if USE_CDSA_CRYPTO
+    SecCertificateGetCommonName(signercert, &commonName);
+#else
     CFArrayRef commonNames = SecCertificateCopyCommonNames(signercert);
     if (commonNames) {
         /* SecCertificateCopyCommonNames doesn't return empty arrays */
@@ -875,6 +1112,7 @@ SecCmsSignerInfoGetSignerCommonName(SecCmsSignerInfoRef sinfo)
         CFRetain(commonName);
         CFRelease(commonNames);
     }
+#endif
 
     return commonName;
 }
@@ -896,6 +1134,9 @@ SecCmsSignerInfoGetSignerEmailAddress(SecCmsSignerInfoRef sinfo)
     if ((signercert = SecCmsSignerInfoGetSigningCertificate(sinfo, NULL)) == NULL)
 	return NULL;
 
+#if USE_CDSA_CRYPTO
+    SecCertificateGetEmailAddress(signercert, &emailAddress);
+#else
     CFArrayRef names = SecCertificateCopyRFC822Names(signercert);
     if (names) {
         if (CFArrayGetCount(names) > 0)
@@ -904,6 +1145,7 @@ SecCmsSignerInfoGetSignerEmailAddress(SecCmsSignerInfoRef sinfo)
             CFRetain(emailAddress);
         CFRelease(names);
     }
+#endif
     return emailAddress;
 }
 
@@ -1076,7 +1318,7 @@ loser:
 
 /* 
  * SecCmsSignerInfoAddMSSMIMEEncKeyPrefs - add a SMIMEEncryptionKeyPreferences attribute to the
- * authenticated (i.e. signed) attributes of "signerinfo", using the OID prefered by Microsoft.
+ * authenticated (i.e. signed) attributes of "signerinfo", using the OID preferred by Microsoft.
  *
  * This is expected to be included in outgoing signed messages for email (S/MIME),
  * if compatibility with Microsoft mail clients is wanted.
@@ -1150,7 +1392,7 @@ SecCmsSignerInfoAddCounterSignature(SecCmsSignerInfoRef signerinfo,
 /*!
      @function
      @abstract Add the Apple Codesigning Hash Agility attribute to the authenticated (i.e. signed) attributes of "signerinfo".
-     @discussion This is expected to be included in outgoing signed Apple code signatures.
+     @discussion This is expected to be included in outgoing Apple code signatures.
  */
 OSStatus
 SecCmsSignerInfoAddAppleCodesigningHashAgility(SecCmsSignerInfoRef signerinfo, CFDataRef attrValue)
@@ -1195,6 +1437,170 @@ loser:
     return status;
 }
 
+static OSStatus CMSAddAgileHashToAttribute(PLArenaPool *poolp, SecCmsAttribute *attr, CFNumberRef cftag, CFDataRef value) {
+    PLArenaPool *tmppoolp = NULL;
+    int64_t tag;
+    SECOidData *digestOid = NULL;
+    CMSAppleAgileHash agileHash;
+    SecAsn1Item attrValue = { .Data = NULL, .Length = 0 };
+    OSStatus status = errSecSuccess;
+
+    memset(&agileHash, 0, sizeof(agileHash));
+
+    if(!CFNumberGetValue(cftag, kCFNumberSInt64Type, &tag)) {
+        return errSecParam;
+    }
+    digestOid = SECOID_FindOIDByTag((SECOidTag)tag);
+
+    agileHash.digestValue.Data = (uint8_t *)CFDataGetBytePtr(value);
+    agileHash.digestValue.Length = CFDataGetLength(value);
+    agileHash.digestOID.Data = digestOid->oid.Data;
+    agileHash.digestOID.Length = digestOid->oid.Length;
+
+    tmppoolp = PORT_NewArena(1024);
+    if (tmppoolp == NULL) {
+        return errSecAllocate;
+    }
+
+    if (SEC_ASN1EncodeItem(tmppoolp, &attrValue, &agileHash, CMSAppleAgileHashTemplate) == NULL) {
+        status = errSecParam;
+        goto loser;
+    }
+
+    status = SecCmsAttributeAddValue(poolp, attr, &attrValue);
+
+loser:
+    if (tmppoolp) {
+        PORT_FreeArena(tmppoolp, PR_FALSE);
+    }
+    return status;
+}
+
+/*!
+ @function
+ @abstract Add the Apple Codesigning Hash Agility attribute to the authenticated (i.e. signed) attributes of "signerinfo".
+ @discussion This is expected to be included in outgoing Apple code signatures.
+ */
+OSStatus
+SecCmsSignerInfoAddAppleCodesigningHashAgilityV2(SecCmsSignerInfoRef signerinfo, CFDictionaryRef attrValues)
+{
+    __block SecCmsAttribute *attr;
+    __block PLArenaPool *poolp = signerinfo->signedData->contentInfo.cmsg->poolp;
+    void *mark = PORT_ArenaMark(poolp);
+    OSStatus status = SECFailure;
+
+    /* The value is required for this attribute. */
+    if (!attrValues) {
+        status = errSecParam;
+        goto loser;
+    }
+
+    if ((attr = SecCmsAttributeCreate(poolp, SEC_OID_APPLE_HASH_AGILITY_V2,
+                                      NULL, PR_TRUE)) == NULL) {
+        status = errSecAllocate;
+        goto loser;
+    }
+
+    CFDictionaryForEach(attrValues, ^(const void *key, const void *value) {
+        if (!isNumber(key) || !isData(value)) {
+            return;
+        }
+        (void)CMSAddAgileHashToAttribute(poolp, attr, (CFNumberRef)key, (CFDataRef)value);
+    });
+
+    if (SecCmsSignerInfoAddAuthAttr(signerinfo, attr) != SECSuccess) {
+        status = errSecInternal;
+        goto loser;
+    }
+
+    PORT_ArenaUnmark(poolp, mark);
+    return SECSuccess;
+
+loser:
+    PORT_ArenaRelease(poolp, mark);
+    return status;
+}
+
+/*
+ * SecCmsSignerInfoAddAppleExpirationTime - add the expiration time to the
+ * authenticated (i.e. signed) attributes of "signerinfo".
+ *
+ * This is expected to be included in outgoing signed
+ * messages for Asset Receipts but is likely useful in other situations.
+ *
+ * This should only be added once; a second call will do nothing.
+ */
+OSStatus
+SecCmsSignerInfoAddAppleExpirationTime(SecCmsSignerInfoRef signerinfo, CFAbsoluteTime t)
+{
+    SecCmsAttribute *attr = NULL;
+    PLArenaPool *poolp = signerinfo->signedData->contentInfo.cmsg->poolp;
+    void *mark = PORT_ArenaMark(poolp);
+
+    /* create new expiration time attribute */
+    SecAsn1Item etime;
+    if (DER_CFDateToUTCTime(t, &etime) != SECSuccess) {
+        goto loser;
+    }
+
+    if ((attr = SecCmsAttributeCreate(poolp, SEC_OID_APPLE_EXPIRATION_TIME, &etime, PR_FALSE)) == NULL) {
+        SECITEM_FreeItem (&etime, PR_FALSE);
+        goto loser;
+    }
+
+    SECITEM_FreeItem(&etime, PR_FALSE);
+
+    if (SecCmsSignerInfoAddAuthAttr(signerinfo, attr) != SECSuccess) {
+        goto loser;
+    }
+
+    PORT_ArenaUnmark(poolp, mark);
+    return SECSuccess;
+
+loser:
+    PORT_ArenaRelease(poolp, mark);
+    return SECFailure;
+}
+
+SecCertificateRef SecCmsSignerInfoCopyCertFromEncryptionKeyPreference(SecCmsSignerInfoRef signerinfo) {
+    SecCertificateRef cert = NULL;
+    SecCmsAttribute *attr;
+    SecAsn1Item *ekp;
+
+    /* sanity check - see if verification status is ok (unverified does not count...) */
+    if (signerinfo->verificationStatus != SecCmsVSGoodSignature)
+        return NULL;
+
+    /* Prep the rawCerts */
+    SecAsn1Item **rawCerts = NULL;
+    if (signerinfo->signedData) {
+        rawCerts = signerinfo->signedData->rawCerts;
+    }
+
+    /* find preferred encryption cert */
+    if (!SecCmsArrayIsEmpty((void **)signerinfo->authAttr) &&
+        (attr = SecCmsAttributeArrayFindAttrByOidTag(signerinfo->authAttr,
+                                                     SEC_OID_SMIME_ENCRYPTION_KEY_PREFERENCE, PR_TRUE)) != NULL)
+    { /* we have a SMIME_ENCRYPTION_KEY_PREFERENCE attribute! Find the cert. */
+        ekp = SecCmsAttributeGetValue(attr);
+        if (ekp == NULL)
+            return NULL;
+        cert = SecSMIMEGetCertFromEncryptionKeyPreference(rawCerts, ekp);
+    }
+    if (cert) return cert;
+
+    if (!SecCmsArrayIsEmpty((void **)signerinfo->authAttr) &&
+        (attr = SecCmsAttributeArrayFindAttrByOidTag(signerinfo->authAttr,
+                                                     SEC_OID_MS_SMIME_ENCRYPTION_KEY_PREFERENCE, PR_TRUE)) != NULL)
+    { /* we have a MS_SMIME_ENCRYPTION_KEY_PREFERENCE attribute! Find the cert. */
+        ekp = SecCmsAttributeGetValue(attr);
+        if (ekp == NULL)
+            return NULL;
+        cert = SecSMIMEGetCertFromEncryptionKeyPreference(rawCerts, ekp);
+    }
+    return cert;
+}
+
 /*
  * XXXX the following needs to be done in the S/MIME layer code
  * after signature of a signerinfo is verified
@@ -1208,35 +1614,40 @@ SecCmsSignerInfoSaveSMIMEProfile(SecCmsSignerInfoRef signerinfo)
 /*
  * SecCmsSignerInfoIncludeCerts - set cert chain inclusion mode for this signer
  */
-OSStatus
-SecCmsSignerInfoIncludeCerts(SecCmsSignerInfoRef signerinfo, SecCmsCertChainMode cm, SECCertUsage usage)
-{
-    if (signerinfo->cert == NULL)
-	return SECFailure;
+    OSStatus
+    SecCmsSignerInfoIncludeCerts(SecCmsSignerInfoRef signerinfo, SecCmsCertChainMode cm, SECCertUsage usage)
+    {
+        if (signerinfo->cert == NULL) {
+            return SECFailure;
+        }
 
-    /* don't leak if we get called twice */
-    if (signerinfo->certList != NULL) {
-	CFRelease(signerinfo->certList);
-	signerinfo->certList = NULL;
+        /* don't leak if we get called twice */
+        if (signerinfo->certList != NULL) {
+            CFRelease(signerinfo->certList);
+            signerinfo->certList = NULL;
+        }
+
+        switch (cm) {
+        case SecCmsCMNone:
+            signerinfo->certList = NULL;
+            break;
+        case SecCmsCMCertOnly:
+            signerinfo->certList = CERT_CertListFromCert(signerinfo->cert);
+            break;
+        case SecCmsCMCertChain:
+            signerinfo->certList = CERT_CertChainFromCert(signerinfo->cert, usage, PR_FALSE, PR_FALSE);
+            break;
+        case SecCmsCMCertChainWithRoot:
+            signerinfo->certList = CERT_CertChainFromCert(signerinfo->cert, usage, PR_TRUE, PR_FALSE);
+            break;
+        case SecCmsCMCertChainWithRootOrFail:
+            signerinfo->certList = CERT_CertChainFromCert(signerinfo->cert, usage, PR_TRUE, PR_TRUE);
+            break;
+        }
+
+        if (cm != SecCmsCMNone && signerinfo->certList == NULL) {
+            return SECFailure;
+        }
+
+        return SECSuccess;
     }
-
-    switch (cm) {
-    case SecCmsCMNone:
-	signerinfo->certList = NULL;
-	break;
-    case SecCmsCMCertOnly:
-	signerinfo->certList = CERT_CertListFromCert(signerinfo->cert);
-	break;
-    case SecCmsCMCertChain:
-	signerinfo->certList = CERT_CertChainFromCert(signerinfo->cert, usage, PR_FALSE);
-	break;
-    case SecCmsCMCertChainWithRoot:
-	signerinfo->certList = CERT_CertChainFromCert(signerinfo->cert, usage, PR_TRUE);
-	break;
-    }
-
-    if (cm != SecCmsCMNone && signerinfo->certList == NULL)
-	return SECFailure;
-    
-    return SECSuccess;
-}

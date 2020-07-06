@@ -97,10 +97,6 @@ static const SSLCipherSuite legacy_ciphersuites[] = {
     TLS_RSA_WITH_AES_256_CBC_SHA,
     TLS_RSA_WITH_AES_128_CBC_SHA,
     SSL_RSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
-    TLS_ECDHE_RSA_WITH_RC4_128_SHA,
-    SSL_RSA_WITH_RC4_128_SHA,
-    SSL_RSA_WITH_RC4_128_MD5,
 };
 
 const SSLCipherSuite legacy_DHE_ciphersuites[] = {
@@ -132,10 +128,6 @@ const SSLCipherSuite legacy_DHE_ciphersuites[] = {
     TLS_RSA_WITH_AES_256_CBC_SHA,
     TLS_RSA_WITH_AES_128_CBC_SHA,
     SSL_RSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
-    TLS_ECDHE_RSA_WITH_RC4_128_SHA,
-    SSL_RSA_WITH_RC4_128_SHA,
-    SSL_RSA_WITH_RC4_128_MD5,
 };
 
 
@@ -238,10 +230,6 @@ const SSLCipherSuite TLSv1_RC4_fallback_ciphersuites[] = {
     TLS_RSA_WITH_AES_256_CBC_SHA,
     TLS_RSA_WITH_AES_128_CBC_SHA,
     SSL_RSA_WITH_3DES_EDE_CBC_SHA,
-    TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
-    TLS_ECDHE_RSA_WITH_RC4_128_SHA,
-    SSL_RSA_WITH_RC4_128_SHA,
-    SSL_RSA_WITH_RC4_128_MD5,
 };
 
 const SSLCipherSuite TLSv1_fallback_ciphersuites[] = {
@@ -278,7 +266,6 @@ static int test_GetEnabledCiphers(SSLContextRef ssl, unsigned expected_num_ciphe
     size_t size;
     int fail=1;
     SSLCipherSuite *ciphers = NULL;
-    OSStatus err;
 
     require_noerr(SSLSetIOFuncs(ssl, &SocketRead, &SocketWrite), out);
     require_noerr(SSLSetConnection(ssl, NULL), out);
@@ -297,8 +284,7 @@ static int test_GetEnabledCiphers(SSLContextRef ssl, unsigned expected_num_ciphe
     free(ciphers);
     ciphers = NULL;
 
-    err = SSLHandshake(ssl);
-    require(err == errSSLWouldBlock, out);
+    require(SSLHandshake(ssl) == errSSLWouldBlock, out);
 
     require_noerr(SSLGetNumberEnabledCiphers(ssl, &num_ciphers), out);
     require_string(num_ciphers==expected_num_ciphers, out, "wrong ciphersuites number");

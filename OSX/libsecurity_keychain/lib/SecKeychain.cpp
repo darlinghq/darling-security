@@ -35,6 +35,7 @@
 #include <security_cdsa_utilities/Schema.h>
 #include <security_cdsa_client/mdsclient.h>
 #include <pwd.h>
+#include <os/activity.h>
 #include <Security/AuthorizationTagsPriv.h>
 #include <Security/Authorization.h>
 #include "TokenLogin.h"
@@ -42,7 +43,10 @@
 OSStatus
 SecKeychainMDSInstall()
 {
-	BEGIN_SECAPI
+    BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainMDSInstall", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	Security::MDSClient::Directory d;
 	d.install();
@@ -76,6 +80,9 @@ OSStatus
 SecKeychainOpen(const char *pathName, SecKeychainRef *keychainRef)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainOpen", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(keychainRef)=globals().storageManager.make(pathName, false)->handle();
 
@@ -88,6 +95,9 @@ SecKeychainOpenWithGuid(const CSSM_GUID *guid, uint32 subserviceId, uint32 subse
 						const CSSM_NET_ADDRESS *dbLocation, SecKeychainRef *keychain)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainOpenWithGuid", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	// range check parameters
 	RequiredParam (guid);
@@ -110,6 +120,9 @@ SecKeychainCreate(const char *pathName, UInt32 passwordLength, const void *passw
 	Boolean promptUser, SecAccessRef initialAccess, SecKeychainRef *keychainRef)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainCreate", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
     
     KCThrowParamErrIf_(!pathName);
 	Keychain keychain = globals().storageManager.make(pathName, true, true);
@@ -134,6 +147,9 @@ OSStatus
 SecKeychainDelete(SecKeychainRef keychainOrArray)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainDelete", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	KCThrowIf_(!keychainOrArray, errSecInvalidKeychain);
 	StorageManager::KeychainList keychains;
@@ -149,6 +165,9 @@ OSStatus
 SecKeychainSetSettings(SecKeychainRef keychainRef, const SecKeychainSettings *newSettings)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainSetSettings", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	Keychain keychain = Keychain::optional(keychainRef);
 	if (newSettings->version==SEC_KEYCHAIN_SETTINGS_VERS1)
@@ -166,6 +185,9 @@ OSStatus
 SecKeychainCopySettings(SecKeychainRef keychainRef, SecKeychainSettings *outSettings)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainCopySettings", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	Keychain keychain = Keychain::optional(keychainRef);
 	if (outSettings->version==SEC_KEYCHAIN_SETTINGS_VERS1)
@@ -186,6 +208,9 @@ OSStatus
 SecKeychainUnlock(SecKeychainRef keychainRef, UInt32 passwordLength, const void *password, Boolean usePassword)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainUnlock", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	Keychain keychain = Keychain::optional(keychainRef);
 
@@ -202,6 +227,9 @@ OSStatus
 SecKeychainLock(SecKeychainRef	keychainRef)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainLock", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	Keychain keychain = Keychain::optional(keychainRef);
 	keychain->lock();
@@ -214,6 +242,9 @@ OSStatus
 SecKeychainLockAll(void)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainLockAll", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	globals().storageManager.lockAll();
 
@@ -224,6 +255,9 @@ SecKeychainLockAll(void)
 OSStatus SecKeychainResetLogin(UInt32 passwordLength, const void* password, Boolean resetSearchList)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainResetLogin", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
         //
         // Get the current user (using fallback method if necessary)
         //
@@ -239,10 +273,12 @@ OSStatus SecKeychainResetLogin(UInt32 passwordLength, const void* password, Bool
             endpwent();
         }
         if ( userName.length() == 0 )	// did we ultimately get one?
+        {
             MacOSError::throwMe(errAuthorizationInternal);
+        }
 
         SecurityServer::ClientSession().resetKeyStorePassphrase(password ? CssmData(const_cast<void *>(password), passwordLength) : CssmData());
-
+        secwarning("SecKeychainResetLogin: reset AKS passphrase");
 		if (password)
 		{
 			// Clear the plist and move aside (rename) the existing login.keychain
@@ -261,10 +297,12 @@ OSStatus SecKeychainResetLogin(UInt32 passwordLength, const void* password, Bool
 			// (implicitly calls resetKeychain, login, and defaultKeychain)
 			globals().storageManager.makeLoginAuthUI(NULL, true);
 		}
+        secwarning("SecKeychainResetLogin: reset osx keychain");
 
 		// Post a "list changed" event after a reset, so apps can refresh their list.
 		// Make sure we are not holding mLock when we post this event.
 		KCEventNotifier::PostKeychainEvent(kSecKeychainListChangedEvent);
+
 
 	END_SECAPI
 }
@@ -284,6 +322,9 @@ OSStatus
 SecKeychainSetDefault(SecKeychainRef keychainRef)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainSetDefault", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	globals().storageManager.defaultKeychain(Keychain::optional(keychainRef));
 
@@ -293,6 +334,9 @@ SecKeychainSetDefault(SecKeychainRef keychainRef)
 OSStatus SecKeychainCopySearchList(CFArrayRef *searchList)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainCopySearchList", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(searchList);
 	StorageManager &smr = globals().storageManager;
@@ -306,6 +350,9 @@ OSStatus SecKeychainCopySearchList(CFArrayRef *searchList)
 OSStatus SecKeychainSetSearchList(CFArrayRef searchList)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainSetSearchList", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(searchList);
 	StorageManager &smr = globals().storageManager;
@@ -319,6 +366,9 @@ OSStatus SecKeychainSetSearchList(CFArrayRef searchList)
 OSStatus SecKeychainCopyDomainDefault(SecPreferencesDomain domain, SecKeychainRef *keychainRef)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainCopyDomainDefault", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(keychainRef)=globals().storageManager.defaultKeychain(domain)->handle();
 
@@ -328,6 +378,9 @@ OSStatus SecKeychainCopyDomainDefault(SecPreferencesDomain domain, SecKeychainRe
 OSStatus SecKeychainSetDomainDefault(SecPreferencesDomain domain, SecKeychainRef keychainRef)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainSetDomainDefault", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	globals().storageManager.defaultKeychain(domain, Keychain::optional(keychainRef));
 
@@ -350,6 +403,9 @@ OSStatus SecKeychainCopyDomainSearchList(SecPreferencesDomain domain, CFArrayRef
 OSStatus SecKeychainSetDomainSearchList(SecPreferencesDomain domain, CFArrayRef searchList)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainSetDomainSearchList", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(searchList);
 	StorageManager &smr = globals().storageManager;
@@ -363,6 +419,9 @@ OSStatus SecKeychainSetDomainSearchList(SecPreferencesDomain domain, CFArrayRef 
 OSStatus SecKeychainSetPreferenceDomain(SecPreferencesDomain domain)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainSetPreferenceDomain", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	globals().storageManager.domain(domain);
 
@@ -372,6 +431,9 @@ OSStatus SecKeychainSetPreferenceDomain(SecPreferencesDomain domain)
 OSStatus SecKeychainGetPreferenceDomain(SecPreferencesDomain *domain)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainGetPreferenceDomain", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 	
 	*domain = globals().storageManager.domain();
 	
@@ -427,6 +489,9 @@ OSStatus
 SecKeychainAttemptMigrationWithMasterKey(SecKeychainRef keychain, UInt32 version, const char* masterKeyFilename)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainAttemptMigrationWithMasterKey", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
     RequiredParam(masterKeyFilename);
     Keychain kc = Keychain::optional(keychain);
@@ -522,6 +587,9 @@ pascal OSStatus
 SecKeychainAddCallback(SecKeychainCallback callbackFunction, SecKeychainEventMask eventMask, void* userContext)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainAddCallback", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(callbackFunction);
 	CCallbackMgr::AddCallback(callbackFunction,eventMask,userContext);
@@ -534,6 +602,9 @@ OSStatus
 SecKeychainRemoveCallback(SecKeychainCallback callbackFunction)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainRemoveCallback", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(callbackFunction);
 	CCallbackMgr::RemoveCallback(callbackFunction);
@@ -545,6 +616,9 @@ OSStatus
 SecKeychainAddInternetPassword(SecKeychainRef keychainRef, UInt32 serverNameLength, const char *serverName, UInt32 securityDomainLength, const char *securityDomain, UInt32 accountNameLength, const char *accountName, UInt32 pathLength, const char *path, UInt16 port, SecProtocolType protocol, SecAuthenticationType authenticationType, UInt32 passwordLength, const void *passwordData, SecKeychainItemRef *itemRef)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainAddInternetPassword", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	KCThrowParamErrIf_(passwordLength!=0 && passwordData==NULL);
 	// @@@ Get real itemClass
@@ -604,6 +678,9 @@ SecKeychainFindInternetPassword(CFTypeRef keychainOrArray, UInt32 serverNameLeng
 												
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainFindInternetPassword", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	StorageManager::KeychainList keychains;
 	globals().storageManager.optionalSearchList(keychainOrArray, keychains);
@@ -680,6 +757,9 @@ OSStatus
 SecKeychainAddGenericPassword(SecKeychainRef keychainRef, UInt32 serviceNameLength, const char *serviceName, UInt32 accountNameLength, const char *accountName, UInt32 passwordLength, const void *passwordData, SecKeychainItemRef *itemRef)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainAddGenericPassword", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	KCThrowParamErrIf_(passwordLength!=0 && passwordData==NULL);
 	// @@@ Get real itemClass
@@ -690,17 +770,7 @@ SecKeychainAddGenericPassword(SecKeychainRef keychainRef, UInt32 serviceNameLeng
 	{
 		CssmData service(const_cast<void *>(reinterpret_cast<const void *>(serviceName)), serviceNameLength);
 		item->setAttribute(Schema::attributeInfo(kSecServiceItemAttr), service);
-		// use service name as default label (UNLESS the service is iTools and we have an account name [3787371])
-		const char *iTools = "iTools";
-		if (accountNameLength && serviceNameLength==strlen(iTools) && !memcmp(serviceName, iTools, serviceNameLength))
-		{
-			CssmData account(const_cast<void *>(reinterpret_cast<const void *>(accountName)), accountNameLength);
-			item->setAttribute(Schema::attributeInfo(kSecLabelItemAttr), account);
-		}
-		else
-		{
-			item->setAttribute(Schema::attributeInfo(kSecLabelItemAttr), service);
-		}
+        item->setAttribute(Schema::attributeInfo(kSecLabelItemAttr), service);
 	}
 
 	if (accountName && accountNameLength)
@@ -736,6 +806,9 @@ SecKeychainFindGenericPassword(CFTypeRef keychainOrArray, UInt32 serviceNameLeng
 																			   
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainFindGenericPassword", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	StorageManager::KeychainList keychains;
 	globals().storageManager.optionalSearchList(keychainOrArray, keychains);
@@ -805,6 +878,9 @@ OSStatus
 SecKeychainGetDLDBHandle(SecKeychainRef keychainRef, CSSM_DL_DB_HANDLE *dldbHandle)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainGetDLDBHandle", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(dldbHandle);
 	
@@ -814,6 +890,8 @@ SecKeychainGetDLDBHandle(SecKeychainRef keychainRef, CSSM_DL_DB_HANDLE *dldbHand
     END_SECAPI
 }
 
+static ModuleNexus<Mutex> gSecReturnedKeychainCSPsMutex;
+static ModuleNexus<std::set<CssmClient::CSP>> gSecReturnedKeychainCSPs;
 
 OSStatus
 SecKeychainGetCSPHandle(SecKeychainRef keychainRef, CSSM_CSP_HANDLE *cspHandle)
@@ -823,7 +901,15 @@ SecKeychainGetCSPHandle(SecKeychainRef keychainRef, CSSM_CSP_HANDLE *cspHandle)
 	RequiredParam(cspHandle);
 
 	Keychain keychain = Keychain::optional(keychainRef);
-	*cspHandle = keychain->csp()->handle();
+
+    // Once we vend this handle, we can no longer delete this CSP object via RAII (and thus call CSSM_ModuleDetach on the CSP).
+    // Keep a global pointer to it to force the CSP to stay live forever.
+    CssmClient::CSP returnedKeychainCSP = keychain->csp();
+    {
+        StLock<Mutex> _(gSecReturnedKeychainCSPsMutex());
+        gSecReturnedKeychainCSPs().insert(returnedKeychainCSP);
+    }
+	*cspHandle = returnedKeychainCSP->handle();
 
 	END_SECAPI
 }
@@ -858,6 +944,9 @@ OSStatus
 SecKeychainChangePassword(SecKeychainRef keychainRef, UInt32 oldPasswordLength, const void *oldPassword,  UInt32 newPasswordLength, const void *newPassword)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainChangePassword", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	Keychain keychain = Keychain::optional(keychainRef);
         keychain->changePassphrase (oldPasswordLength, oldPassword,  newPasswordLength, newPassword);
@@ -870,6 +959,9 @@ OSStatus
 SecKeychainCopyLogin(SecKeychainRef *keychainRef)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainCopyLogin", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(keychainRef)=globals().storageManager.loginKeychain()->handle();
 
@@ -881,6 +973,9 @@ OSStatus
 SecKeychainLogin(UInt32 nameLength, const void* name, UInt32 passwordLength, const void* password)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainLogin", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	try
 	{
@@ -914,6 +1009,9 @@ SecKeychainLogin(UInt32 nameLength, const void* name, UInt32 passwordLength, con
 OSStatus SecKeychainStash()
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainStash", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
     
 	try
 	{
@@ -938,6 +1036,9 @@ OSStatus
 SecKeychainLogout()
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainLogout", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	globals().storageManager.logout();
 
@@ -980,6 +1081,9 @@ OSStatus SecKeychainIsValid(SecKeychainRef keychainRef, Boolean* isValid)
 OSStatus SecKeychainRemoveFromSearchList(SecKeychainRef keychainRef)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainRemoveFromSearchList", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
         StorageManager::KeychainList singleton;
         singleton.push_back(KeychainImpl::required(keychainRef));
         globals().storageManager.remove(singleton);
@@ -991,6 +1095,9 @@ OSStatus SecKeychainRemoveFromSearchList(SecKeychainRef keychainRef)
 OSStatus SecKeychainCreateNew(SecKeychainRef keychainRef, UInt32 passwordLength, const char* inPassword)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainCreateNew", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
         RequiredParam(inPassword);
         KeychainImpl::required(keychainRef)->create(passwordLength, inPassword);
 	END_SECAPI
@@ -1001,6 +1108,9 @@ OSStatus SecKeychainCreateNew(SecKeychainRef keychainRef, UInt32 passwordLength,
 OSStatus SecKeychainRecodeKeychain(SecKeychainRef keychainRef, CFArrayRef dbBlobArray, CFDataRef extraData)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainRecodeKeychain", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	// do error checking for required parameters
 	RequiredParam(dbBlobArray);
@@ -1076,6 +1186,9 @@ OSStatus SecKeychainRecodeKeychain(SecKeychainRef keychainRef, CFArrayRef dbBlob
 OSStatus SecKeychainCopySignature(SecKeychainRef keychainRef, CFDataRef *keychainSignature) 
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainCopySignature", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	// do error checking for required parameters
 	RequiredParam(keychainSignature);
@@ -1100,6 +1213,9 @@ OSStatus SecKeychainCopySignature(SecKeychainRef keychainRef, CFDataRef *keychai
 OSStatus SecKeychainCopyBlob(SecKeychainRef keychainRef, CFDataRef *dbBlob)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainCopyBlob", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	// do error checking for required parameters
 	RequiredParam(dbBlob);
@@ -1119,6 +1235,9 @@ OSStatus SecKeychainCopyBlob(SecKeychainRef keychainRef, CFDataRef *dbBlob)
 OSStatus SecKeychainCreateWithBlob(const char* fullPathName, CFDataRef dbBlob, SecKeychainRef *kcRef)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainCreateWithBlob", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 	
 	KCThrowParamErrIf_(!fullPathName);
 	KCThrowParamErrIf_(!dbBlob);
@@ -1143,6 +1262,9 @@ OSStatus SecKeychainAddDBToKeychainList (SecPreferencesDomain domain, const char
 										 const CSSM_GUID *guid, uint32 subServiceType)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainAddDBToKeychainList", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
 	RequiredParam(dbName);
 	StorageManager &smr = globals().storageManager;
@@ -1167,6 +1289,9 @@ OSStatus SecKeychainRemoveDBFromKeychainList (SecPreferencesDomain domain, const
 											  const CSSM_GUID *guid, uint32 subServiceType)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainRemoveDBFromKeychainList", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 	RequiredParam(dbName);
 	StorageManager &smr = globals().storageManager;
 	smr.removeFromDomainList(domain, dbName, *guid, subServiceType);
@@ -1185,6 +1310,9 @@ void SecKeychainSetServerMode()
 OSStatus SecKeychainSetBatchMode (SecKeychainRef kcRef, Boolean mode, Boolean rollback)
 {
 	BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainSetBatchMode", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 	RequiredParam(kcRef);
 	Keychain keychain = Keychain::optional(kcRef);
 	keychain->setBatchMode(mode, rollback);
@@ -1202,6 +1330,9 @@ OSStatus SecKeychainCleanupHandles()
 OSStatus SecKeychainVerifyKeyStorePassphrase(uint32_t retries)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainVerifyKeyStorePassphrase", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
     SecurityServer::ClientSession().verifyKeyStorePassphrase(retries);
     END_SECAPI
 }
@@ -1209,6 +1340,9 @@ OSStatus SecKeychainVerifyKeyStorePassphrase(uint32_t retries)
 OSStatus SecKeychainChangeKeyStorePassphrase()
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainChangeKeyStorePassphrase", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
     SecurityServer::ClientSession().changeKeyStorePassphrase();
     END_SECAPI
 }
@@ -1216,6 +1350,9 @@ OSStatus SecKeychainChangeKeyStorePassphrase()
 static OSStatus SecKeychainGetMasterKey(SecKeychainRef userKeychainRef, CFDataRef *masterKey, CFStringRef password)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainGetMasterKey", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
     // make a keychain object "wrapper" for this keychain ref
 	Keychain keychain = Keychain::optional(userKeychainRef);
@@ -1431,6 +1568,9 @@ OSStatus SecKeychainStoreUnlockKey(SecKeychainRef userKeychainRef, SecKeychainRe
 OSStatus SecKeychainGetUserPromptAttempts(uint32_t * attempts)
 {
     BEGIN_SECAPI
+    os_activity_t activity = os_activity_create("SecKeychainGetUserPromptAttempts", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_scope(activity);
+    os_release(activity);
 
     if(attempts) {
         SecurityServer::ClientSession().getUserPromptAttempts(*attempts);
@@ -1455,7 +1595,6 @@ OSStatus SecKeychainStoreUnlockKeyWithPubKeyHash(CFDataRef pubKeyHash, CFStringR
 
 		AuthorizationItem myItems = {"com.apple.ctk.pair", 0, NULL, 0};
 		AuthorizationRights myRights = {1, &myItems};
-		AuthorizationRights *authorizedRights = NULL;
 
 		char pathName[PATH_MAX];
 		UInt32 pathLength = PATH_MAX;
@@ -1475,16 +1614,20 @@ OSStatus SecKeychainStoreUnlockKeyWithPubKeyHash(CFDataRef pubKeyHash, CFStringR
 
 		AuthorizationEnvironment environment  = {3, envItems};
 		AuthorizationFlags flags = kAuthorizationFlagDefaults | kAuthorizationFlagInteractionAllowed | kAuthorizationFlagExtendRights;
-		result = AuthorizationCopyRights(authorizationRef, &myRights, &environment, flags, &authorizedRights);
-		if (authorizedRights)
-			AuthorizationFreeItemSet(authorizedRights);
+		result = AuthorizationCopyRights(authorizationRef, &myRights, &environment, flags, NULL);
+        secnotice("SecKeychain", "Authorization result: %d", (int)result);
 
 		if (result == errAuthorizationSuccess) {
 			AuthorizationItemSet *items;
 			result = AuthorizationCopyInfo(authorizationRef, kAuthorizationEnvironmentPassword, &items);
+            secnotice("SecKeychain", "Items copy result: %d", (int)result);
 			if (result == errAuthorizationSuccess) {
+                secnotice("SecKeychain", "Items count: %d", items->count);
 				if (items->count > 0) {
 					pwd = CFStringCreateWithCString(kCFAllocatorDefault, (const char *)items->items[0].value, kCFStringEncodingUTF8);
+                    if (pwd) {
+                        secnotice("SecKeychain", "Got kcpass");
+                    }
 				}
 				AuthorizationFreeItemSet(items);
 			}

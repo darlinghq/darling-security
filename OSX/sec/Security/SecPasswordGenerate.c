@@ -505,6 +505,8 @@ static int SecPasswordNumberOfRepeatedDigits(CFStringRef passcode){
     int finalRepeating = 0;
     if(highest != NULL)
         CFNumberGetValue(highest, kCFNumberIntType, &finalRepeating);
+
+    CFReleaseNull(highestRepeatingcount);
     return finalRepeating;
 }
 
@@ -868,10 +870,17 @@ fail:
     return false;
 }
 
-static void getPasswordRandomCharacters(CFStringRef *returned, CFDictionaryRef requirements, CFIndex *numberOfRandomCharacters, CFStringRef allowedCharacters)
+static OSStatus getPasswordRandomCharacters(CFStringRef *returned, CFDictionaryRef requirements, CFIndex *numberOfRandomCharacters, CFStringRef allowedCharacters)
 {
-    uint8_t randomNumbers[*numberOfRandomCharacters];
-    unsigned char randomCharacters[*numberOfRandomCharacters];
+    uint8_t *randomNumbers = malloc(*numberOfRandomCharacters);
+    unsigned char *randomCharacters = malloc(*numberOfRandomCharacters);
+    
+    if (randomNumbers == NULL || randomCharacters == NULL) {
+        free(randomNumbers);
+        free(randomCharacters);
+        return errSecMemoryError;
+    }
+    
     getUniformRandomNumbers(randomNumbers, *numberOfRandomCharacters, CFStringGetLength(allowedCharacters));
 
     CFTypeRef prohibitedCharacters = NULL;
@@ -899,6 +908,11 @@ static void getPasswordRandomCharacters(CFStringRef *returned, CFDictionaryRef r
     }
 
     *returned = CFStringCreateWithBytes(kCFAllocatorDefault, randomCharacters, *numberOfRandomCharacters, kCFStringEncodingUTF8, false);
+    
+    free(randomCharacters);
+    free(randomNumbers);
+    
+    return errSecSuccess;
 }
 
 static bool doesPasswordEndWith(CFStringRef password, CFStringRef prohibitedCharacters)
@@ -1525,7 +1539,7 @@ CF_RETURNS_RETAINED CFStringRef SecPasswordGenerate(SecPasswordType type, CFErro
 
     while (true) {
         allowedChars = CFDictionaryGetValue(properlyFormattedRequirements, kSecAllowedCharactersKey);
-        getPasswordRandomCharacters(&randomCharacters, properlyFormattedRequirements, &requiredCharactersSize, allowedChars);
+        require_noerr(getPasswordRandomCharacters(&randomCharacters, properlyFormattedRequirements, &requiredCharactersSize, allowedChars), fail);
 
         if(numberOfGroupsRef && groupSizeRef){
             finalPassword = CFStringCreateMutable(kCFAllocatorDefault, 0);
@@ -1689,20 +1703,32 @@ CFDictionaryRef SecPasswordCopyDefaultPasswordLength(SecPasswordType type, CFErr
 bool
 SecPasswordValidatePasswordFormat(SecPasswordType type, CFStringRef password, CFErrorRef *error)
 {
-    CFIndex tupleLengthInt = 0, numOfTuplesInt = 0, checkSumChars = 3;
+    CFIndex tupleLengthInt = 0, numOfTuplesInt = 0, checkSumChars = 0;
     CFStringRef checksum = NULL, madeChecksum = NULL, passwordNoChecksum = NULL;
     CFMutableStringRef randomChars = NULL;
     CFStringRef allowedChars = NULL;
     bool res = false;
 
-    if (type != kSecPasswordTypeiCloudRecoveryKey) {
-        return false;
+    switch (type) {
+        case kSecPasswordTypeiCloudRecoveryKey:
+            tupleLengthInt = 4;
+            numOfTuplesInt = 7;
+            checkSumChars = 2;
+            allowedChars = defaultiCloudCharacters;
+            break;
+        case kSecPasswordTypeiCloudRecovery:
+            tupleLengthInt = 4;
+            numOfTuplesInt = 6;
+            break;
+        case(kSecPasswordTypePIN):
+            tupleLengthInt = 4;
+            numOfTuplesInt = 1;
+            break;
+        default:
+            SecError(errSecBadReq, error, CFSTR("Password type does not exist."));
+            return false;
     }
 
-    tupleLengthInt = 4;
-    numOfTuplesInt = 7;
-    checkSumChars = 2;
-    allowedChars = defaultiCloudCharacters;
 
     if (numOfTuplesInt < 1)
         return false;
@@ -1734,24 +1760,26 @@ SecPasswordValidatePasswordFormat(SecPasswordType type, CFStringRef password, CF
         CFReleaseNull(substr);
     }
 
-    /*
-     * Pull apart and password and checksum
-     */
+    if (checkSumChars) {
+        /*
+         * Pull apart and password and checksum
+         */
 
-    checksum = CFStringCreateWithSubstring(SecCFAllocatorZeroize(), randomChars, CFRangeMake((numOfTuplesInt * tupleLengthInt) - checkSumChars, checkSumChars));
-    require(checksum, out);
+        checksum = CFStringCreateWithSubstring(SecCFAllocatorZeroize(), randomChars, CFRangeMake((numOfTuplesInt * tupleLengthInt) - checkSumChars, checkSumChars));
+        require(checksum, out);
 
-    passwordNoChecksum = CFStringCreateWithSubstring(SecCFAllocatorZeroize(), randomChars, CFRangeMake(0, (numOfTuplesInt * tupleLengthInt) - checkSumChars));
-    require(passwordNoChecksum, out);
+        passwordNoChecksum = CFStringCreateWithSubstring(SecCFAllocatorZeroize(), randomChars, CFRangeMake(0, (numOfTuplesInt * tupleLengthInt) - checkSumChars));
+        require(passwordNoChecksum, out);
 
-    /*
-     * Validate checksum
-     */
+        /*
+         * Validate checksum
+         */
 
-    madeChecksum = CreateChecksum(type, passwordNoChecksum, checkSumChars, allowedChars);
-    require(madeChecksum, out);
+        madeChecksum = CreateChecksum(type, passwordNoChecksum, checkSumChars, allowedChars);
+        require(madeChecksum, out);
 
-    require(CFEqual(madeChecksum, checksum), out);
+        require(CFEqual(madeChecksum, checksum), out);
+    }
 
     res = true;
 out:

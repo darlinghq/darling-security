@@ -9,12 +9,26 @@
 #include <Security/AuthorizationDB.h>
 #include <Security/AuthorizationTags.h>
 #include <Security/AuthorizationTagsPriv.h>
+#include <utilities/SecDispatchRelease.h>
+#include <utilities/SecCFRelease.h>
 #include <xpc/xpc.h>
 #include <xpc/private.h>
 #include <mach/mach.h>
 #include <syslog.h>
 #include <AssertMacros.h>
 #include <CoreFoundation/CFXPCBridge.h>
+#include <CoreGraphics/CGWindow.h>
+#include <dlfcn.h>
+#include <os/log.h>
+
+static os_log_t AUTH_LOG_DEFAULT() {
+    static dispatch_once_t once;
+    static os_log_t log;
+    dispatch_once(&once, ^{ log = os_log_create("com.apple.Authorization", "framework"); });
+    return log;
+};
+
+#define AUTH_LOG AUTH_LOG_DEFAULT()
 
 static dispatch_queue_t
 get_authorization_dispatch_queue()
@@ -107,7 +121,7 @@ OSStatus AuthorizationCreate(const AuthorizationRights *rights,
     // Reply
     reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
     require_action_quiet(reply != NULL, done, status = errAuthorizationInternal);
-    require_action_quiet(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
+    require_action_quiet(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal;);
 
     // Status
     status = (OSStatus)xpc_dictionary_get_int64(reply, AUTH_XPC_STATUS);
@@ -216,6 +230,65 @@ done:
 }
 
 static OSStatus
+_AuthorizationPreauthorizeCredentials_send_message(xpc_object_t message)
+{
+	OSStatus status = errAuthorizationInternal;
+	xpc_object_t reply = NULL;
+
+	// Send
+	require_action(message != NULL, done, status = errAuthorizationInternal);
+
+	// Reply
+	reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+	require_action(reply != NULL, done, status = errAuthorizationInternal);
+	require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
+
+	// Status
+	status = (OSStatus)xpc_dictionary_get_int64(reply, AUTH_XPC_STATUS);
+
+done:
+	xpc_release_safe(reply);
+	return status;
+}
+
+static OSStatus
+_AuthorizationPreauthorizeCredentials_prepare_message(AuthorizationRef authorization, const AuthorizationItemSet *credentials, xpc_object_t *message_out)
+{
+	OSStatus status = errAuthorizationInternal;
+	AuthorizationBlob *blob = NULL;
+	xpc_object_t message = xpc_dictionary_create(NULL, NULL, 0);
+	require_action(message != NULL, done, status = errAuthorizationInternal);
+
+	require_action(authorization != NULL, done, status = errAuthorizationInvalidRef);
+	blob = (AuthorizationBlob *)authorization;
+
+	xpc_dictionary_set_uint64(message, AUTH_XPC_TYPE, AUTHORIZATION_PREAUTHORIZE_CREDENTIALS);
+	xpc_dictionary_set_data(message, AUTH_XPC_BLOB, blob, sizeof(AuthorizationBlob));
+	setItemSet(message, AUTH_XPC_DATA, credentials);
+
+	*message_out = message;
+	message = NULL;
+	status = errAuthorizationSuccess;
+
+done:
+	xpc_release_safe(message);
+	return status;
+}
+
+OSStatus AuthorizationPreauthorizeCredentials(AuthorizationRef authorization, const AuthorizationItemSet *credentials)
+{
+	OSStatus status = errAuthorizationInternal;
+	xpc_object_t message = NULL;
+
+	require_noerr(status = _AuthorizationPreauthorizeCredentials_prepare_message(authorization, credentials, &message), done);
+	require_noerr(status = _AuthorizationPreauthorizeCredentials_send_message(message), done);
+
+done:
+	xpc_release_safe(message);
+	return status;
+}
+
+static OSStatus
 _AuthorizationCopyRights_send_message(xpc_object_t message, AuthorizationRights **authorizedRights)
 {
     OSStatus status = errAuthorizationInternal;
@@ -279,6 +352,48 @@ OSStatus AuthorizationCopyRights(AuthorizationRef authorization,
                         AuthorizationRights **authorizedRights)
 {
     OSStatus status = errAuthorizationInternal;
+    
+    if ((flags & kAuthorizationFlagSheet) && environment) {
+        // check if window ID is present in environment
+        CGWindowID window = 0;
+        for (UInt32 i = 0; i < environment->count; ++i) {
+            if (strncmp(environment->items[i].name, kAuthorizationEnvironmentWindowId, strlen(kAuthorizationEnvironmentWindowId)) == 0
+                && (environment->items[i].valueLength = sizeof(window)) && environment->items[i].value) {
+                window = *(CGWindowID *)environment->items[i].value;
+                break;
+            }
+        }
+        if (window > 0) {
+            os_log_debug(AUTH_LOG, "Trying to use sheet version");
+            static OSStatus (*sheetAuthorizationWorker)(CGWindowID windowID, AuthorizationRef authorization,
+                                                        const AuthorizationRights *rights,
+                                                        const AuthorizationEnvironment *environment,
+                                                        AuthorizationFlags flags,
+                                                        AuthorizationRights **authorizedRights,
+                                                        Boolean *authorizationLaunched) = NULL;
+            static dispatch_once_t onceToken;
+            dispatch_once(&onceToken, ^{
+                void *handle = dlopen("/System/Library/Frameworks/SecurityInterface.framework/SecurityInterface", RTLD_NOW|RTLD_GLOBAL|RTLD_NODELETE);
+                if (handle) {
+                    sheetAuthorizationWorker = dlsym(handle, "sheetAuthorizationWorker");
+                }
+            });
+            
+            if (sheetAuthorizationWorker) {
+                Boolean authorizationLaunched;
+                status = sheetAuthorizationWorker(window, authorization, rights, environment, flags, authorizedRights, &authorizationLaunched);
+                if (authorizationLaunched == true) {
+                    os_log_debug(AUTH_LOG, "Returning sheet result %d", (int)status);
+                    return status;
+                }
+                os_log(AUTH_LOG, "Sheet authorization cannot be used this time, falling back to the SecurityAgent UI");
+            } else {
+                os_log_debug(AUTH_LOG, "Failed to find sheet support in SecurityInterface");
+            }
+            // fall back to the standard (windowed) version if sheets are not available
+        }
+    }
+    
     xpc_object_t message = NULL;
 
     require_noerr(status = _AuthorizationCopyRights_prepare_message(authorization, rights, environment, flags, &message), done);

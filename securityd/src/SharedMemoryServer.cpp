@@ -24,6 +24,7 @@
 #include "SharedMemoryServer.h"
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/errno.h>
 #include <fcntl.h>
 #include <machine/byte_order.h>
 #include <string>
@@ -31,23 +32,28 @@
 #include <security_utilities/crc.h>
 #include <security_utilities/casts.h>
 #include <unistd.h>
+#include <vector>
 
 /*
     Logically, these should go in /var/run/mds, but we know that /var/db/mds
     already exists at install time.
 */
 
-std::string SharedMemoryCommon::SharedMemoryFilePath(const char *segmentName, uid_t uid) {
-    std::string path;
-    uid = SharedMemoryCommon::fixUID(uid);
-    path = SharedMemoryCommon::kMDSMessagesDirectory;   // i.e. /private/var/db/mds/messages/
-    if (uid != 0) {
-        path += std::to_string(uid) + "/";              // e.g. /private/var/db/mds/messages/501/
+static bool makedir(const char *path, mode_t mode) {
+    // Returns true on success. Primarily to centralize logging
+    if (::mkdir(path, mode)==0 || errno==EEXIST) {
+        return true;
+    } else {
+        secdebug("MDSPRIVACY","Failed to make directory: %s (%d)", path, errno);
+        return false;
     }
+}
 
-    path += SharedMemoryCommon::kUserPrefix;            // e.g. /var/db/mds/messages/se_
-    path += segmentName;                                // e.g. /var/db/mds/messages/501/se_SecurityMessages
-    return path;
+static void unlinkfile(const char *path) {
+    // Primarily to centralize logging
+    if (::unlink(path)==-1) {
+         secdebug("MDSPRIVACY","Failed to unlink file: %s (%d)", path, errno);
+    }
 }
 
 SharedMemoryServer::SharedMemoryServer (const char* segmentName, SegmentOffsetType segmentSize, uid_t uid, gid_t gid) :
@@ -59,40 +65,39 @@ SharedMemoryServer::SharedMemoryServer (const char* segmentName, SegmentOffsetTy
 
     // make the mds directory, just in case it doesn't exist
     if (mUID == 0) {
-        mkdir(SharedMemoryCommon::kMDSDirectory, perm1777);
-        mkdir(SharedMemoryCommon::kMDSMessagesDirectory, perm0755);
+        makedir(SharedMemoryCommon::kMDSDirectory, perm1777);
+        makedir(SharedMemoryCommon::kMDSMessagesDirectory, perm0755);
     } else {
         // Assume kMDSMessagesDirectory was created first by securityd
         std::string uidstr = std::to_string(mUID);
         std::string upath = SharedMemoryCommon::kMDSMessagesDirectory;
         upath += "/" + uidstr;
-        mkdir(upath.c_str(), perm0755);
+        makedir(upath.c_str(), perm0755);
     }
     mFileName = SharedMemoryCommon::SharedMemoryFilePath(segmentName, uid);
 
     // make the file name
     // clean any old file away
-    unlink(mFileName.c_str());
+    unlinkfile(mFileName.c_str());
 
     // open the file
     secdebug("MDSPRIVACY","creating %s",mFileName.c_str ());
-    mBackingFile = open (mFileName.c_str (), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if(mUID != 0) {
+        mBackingFile = open (mFileName.c_str (), O_RDWR | O_CREAT | O_EXCL, perm0600);
+    }
+    else {
+        mBackingFile = open (mFileName.c_str (), O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    }
+
     if (mBackingFile < 0)
     {
         secdebug("MDSPRIVACY","creation of %s failed", mFileName.c_str());
         return;
     }
 
-    int rx = chown(mFileName.c_str (), uid, gid);
+    int rx = fchown(mBackingFile, uid, gid);
     if (rx) {
         secdebug("MDSPRIVACY","chown of %s to %d/%d failed : %d", mFileName.c_str(), uid, gid, rx);
-    }
-
-    if (mUID != 0) {
-        int rx = fchmod(mBackingFile, perm0600);
-        if (rx) {
-            secdebug("MDSPRIVACY","chmod of %s to %x failed : %d", mFileName.c_str(), perm0600, rx);
-        }
     }
 
     // set the segment size
@@ -104,7 +109,7 @@ SharedMemoryServer::SharedMemoryServer (const char* segmentName, SegmentOffsetTy
     if (mSegment == MAP_FAILED) // can't map the memory?
     {
         mSegment = NULL;
-        unlink(mFileName.c_str());
+        unlinkfile(mFileName.c_str());
     } else {
         mDataPtr = mDataArea = mSegment + sizeof(SegmentOffsetType);
         mDataMax = mSegment + segmentSize;;
@@ -127,7 +132,7 @@ SharedMemoryServer::~SharedMemoryServer ()
     close(mBackingFile);
 	
 	// mark the segment for deletion
-	unlink (mFileName.c_str ());
+	unlinkfile(mFileName.c_str ());
 }
 
 
@@ -141,18 +146,21 @@ const SegmentOffsetType
 
 void SharedMemoryServer::WriteMessage (SegmentOffsetType domain, SegmentOffsetType event, const void *message, SegmentOffsetType messageLength)
 {
-    // backing file MUST be right size
-    ftruncate (mBackingFile, mSegmentSize);
+    // backing file MUST be right size, don't ftruncate() more then needed though to avoid reaching too deep into filesystem
+    struct stat sb;
+    if (::fstat(mBackingFile, &sb) == 0 && sb.st_size != (off_t)mSegmentSize) {
+        ::ftruncate(mBackingFile, mSegmentSize);
+    }
 
 	// assemble the final message
 	ssize_t messageSize = kHeaderLength + messageLength;
-	u_int8_t finalMessage[messageSize];
-	SegmentOffsetType *fm  = (SegmentOffsetType*) finalMessage;
+	std::vector<u_int8_t> finalMessage(messageSize);
+	SegmentOffsetType *fm  = (SegmentOffsetType*) finalMessage.data();
 	fm[0] = OSSwapHostToBigInt32(domain);
 	fm[1] = OSSwapHostToBigInt32(event);
 	memcpy(&fm[2], message, messageLength);
 	
-	SegmentOffsetType crc = CalculateCRC(finalMessage, messageSize);
+	SegmentOffsetType crc = CalculateCRC(finalMessage.data(), messageSize);
 	
 	// write the length
 	WriteOffset(int_cast<size_t, SegmentOffsetType>(messageSize));
@@ -161,7 +169,7 @@ void SharedMemoryServer::WriteMessage (SegmentOffsetType domain, SegmentOffsetTy
 	WriteOffset(crc);
 	
 	// write the data
-	WriteData (finalMessage, int_cast<size_t, SegmentOffsetType>(messageSize));
+	WriteData (finalMessage.data(), int_cast<size_t, SegmentOffsetType>(messageSize));
 	
 	// write the data count
 	SetProducerOffset(int_cast<size_t, SegmentOffsetType>(mDataPtr - mDataArea));

@@ -45,17 +45,20 @@ namespace CodeSigning {
 // that it's driven directly from the signing code, with no
 // abstractions to get in the way.
 //
-class MachORep : public SingleDiskRep {
+class MachORep : public SingleDiskRep, public EditableDiskRep {
 public:
 	MachORep(const char *path, const Context *ctx = NULL);
 	virtual ~MachORep();
 	
 	CFDataRef component(CodeDirectory::SpecialSlot slot);
+	RawComponentMap createRawComponents();
 	CFDataRef identification();
 	Universal *mainExecutableImage();
 	void prepareForSigning(SigningContext &context);
 	size_t signingBase();
 	size_t signingLimit();
+	size_t execSegBase(const Architecture *arch);
+	size_t execSegLimit(const Architecture *arch);
 	std::string format();
     CFDictionaryRef diskRepInformation();
 
@@ -66,7 +69,7 @@ public:
 	void strictValidate(const CodeDirectory* cd, const ToleratedErrors& tolerated, SecCSFlags flags);
 	
 	void flush();		// flush cache
-	
+
 	static bool candidate(UnixPlusPlus::FileDesc &fd);
 	
 public:
@@ -83,8 +86,11 @@ protected:
 	Requirement *libraryRequirements(const Architecture *arch, const SigningContext &ctx);
 
 private:
+	static bool needsExecSeg(const MachO& macho);
+	EmbeddedSignatureBlob *signingData();
+
 	Universal *mExecutable;	// cached Mach-O/Universal reference to mainExecutablePath()
-	EmbeddedSignatureBlob *mSigningData; // cached signing data from current architecture
+	mutable EmbeddedSignatureBlob *mSigningData; // cached signing data from current architecture
 };
 
 

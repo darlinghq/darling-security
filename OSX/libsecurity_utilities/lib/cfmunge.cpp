@@ -47,22 +47,6 @@ namespace Security {
 
 
 //
-// Initialize a CFMunge. We start out with the default CFAllocator, and
-// we do not throw errors.
-//
-CFMunge::CFMunge(const char *fmt, va_list arg)
-	: format(fmt), allocator(NULL), error(errSecSuccess)
-{
-	va_copy(args, arg);
-}
-
-CFMunge::~CFMunge()
-{
-	va_end(args);
-}
-
-
-//
 // Skip whitespace and other fluff and deliver the next significant character.
 //
 char CFMunge::next()
@@ -94,11 +78,11 @@ bool CFMunge::parameter()
 	switch (*++format) {
 	case 'A':
 		++format;
-		allocator = va_arg(args, CFAllocatorRef);
+		allocator = va_arg(*args, CFAllocatorRef);
 		return true;
 	case 'E':
 		++format;
-		error = va_arg(args, OSStatus);
+		error = va_arg(*args, OSStatus);
 		return true;
 	default:
 		return false;
@@ -109,7 +93,7 @@ bool CFMunge::parameter()
 //
 // The top constructor.
 //
-CFTypeRef CFMake::make()
+CFTypeRef CF_RETURNS_RETAINED CFMake::make()
 {
 	while (next() == '@')
 		parameter();
@@ -142,27 +126,27 @@ CFTypeRef CFMake::make()
 }
 
 
-CFTypeRef CFMake::makeformat()
+CFTypeRef CF_RETURNS_RETAINED CFMake::makeformat()
 {
 	++format;
 	switch (*format++) {
 	case 'b':	// blob (pointer, length)
 		{
-			const void *data = va_arg(args, const void *);
-			size_t length = va_arg(args, size_t);
+			const void *data = va_arg(*args, const void *);
+			size_t length = va_arg(*args, size_t);
 			return CFDataCreate(allocator, (const UInt8 *)data, length);
 		}
 	case F_BOOLEAN:	// boolean (with int promotion)
-		return va_arg(args, int) ? kCFBooleanTrue : kCFBooleanFalse;
+		return va_arg(*args, int) ? kCFBooleanTrue : kCFBooleanFalse;
 	case 'd':
-		return makeCFNumber(va_arg(args, int));
+		return makeCFNumber(va_arg(*args, int));
 	case 's':
-		return CFStringCreateWithCString(allocator, va_arg(args, const char *),
+		return CFStringCreateWithCString(allocator, va_arg(*args, const char *),
 			kCFStringEncodingUTF8);
 	case F_OBJECT:
-		return CFRetain(va_arg(args, CFTypeRef));
+		return CFRetain(va_arg(*args, CFTypeRef));
 	case 'u':
-		return makeCFNumber(va_arg(args, unsigned int));
+		return makeCFNumber(va_arg(*args, unsigned int));
 	default:
 		assert(false);
 		return NULL;
@@ -200,7 +184,7 @@ CFTypeRef CFMake::makenumber()
 // Embedded strings can either be alphanumeric (only), or delimited with single quotes ''.
 // No escapes are processed within such quotes. If you want arbitrary string values, use %s.
 //
-CFTypeRef CFMake::makestring()
+CFTypeRef CF_RETURNS_RETAINED CFMake::makestring()
 {
 	const char *start, *end;
 	if (*format == '\'') {
@@ -224,14 +208,14 @@ CFTypeRef CFMake::makestring()
 //
 // Construct a CFDictionary
 //
-CFTypeRef CFMake::makedictionary()
+CFTypeRef CF_RETURNS_RETAINED CFMake::makedictionary()
 {
 	++format;	// next '{'
 	next('!');	// indicates mutable (currently always true)
 	CFMutableDictionaryRef dict;
 	if (next('+')) { // {+%O, => copy dictionary argument, then proceed
 		if (next('%') && next('O')) {
-			CFDictionaryRef source = va_arg(args, CFDictionaryRef);
+			CFDictionaryRef source = va_arg(*args, CFDictionaryRef);
 			dict = CFDictionaryCreateMutableCopy(allocator, NULL, source);
 			if (next('}'))
 				return dict;
@@ -240,6 +224,8 @@ CFTypeRef CFMake::makedictionary()
 	} else
 		dict = CFDictionaryCreateMutable(allocator, 0,
 			&kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    if (dict == NULL)
+        return dict;
 	if (add(dict))
 		return dict;
 	else {
@@ -286,14 +272,14 @@ CFDictionaryRef CFMake::addto(CFMutableDictionaryRef dict)
 //
 // Construct a CFArray
 //
-CFTypeRef CFMake::makearray()
+CFTypeRef CF_RETURNS_RETAINED CFMake::makearray()
 {
 	++format;	// next '['
 	next('!');	// indicates mutable (currently always)
 	CFMutableArrayRef array = NULL;
 	if (next('+')) { // {+%O, => copy array argument, then proceed
 		if (next('%') && next('O')) {
-			CFArrayRef source = va_arg(args, CFArrayRef);
+			CFArrayRef source = va_arg(*args, CFArrayRef);
 			array = CFArrayCreateMutableCopy(allocator, 0, source);
 			if (next('}'))
 				return array;
@@ -324,7 +310,7 @@ CFTypeRef CFMake::makearray()
 //
 class CFScan : public CFMake {
 public:
-	CFScan(const char *format, va_list args)
+	CFScan(const char *format, va_list *args)
 		: CFMake(format, args), suppress(false) { }
 	
 	bool scan(CFTypeRef obj);
@@ -417,7 +403,7 @@ template <class Type>
 void CFScan::store(Type value)
 {
 	if (!suppress)
-		*va_arg(args, Type *) = value;
+		*va_arg(*args, Type *) = value;
 }
 
 
@@ -455,8 +441,8 @@ bool CFScan::scanformat(CFTypeRef obj)
 		switch (*format) {
 		case 'f':	// %Bf - two arguments (value, &variable)
 			{
-				unsigned flag = va_arg(args, unsigned);
-				unsigned *value = va_arg(args, unsigned *);
+				unsigned flag = va_arg(*args, unsigned);
+				unsigned *value = va_arg(*args, unsigned *);
 				if (obj == kCFBooleanTrue && !suppress)
 					*value |= flag;
 				return true;
@@ -552,16 +538,16 @@ CFTypeRef CFScan::dictpath(CFTypeRef obj)
 //
 // The public functions
 //
-CFTypeRef cfmake(const char *format, ...)
+CFTypeRef CF_RETURNS_RETAINED cfmake(const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
-	CFTypeRef result = CFMake(format, args).make();
+	CFTypeRef result = CFMake(format, &args).make();
 	va_end(args);
 	return result;
 }
 
-CFTypeRef vcfmake(const char *format, va_list args)
+CFTypeRef CF_RETURNS_RETAINED vcfmake(const char *format, va_list *args)
 {
 	return CFMake(format, args).make();
 }
@@ -570,7 +556,7 @@ CFDictionaryRef cfadd(CFMutableDictionaryRef dict, const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
-	CFDictionaryRef result = CFMake(format, args).addto(dict);
+	CFDictionaryRef result = CFMake(format, &args).addto(dict);
 	va_end(args);
 	return result;
 }
@@ -580,12 +566,12 @@ bool cfscan(CFTypeRef obj, const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
-	bool result = vcfscan(obj, format, args);
+	bool result = vcfscan(obj, format, &args);
 	va_end(args);
 	return result;
 }
 
-bool vcfscan(CFTypeRef obj, const char *format, va_list args)
+bool vcfscan(CFTypeRef obj, const char *format, va_list *args)
 {
 	return CFScan(format, args).scan(obj);
 }
@@ -595,12 +581,12 @@ CFTypeRef cfget(CFTypeRef obj, const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
-	CFTypeRef result = vcfget(obj, format, args);
+	CFTypeRef result = vcfget(obj, format, &args);
 	va_end(args);
 	return result;
 }
 
-CFTypeRef vcfget(CFTypeRef obj, const char *format, va_list args)
+CFTypeRef vcfget(CFTypeRef obj, const char *format, va_list *args)
 {
 	return CFScan(format, args).dictpath(obj);
 }

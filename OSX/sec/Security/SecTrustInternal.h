@@ -51,10 +51,44 @@ __BEGIN_DECLS
 #define kSecTrustResultKey "result"
 #define kSecTrustInfoKey "info"
 
-#if TARGET_OS_MAC && !TARGET_OS_IPHONE
+extern const CFStringRef kSecCertificateDetailSHA1Digest;
+
+#if TARGET_OS_OSX
 SecKeyRef SecTrustCopyPublicKey_ios(SecTrustRef trust);
 CFArrayRef SecTrustCopyProperties_ios(SecTrustRef trust);
 #endif
+
+#define kSecTrustEventNameKey "eventName"
+#define kSecTrustEventAttributesKey "eventAttributes"
+#define kSecTrustEventApplicationID "appID"
+
+typedef enum {
+    kSecTrustErrorSubTypeBlocked,
+    kSecTrustErrorSubTypeRevoked,
+    kSecTrustErrorSubTypeKeySize,
+    kSecTrustErrorSubTypeWeakHash,
+    kSecTrustErrorSubTypeDenied,
+    kSecTrustErrorSubTypeCompliance,
+    kSecTrustErrorSubTypePinning,
+    kSecTrustErrorSubTypeTrust,
+    kSecTrustErrorSubTypeUsage,
+    kSecTrustErrorSubTypeName,
+    kSecTrustErrorSubTypeExpired,
+    kSecTrustErrorSubTypeInvalid,
+} SecTrustErrorSubType;
+
+#define __PC_SUBTYPE_   kSecTrustErrorSubTypeInvalid
+#define __PC_SUBTYPE_N  kSecTrustErrorSubTypeName
+#define __PC_SUBTYPE_E  kSecTrustErrorSubTypeExpired
+#define __PC_SUBTYPE_S  kSecTrustErrorSubTypeKeySize
+#define __PC_SUBTYPE_H  kSecTrustErrorSubTypeWeakHash
+#define __PC_SUBTYPE_U  kSecTrustErrorSubTypeUsage
+#define __PC_SUBTYPE_P  kSecTrustErrorSubTypePinning
+#define __PC_SUBTYPE_V  kSecTrustErrorSubTypeRevoked
+#define __PC_SUBTYPE_T  kSecTrustErrorSubTypeTrust
+#define __PC_SUBTYPE_C  kSecTrustErrorSubTypeCompliance
+#define __PC_SUBTYPE_D  kSecTrustErrorSubTypeDenied
+#define __PC_SUBTYPE_B  kSecTrustErrorSubTypeBlocked
 
 __END_DECLS
 

@@ -41,7 +41,9 @@ static void InitServerECIES(ccecies_gcm_t ecies, const struct ccmode_gcm *gcm_mo
                               gcm_mode,
                               kBlobCipherKeySize,
                               kBlobMacSize,
-                              ECIES_EXPORT_PUB_STANDARD+ECIES_EPH_PUBKEY_IN_SHAREDINFO1);
+                              ECIES_EXPORT_PUB_STANDARD
+                              +ECIES_EPH_PUBKEY_IN_SHAREDINFO1
+                              +ECIES_LEGACY_IV);
 }
 
 //
@@ -189,7 +191,7 @@ fail:
 
 static size_t ccec_x963_pub_export_size(ccec_pub_ctx_t key)
 {
-    return ccec_x963_export_size(0,(ccec_full_ctx_t)key.body); // We lie since the API is broken.
+    return ccec_x963_export_size(0,key);
 }
 
 CFDataRef SecCopyEncryptedToServerKey(SecKeyRef publicKey, CFDataRef dataToEncrypt, CFErrorRef *error)
@@ -226,7 +228,7 @@ CFDataRef SecCopyEncryptedToServerKey(SecKeyRef publicKey, CFDataRef dataToEncry
         size_t tag_size = kBlobMacSize;
         uint8_t *tag = NULL;
 
-        require_action_quiet(public_key_size + ciphertext_size + tag_size == encrypted_size, errout, SecError(errSecInternal, error, CFSTR("Allocation mismatch"), encrypt_result));
+        require_action_quiet(public_key_size + ciphertext_size + tag_size == encrypted_size, errout, SecError(errSecInternal, error, CFSTR("Allocation mismatch")));
 
         encrypted = CreateDataForEncodeEncryptedBlobOf(public_key,
                                                        public_key_size, &public_key_data,
@@ -318,14 +320,14 @@ CFDataRef SecCopyDecryptedForServer(SecKeyRef serverFullKey, CFDataRef blob, CFE
     return result;
 }
 
-#if TARGET_OS_MAC && !(TARGET_OS_IPHONE || TARGET_OS_EMBEDDED)
+#if TARGET_OS_OSX
 #include <Security/SecTrustInternal.h>
 #endif
 
 CFDataRef SecCopyEncryptedToServer(SecTrustRef trustedEvaluation, CFDataRef dataToEncrypt, CFErrorRef *error)
 {
     CFDataRef result = NULL;
-#if TARGET_OS_MAC && !(TARGET_OS_IPHONE || TARGET_OS_EMBEDDED)
+#if TARGET_OS_OSX
     SecKeyRef trustKey = SecTrustCopyPublicKey_ios(trustedEvaluation);
 #else
     SecKeyRef trustKey = SecTrustCopyPublicKey(trustedEvaluation);

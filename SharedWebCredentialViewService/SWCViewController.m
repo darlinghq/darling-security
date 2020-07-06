@@ -9,7 +9,7 @@
 #import "SWCViewController.h"
 #import <UIKit/UIViewController_Private.h>
 #import <UIKit/UIFont_Private.h>
-
+#import <UIKit/UIImage_SymbolImagePrivate.h>
 #import <UIKit/UIAlertController_Private.h>
 #import <UIKit/UITableViewCell_Private.h>
 
@@ -88,9 +88,9 @@ const NSString* SWC_SERVER_KEY   = @"srvr";
         
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         
-        self.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.005];
+        self.backgroundColor = [UIColor systemBackgroundColor];
         
-        self.textLabel.textColor = [UIColor blackColor];
+        self.textLabel.textColor = [UIColor labelColor];
         self.textLabel.textAlignment = NSTextAlignmentLeft;
         self.textLabel.adjustsFontSizeToFitWidth = YES;
         self.textLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
@@ -98,7 +98,7 @@ const NSString* SWC_SERVER_KEY   = @"srvr";
         NSString *title = [dict objectForKey:SWC_ACCOUNT_KEY];
         self.textLabel.text = title ? title : NSLocalizedString(@"--", nil);
         
-        self.detailTextLabel.textColor = [UIColor darkGrayColor];
+        self.detailTextLabel.textColor = [UIColor secondaryLabelColor];
         self.detailTextLabel.textAlignment = NSTextAlignmentLeft;
         self.detailTextLabel.adjustsFontSizeToFitWidth = YES;
         self.detailTextLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
@@ -107,11 +107,10 @@ const NSString* SWC_SERVER_KEY   = @"srvr";
         self.detailTextLabel.text = subtitle ? subtitle : NSLocalizedString(@"--", nil);
         
         self.backgroundView = [[UIView alloc] init];
-        self.backgroundView.backgroundColor = self.backgroundColor;
-        
-        self.imageView.image = [self _checkmarkImage: NO];
+        self.backgroundView.backgroundColor = [UIColor systemBackgroundColor];
+
+        self.imageView.image = [UIImage symbolImageNamed:@"checkmark"];
         self.imageView.hidden = YES;
-        
     }
     
     return self;
@@ -164,13 +163,13 @@ const NSString* SWC_SERVER_KEY   = @"srvr";
             if (!_bottomLine) {
                 CGRect rectZero = CGRectMake(0, 0, 0, 0);
                 _bottomLine = [[UIView alloc] initWithFrame:rectZero];
-                _bottomLine.backgroundColor = [UIColor colorWithWhite:.5 alpha:.5];
+                _bottomLine.backgroundColor = [UIColor separatorColor];
                 [self.backgroundView addSubview:_bottomLine];
             }
             if (!_bottomLineSelected) {
                 CGRect rectZero = CGRectMake(0, 0, 0, 0);
                 _bottomLineSelected = [[UIView alloc] initWithFrame:rectZero];
-                _bottomLineSelected.backgroundColor = [UIColor colorWithWhite:.5 alpha:.5];
+                _bottomLineSelected.backgroundColor = [UIColor separatorColor];
                 [self.selectedBackgroundView addSubview: _bottomLineSelected];
             }
             
@@ -195,13 +194,13 @@ const NSString* SWC_SERVER_KEY   = @"srvr";
             if (!_topLine) {
                 CGRect rectZero = CGRectMake(0, 0, 0, 0);
                 _topLine = [[UIView alloc] initWithFrame:rectZero];
-                _topLine.backgroundColor = [UIColor colorWithWhite:.5 alpha:.5];
+                _topLine.backgroundColor = [UIColor separatorColor];
                 [self.backgroundView addSubview:_topLine];
             }
             if (!_topLineSelected) {
                 CGRect rectZero = CGRectMake(0, 0, 0, 0);
                 _topLineSelected = [[UIView alloc] initWithFrame:rectZero];
-                _topLineSelected.backgroundColor = [UIColor colorWithWhite:.5 alpha:.5];
+                _topLineSelected.backgroundColor = [UIColor separatorColor];
                 [self.selectedBackgroundView addSubview: _topLineSelected];
             }
             
@@ -264,7 +263,7 @@ const NSString* SWC_SERVER_KEY   = @"srvr";
         _table = [[UITableView alloc] init];
         [_table setTranslatesAutoresizingMaskIntoConstraints:NO];
         [_table setAutoresizingMask:UIViewAutoresizingNone];
-        [_table setBackgroundColor:[UIColor clearColor]];
+        [_table setBackgroundColor:[UIColor systemBackgroundColor]];
         [_table setSeparatorStyle:UITableViewCellSeparatorStyleNone];
     }
     [_table sizeToFit];
@@ -296,38 +295,43 @@ const NSString* SWC_SERVER_KEY   = @"srvr";
         CFRelease(credentialList);
     }
     
+    table.frame = CGRectMake(0.0, 0.0, 300.0, 45.0);
+    [table layoutIfNeeded]; // so autolayout can do its thing and then we can measure a cell
+    UITableViewCell* cell = table.visibleCells.firstObject;
+    CGFloat heightForOneRow = cell ? CGRectGetHeight(cell.frame) : 45.0;
     
     NSDictionary* views = NSDictionaryOfVariableBindings(table);
     
     if ([_credentials count] > 2)
     {
         
-        NSDictionary *metrics = @{@"height":@120.0};
+        CGFloat manyCredentialsHeight = CGFloatMax((heightForOneRow * 2) + 30.0, 120.0);
+        NSDictionary *metrics = @{@"height":@(manyCredentialsHeight)};
         [view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|-[table]-|"  options:0 metrics:metrics views:views]];
         [view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[table(height)]-|" options:0 metrics:metrics views:views]];
         
         CGFloat scale = [[UIScreen mainScreen] scale];
         table.layer.borderWidth = 1.0 / scale;
-        table.layer.borderColor = [UIColor colorWithWhite:.5 alpha:.5].CGColor;
-        
-        [self setPreferredContentSize:CGSizeMake(0,140)];
+        table.layer.borderColor = [UIColor opaqueSeparatorColor].CGColor;
+
+        [self setPreferredContentSize:CGSizeMake(0, manyCredentialsHeight + 20.0)];
         
     } else if ([_credentials count] == 2) {
         
-        NSDictionary *metrics = @{@"height":@90.0};
+        NSDictionary *metrics = @{@"height":@(heightForOneRow * 2)};
         [view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[table]|"  options:0 metrics:metrics views:views]];
         [view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[table(height)]-|" options:0 metrics:metrics views:views]];
         
-        [self setPreferredContentSize:CGSizeMake(0,90)];
+        [self setPreferredContentSize:CGSizeMake(0, heightForOneRow * 2)];
         [table setScrollEnabled: NO];
         
     } else {  // [_credentials count] == 1
         
-        NSDictionary *metrics = @{@"height":@45.0};
+        NSDictionary *metrics = @{@"height":@(heightForOneRow)};
         [view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"H:|[table]|"  options:0 metrics:metrics views:views]];
         [view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat:@"V:|[table(height)]|" options:0 metrics:metrics views:views]];
         
-        [self setPreferredContentSize:CGSizeMake(0,45)];
+        [self setPreferredContentSize:CGSizeMake(0, heightForOneRow)];
         [table setScrollEnabled: NO];
         
     }
@@ -345,6 +349,7 @@ const NSString* SWC_SERVER_KEY   = @"srvr";
     _selectedCell = [NSIndexPath indexPathForItem:0 inSection: 0];
     SWCItemCell *cell = (SWCItemCell *)[_table cellForRowAtIndexPath: _selectedCell];
     [cell setTicked: YES];
+    [cell layoutSubviews];
     [_table selectRowAtIndexPath: _selectedCell animated: NO scrollPosition: UITableViewScrollPositionTop];
     
     CFErrorRef error = NULL;

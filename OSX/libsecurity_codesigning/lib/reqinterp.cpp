@@ -24,6 +24,7 @@
 //
 // reqinterp - Requirement language (exprOp) interpreter
 //
+
 #include "reqinterp.h"
 #include "codesigning_dtrace.h"
 #include <Security/SecTrustSettingsPriv.h>
@@ -34,6 +35,8 @@
 #include <IOKit/IOKitLib.h>
 #include <IOKit/IOCFUnserialize.h>
 #include "csutilities.h"
+#include "notarization.h"
+#include "legacydevid.h"
 
 namespace Security {
 namespace CodeSigning {
@@ -149,12 +152,20 @@ bool Requirement::Interpreter::eval(int depth)
 			Match match(*this);
 			return certFieldValue(key, match, cert);
 		}
+#if TARGET_OS_OSX
 	case opCertGeneric:
 		{
 			SecCertificateRef cert = mContext->cert(get<int32_t>());
 			string key = getString();
 			Match match(*this);
 			return certFieldGeneric(key, match, cert);
+		}
+	case opCertFieldDate:
+		{
+			SecCertificateRef cert = mContext->cert(get<int32_t>());
+			string key = getString();
+			Match match(*this);
+			return certFieldDate(key, match, cert);
 		}
 	case opCertPolicy:
 		{
@@ -163,6 +174,7 @@ bool Requirement::Interpreter::eval(int depth)
 			Match match(*this);
 			return certFieldPolicy(key, match, cert);
 		}
+#endif
 	case opTrustedCert:
 		return trustedCert(get<int32_t>());
 	case opTrustedCerts:
@@ -175,6 +187,14 @@ bool Requirement::Interpreter::eval(int depth)
 		{
 			int32_t targetPlatform = get<int32_t>();
 			return mContext->directory && mContext->directory->platform == targetPlatform;
+		}
+	case opNotarized:
+		{
+			return isNotarized(mContext);
+		}
+	case opLegacyDevID:
+		{
+			return meetsDeveloperIDLegacyAllowedPolicy(mContext);
 		}
 	default:
 		// opcode not recognized - handle generically if possible, fail otherwise
@@ -204,7 +224,7 @@ bool Requirement::Interpreter::infoKeyValue(const string &key, const Match &matc
 	if (mContext->info)		// we have an Info.plist
 		if (CFTypeRef value = CFDictionaryGetValue(mContext->info, CFTempString(key)))
 			return match(value);
-	return false;
+	return match(kCFNull);
 }
 
 
@@ -216,12 +236,14 @@ bool Requirement::Interpreter::entitlementValue(const string &key, const Match &
 	if (mContext->entitlements)		// we have an Info.plist
 		if (CFTypeRef value = CFDictionaryGetValue(mContext->entitlements, CFTempString(key)))
 			return match(value);
-	return false;
+	return match(kCFNull);
 }
 
 
 bool Requirement::Interpreter::certFieldValue(const string &key, const Match &match, SecCertificateRef cert)
 {
+// XXX: Not supported on embedded yet due to lack of supporting API
+#if TARGET_OS_OSX
 	// no cert, no chance
 	if (cert == NULL)
 		return false;
@@ -273,10 +295,11 @@ bool Requirement::Interpreter::certFieldValue(const string &key, const Match &ma
 
 	// unrecognized key. Fail but do not abort to promote backward compatibility down the road
 	secinfo("csinterp", "cert field notation \"%s\" not understood", key.c_str());
+#endif
 	return false;
 }
 
-	
+#if TARGET_OS_OSX
 bool Requirement::Interpreter::certFieldGeneric(const string &key, const Match &match, SecCertificateRef cert)
 {
 	// the key is actually a (binary) OID value
@@ -286,7 +309,26 @@ bool Requirement::Interpreter::certFieldGeneric(const string &key, const Match &
 
 bool Requirement::Interpreter::certFieldGeneric(const CssmOid &oid, const Match &match, SecCertificateRef cert)
 {
-	return cert && certificateHasField(cert, oid) && match(kCFBooleanTrue);
+	return cert && match(certificateHasField(cert, oid) ? (CFTypeRef)kCFBooleanTrue : (CFTypeRef)kCFNull);
+}
+
+bool Requirement::Interpreter::certFieldDate(const string &key, const Match &match, SecCertificateRef cert)
+{
+	// the key is actually a (binary) OID value
+	CssmOid oid((char *)key.data(), key.length());
+	return certFieldDate(oid, match, cert);
+}
+	
+bool Requirement::Interpreter::certFieldDate(const CssmOid &oid, const Match &match, SecCertificateRef cert)
+{
+	CFTypeRef value = cert != NULL ? certificateCopyFieldDate(cert, oid) : NULL;
+	bool matching = match(value != NULL ? value : kCFNull);
+	
+	if (value) {
+		CFRelease(value);
+	}
+	
+	return matching;
 }
 
 bool Requirement::Interpreter::certFieldPolicy(const string &key, const Match &match, SecCertificateRef cert)
@@ -298,9 +340,9 @@ bool Requirement::Interpreter::certFieldPolicy(const string &key, const Match &m
 
 bool Requirement::Interpreter::certFieldPolicy(const CssmOid &oid, const Match &match, SecCertificateRef cert)
 {
-	return cert && certificateHasPolicy(cert, oid) && match(kCFBooleanTrue);
+	return cert && match(certificateHasPolicy(cert, oid) ? (CFTypeRef)kCFBooleanTrue : (CFTypeRef)kCFNull);
 }
-
+#endif
 
 //
 // Check the Apple-signed condition
@@ -366,6 +408,10 @@ bool Requirement::Interpreter::appleLocalAnchored()
     if (csr_check(CSR_ALLOW_APPLE_INTERNAL))
         return false;
 
+	if (mContext->forcePlatform) {
+		return true;
+	}
+
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         additionalTrustedCertificates = getAdditionalTrustedAnchors();
@@ -394,7 +440,7 @@ bool Requirement::Interpreter::appleSigned()
 				return true;
     } else if (appleLocalAnchored()) {
         return true;
-    }
+	}
 	return false;
 }
 
@@ -406,12 +452,16 @@ bool Requirement::Interpreter::verifyAnchor(SecCertificateRef cert, const unsign
 {
 	// get certificate bytes
 	if (cert) {
+        SHA1 hasher;
+#if TARGET_OS_OSX
 		CSSM_DATA certData;
 		MacOSError::check(SecCertificateGetData(cert, &certData));
 		
 		// verify hash
-		SHA1 hasher;
 		hasher(certData.Data, certData.Length);
+#else
+        hasher(SecCertificateGetBytePtr(cert), SecCertificateGetLength(cert));
+#endif
 		return hasher.verify(digest);
 	}
 	return false;
@@ -469,6 +519,8 @@ bool Requirement::Interpreter::trustedCert(int slot)
 //
 SecTrustSettingsResult Requirement::Interpreter::trustSetting(SecCertificateRef cert, bool isAnchor)
 {
+    // XXX: Not supported on embedded yet due to lack of supporting API
+#if TARGET_OS_OSX
 	// the SPI input is the uppercase hex form of the SHA-1 of the certificate...
 	assert(cert);
 	SHA1::Digest digest;
@@ -506,6 +558,9 @@ SecTrustSettingsResult Requirement::Interpreter::trustSetting(SecCertificateRef 
 		::free(errors);
 		MacOSError::throwMe(rc);
 	}
+#else
+    return kSecTrustSettingsResultUnspecified;
+#endif
 }
 
 
@@ -515,6 +570,7 @@ SecTrustSettingsResult Requirement::Interpreter::trustSetting(SecCertificateRef 
 Requirement::Interpreter::Match::Match(Interpreter &interp)
 {
 	switch (mOp = interp.get<MatchOperation>()) {
+	case matchAbsent:
 	case matchExists:
 		break;
 	case matchEqual:
@@ -527,6 +583,14 @@ Requirement::Interpreter::Match::Match(Interpreter &interp)
 	case matchGreaterEqual:
 		mValue.take(makeCFString(interp.getString()));
 		break;
+	case matchOn:
+	case matchBefore:
+	case matchAfter:
+	case matchOnOrBefore:
+	case matchOnOrAfter: {
+		mValue.take(CFDateCreate(NULL, interp.getAbsoluteTime()));
+		break;
+	}
 	default:
 		// Assume this (unknown) match type has a single data argument.
 		// This gives us a chance to keep the instruction stream aligned.
@@ -545,6 +609,10 @@ bool Requirement::Interpreter::Match::operator () (CFTypeRef candidate) const
 	if (!candidate)
 		return false;
 
+	if (candidate == kCFNull) {
+		return mOp == matchAbsent; // only 'absent' matches
+	}
+	
 	// interpret an array as matching alternatives (any one succeeds)
 	if (CFGetTypeID(candidate) == CFArrayGetTypeID()) {
 		CFArrayRef array = CFArrayRef(candidate);
@@ -555,31 +623,33 @@ bool Requirement::Interpreter::Match::operator () (CFTypeRef candidate) const
 	}
 
 	switch (mOp) {
+	case matchAbsent:
+		return false;		// it exists, so it cannot be absent
 	case matchExists:		// anything but NULL and boolean false "exists"
 		return !CFEqual(candidate, kCFBooleanFalse);
 	case matchEqual:		// equality works for all CF types
 		return CFEqual(candidate, mValue);
 	case matchContains:
-		if (CFGetTypeID(candidate) == CFStringGetTypeID()) {
+		if (isStringValue() && CFGetTypeID(candidate) == CFStringGetTypeID()) {
 			CFStringRef value = CFStringRef(candidate);
-			if (CFStringFindWithOptions(value, mValue, CFRangeMake(0, CFStringGetLength(value)), 0, NULL))
+			if (CFStringFindWithOptions(value, cfStringValue(), CFRangeMake(0, CFStringGetLength(value)), 0, NULL))
 				return true;
 		}
 		return false;
 	case matchBeginsWith:
-		if (CFGetTypeID(candidate) == CFStringGetTypeID()) {
+		if (isStringValue() && CFGetTypeID(candidate) == CFStringGetTypeID()) {
 			CFStringRef value = CFStringRef(candidate);
-			if (CFStringFindWithOptions(value, mValue, CFRangeMake(0, CFStringGetLength(mValue)), 0, NULL))
+			if (CFStringFindWithOptions(value, cfStringValue(), CFRangeMake(0, CFStringGetLength(cfStringValue())), 0, NULL))
 				return true;
 		}
 		return false;
 	case matchEndsWith:
-		if (CFGetTypeID(candidate) == CFStringGetTypeID()) {
+		if (isStringValue() && CFGetTypeID(candidate) == CFStringGetTypeID()) {
 			CFStringRef value = CFStringRef(candidate);
-			CFIndex matchLength = CFStringGetLength(mValue);
+			CFIndex matchLength = CFStringGetLength(cfStringValue());
 			CFIndex start = CFStringGetLength(value) - matchLength;
 			if (start >= 0)
-				if (CFStringFindWithOptions(value, mValue, CFRangeMake(start, matchLength), 0, NULL))
+				if (CFStringFindWithOptions(value, cfStringValue(), CFRangeMake(start, matchLength), 0, NULL))
 					return true;
 		}
 		return false;
@@ -591,6 +661,26 @@ bool Requirement::Interpreter::Match::operator () (CFTypeRef candidate) const
 		return inequality(candidate, kCFCompareNumerically, kCFCompareGreaterThan, false);
 	case matchGreaterEqual:
 		return inequality(candidate, kCFCompareNumerically, kCFCompareLessThan, false);
+	case matchOn:
+	case matchBefore:
+	case matchAfter:
+	case matchOnOrBefore:
+	case matchOnOrAfter: {
+		if (!isDateValue() || CFGetTypeID(candidate) != CFDateGetTypeID()) {
+			return false;
+		}
+		
+		CFComparisonResult res = CFDateCompare((CFDateRef)candidate, cfDateValue(), NULL);
+
+		switch (mOp) {
+			case matchOn: return res == 0;
+			case matchBefore: return res < 0;
+			case matchAfter: return res > 0;
+			case matchOnOrBefore: return res <= 0;
+			case matchOnOrAfter: return res >= 0;
+			default: abort();
+		}
+	}
 	default:
 		// unrecognized match types can never match
 		return false;
@@ -601,9 +691,9 @@ bool Requirement::Interpreter::Match::operator () (CFTypeRef candidate) const
 bool Requirement::Interpreter::Match::inequality(CFTypeRef candidate, CFStringCompareFlags flags,
 	CFComparisonResult outcome, bool negate) const
 {
-	if (CFGetTypeID(candidate) == CFStringGetTypeID()) {
+	if (isStringValue() && CFGetTypeID(candidate) == CFStringGetTypeID()) {
 		CFStringRef value = CFStringRef(candidate);
-		if ((CFStringCompare(value, mValue, flags) == outcome) == negate)
+		if ((CFStringCompare(value, cfStringValue(), flags) == outcome) == negate)
 			return true;
 	}
 	return false;

@@ -278,11 +278,13 @@ protected:
 	void makeUnlocked(const CssmData &passphrase, bool unlockKeybag);	 // interior version of unlock(CssmData)
 	
 	void establishOldSecrets(const AccessCredentials *creds);
-	bool establishNewSecrets(const AccessCredentials *creds, SecurityAgent::Reason reason);
+	bool establishNewSecrets(const AccessCredentials *creds, SecurityAgent::Reason reason, bool change);
 	
 	bool interactiveUnlock();
 	
 	CssmClient::Key keyFromCreds(const TypedList &sample, unsigned int requiredLength);
+	CssmClient::Key keyFromKeybag(const TypedList &sample);
+	CssmClient::Key makeRawKey(void *data, size_t length, CSSM_ALGORITHMS algid, CSSM_KEYUSE usage);
 	
 	void encode();									// (re)generate mBlob if needed
 

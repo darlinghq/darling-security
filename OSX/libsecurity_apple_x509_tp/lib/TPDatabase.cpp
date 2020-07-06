@@ -119,7 +119,7 @@ TPCertInfo *tpDbFindIssuerCert(
 		dlDb = dbList->DLDBHandle[dbDex];
 		cert.Data = NULL;
 		cert.Length = 0;
-		resultHand = 0;
+		resultHand = CSSM_INVALID_HANDLE;
 		record = tpCertLookup(dlDb,
 			subjectItem->issuerName(),
 			&resultHand,
@@ -435,7 +435,7 @@ static CSSM_DB_UNIQUE_RECORD_PTR tpCrlLookup(
 	else {
 		/* right now */
 		StLock<Mutex> _(tpTimeLock());
-		timeAtNowPlus(0, TIME_CSSM, timeStr);
+		timeAtNowPlus(0, TP_TIME_CSSM, timeStr);
 	}
 	CSSM_DATA timeData;
 	timeData.Data = (uint8 *)timeStr;
@@ -507,6 +507,7 @@ TPCrlInfo *tpDbFindIssuerCrl(
 		dlDb = dbList->DLDBHandle[dbDex];
 		crl.Data = NULL;
 		crl.Length = 0;
+		resultHand = CSSM_INVALID_HANDLE;
 		record = tpCrlLookup(dlDb,
 			&issuer,
 			vfyCtx.verifyTime,

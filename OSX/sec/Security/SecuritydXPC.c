@@ -33,6 +33,7 @@
 // TODO Shorten these string values to save ipc bandwidth.
 const char *kSecXPCKeyOperation = "operation";
 const char *kSecXPCKeyResult = "status";
+const char *kSecXPCKeyEndpoint = "endpoint";
 const char *kSecXPCKeyError = "error";
 const char *kSecXPCKeyClientToken = "client";
 const char *kSecXPCKeyPeerInfoArray = "peer-infos";
@@ -40,7 +41,9 @@ const char *kSecXPCKeyPeerInfo = "peer-info";
 const char *kSecXPCKeyUserLabel = "userlabel";
 const char *kSecXPCKeyBackup = "backup";
 const char *kSecXPCKeyKeybag = "keybag";
+const char *kSecXPCKeyFlags = "flags";
 const char *kSecXPCKeyUserPassword = "password";
+const char *kSecXPCKeyEMCSBackup = "emcsbackup";
 const char *kSecXPCKeyDSID = "dsid";
 const char *kSecXPCKeyQuery = "query";
 const char *kSecXPCKeyAttributesToUpdate = "attributesToUpdate";
@@ -54,9 +57,6 @@ const char *kSecXPCPublicPeerId = "publicPeerId"; // Public peer id
 const char *kSecXPCOTRSession = "otrsess"; // OTR session bytes
 const char *kSecXPCData = "data"; // Data to process
 const char *kSecXPCOTRReady = "otrrdy"; // OTR ready for messages
-const char *kSecXPCKeyDeviceID = "deviceID";
-const char *kSecXPCKeySendIDSMessage = "sendIDSMessageCommand";
-const char *kSecXPCKeyIDSMessage = "idsMessage";
 const char *kSecXPCKeyViewName = "viewname";
 const char *kSecXPCKeyViewActionCode = "viewactioncode";
 const char *kSecXPCKeyHSA2AutoAcceptInfo = "autoacceptinfo";
@@ -75,8 +75,12 @@ const char *kSecXPCKeyTriesLabel = "tries";
 const char *kSecXPCKeyFileDescriptor = "fileDescriptor";
 const char *kSecXPCKeyAccessGroups = "accessGroups";
 const char *kSecXPCKeyClasses = "classes";
-
-
+const char *kSecXPCKeyNormalizedIssuer = "normIssuer";
+const char *kSecXPCKeySerialNumber = "serialNum";
+const char *kSecXPCKeyBackupKeybagIdentifier = "backupKeybagID";
+const char *kSecXPCKeyBackupKeybagPath = "backupKeybagPath";
+const char *kSecXPCVersion = "version";
+const char *kSecXPCKeySignInAnalytics = "signinanalytics";
 //
 // XPC Functions for both client and server.
 //
@@ -91,8 +95,10 @@ CFStringRef SOSCCGetOperationDescription(enum SecXPCOperation op)
             return CFSTR("OTAGetEscrowCertificates");
         case kSecXPCOpOTAPKIGetNewAsset:
             return CFSTR("OTAPKIGetNewAsset");
-        case kSecXPCOpSetHSA2AutoAcceptInfo:
-            return CFSTR("SetHSA2AutoAcceptInfo");
+        case kSecXPCOpOTASecExperimentGetNewAsset:
+            return CFSTR("OTASecExperimentGetNewAsset");
+        case kSecXPCOpOTASecExperimentGetAsset:
+            return CFSTR("OTASecExperimentGetAsset");
         case kSecXPCOpAcceptApplicants:
             return CFSTR("AcceptApplicants");
         case kSecXPCOpApplyToARing:
@@ -131,20 +137,8 @@ CFStringRef SOSCCGetOperationDescription(enum SecXPCOperation op)
             return CFSTR("GetAllTheRings");
         case kSecXPCOpGetLastDepartureReason:
             return CFSTR("GetLastDepartureReason");
-        case kSecXPCOpHandleIDSMessage:
-            return CFSTR("HandleIDSMessage");
-        case kSecXPCOpSyncWithKVSPeer:
-            return CFSTR("SyncKVSPeer");
-        case kSecXPCOpSyncWithIDSPeer:
-            return CFSTR("SyncIDSPeer");
-        case kSecXPCOpIDSDeviceID:
-            return CFSTR("IDSDeviceID");
-        case kSecXPCOpClearKVSPeerMessage:
-            return CFSTR("kSecXPCOpClearKVSPeerMessage");
         case kSecXPCOpLoggedOutOfAccount:
             return CFSTR("LoggedOutOfAccount");
-        case kSecXPCOpPingTest:
-            return CFSTR("PingTest");
         case kSecXPCOpProcessSyncWithAllPeers:
             return CFSTR("ProcessSyncWithAllPeers");
         case kSecXPCOpProcessSyncWithPeers:
@@ -157,32 +151,34 @@ CFStringRef SOSCCGetOperationDescription(enum SecXPCOperation op)
             return CFSTR("RejectApplicants");
         case kSecXPCOpRemoveThisDeviceFromCircle:
             return CFSTR("RemoveThisDeviceFromCircle");
+        case kSecXPCOpRemoveThisDeviceFromCircleWithAnalytics:
+            return CFSTR("RemoveThisDeviceFromCircleWithAnalytics");
         case kSecXPCOpRemovePeersFromCircle:
             return CFSTR("RemovePeersFromCircle");
-        case kSecXPCOpRequestDeviceID:
-            return CFSTR("RequestDeviceID");
+        case kSecXPCOpRemovePeersFromCircleWithAnalytics:
+            return CFSTR("RemovePeersFromCircleWithAnalytics");
         case kSecXPCOpRequestEnsureFreshParameters:
             return CFSTR("RequestEnsureFreshParameters");
         case kSecXPCOpRequestToJoin:
             return CFSTR("RequestToJoin");
+        case kSecXPCOpRequestToJoinWithAnalytics:
+            return CFSTR("RequestToJoinWithAnalytics");
         case kSecXPCOpRequestToJoinAfterRestore:
             return CFSTR("RequestToJoinAfterRestore");
+        case kSecXPCOpRequestToJoinAfterRestoreWithAnalytics:
+            return CFSTR("RequestToJoinAfterRestoreWithAnalytics");
         case kSecXPCOpResetToEmpty:
             return CFSTR("ResetToEmpty");
+        case kSecXPCOpResetToEmptyWithAnalytics:
+            return CFSTR("ResetToEmptyWithAnalytics");
         case kSecXPCOpResetToOffering:
             return CFSTR("ResetToOffering");
         case kSecXPCOpRingStatus:
             return CFSTR("RingStatus");
         case kSecXPCOpRollKeys:
             return CFSTR("RollKeys");
-        case kSecXPCOpSecurityProperty:
-            return CFSTR("SecurityProperty");
-        case kSecXPCOpSendIDSMessage:
-            return CFSTR("SendIDSMessage");
         case kSecXPCOpSetBagForAllSlices:
             return CFSTR("SetBagForAllSlices");
-        case kSecXPCOpSetDeviceID:
-            return CFSTR("SetDeviceID");
         case kSecXPCOpSetLastDepartureReason:
             return CFSTR("SetLastDepartureReason");
         case kSecXPCOpSetNewPublicBackupKey:
@@ -191,6 +187,8 @@ CFStringRef SOSCCGetOperationDescription(enum SecXPCOperation op)
             return CFSTR("SetUserCredentials");
         case kSecXPCOpSetUserCredentialsAndDSID:
             return CFSTR("SetUserCredentialsAndDSID");
+        case kSecXPCOpSetUserCredentialsAndDSIDWithAnalytics:
+            return CFSTR("SetUserCredentialsAndDSIDWithAnalytics");
         case kSecXPCOpTryUserCredentials:
             return CFSTR("TryUserCredentials");
         case kSecXPCOpValidateUserPublic:
@@ -233,7 +231,9 @@ CFStringRef SOSCCGetOperationDescription(enum SecXPCOperation op)
             return CFSTR("keychain_restore_syncable");
         case sec_keychain_sync_update_message_id: 
             return CFSTR("keychain_sync_update_message");
-        case sec_ota_pki_asset_version_id: 
+        case sec_ota_pki_trust_store_version_id:
+            return CFSTR("ota_pki_trust_store_version");
+        case sec_ota_pki_asset_version_id:
             return CFSTR("ota_pki_asset_version");
         case sec_otr_session_create_remote_id: 
             return CFSTR("otr_session_create_remote");
@@ -255,6 +255,8 @@ CFStringRef SOSCCGetOperationDescription(enum SecXPCOperation op)
             return CFSTR("trust_store_copy_all");
         case sec_trust_store_copy_usage_constraints_id:
             return CFSTR("trust_store_copy_usage_constraints");
+        case sec_ocsp_cache_flush_id:
+            return CFSTR("ocsp_cache_flush");
         case soscc_EnsurePeerRegistration_id:
             return CFSTR("EnsurePeerRegistration");
         case kSecXPCOpSetEscrowRecord:
@@ -287,12 +289,30 @@ CFStringRef SOSCCGetOperationDescription(enum SecXPCOperation op)
             return CFSTR("GetRecoveryPublicKey");
         case kSecXPCOpCopyBackupInformation:
             return CFSTR("CopyBackupInformation");
-        case sec_device_is_internal_id:
-            return CFSTR("DeviceIsInternal");
         case kSecXPCOpMessageFromPeerIsPending:
             return CFSTR("MessageFromPeerIsPending");
         case kSecXPCOpSendToPeerIsPending:
             return CFSTR("SendToPeerIsPending");
+        case sec_item_copy_parent_certificates_id:
+            return CFSTR("copy_parent_certificates");
+        case sec_item_certificate_exists_id:
+            return CFSTR("certificate_exists");
+        case kSecXPCOpBackupKeybagAdd:
+            return CFSTR("KeybagAdd");
+        case kSecXPCOpBackupKeybagDelete:
+            return CFSTR("KeybagDelete");
+        case kSecXPCOpKeychainControlEndpoint:
+            return CFSTR("KeychainControlEndpoint");
+        case kSecXPCOpNetworkingAnalyticsReport:
+            return CFSTR("NetworkingAnalyticsReport");
+        case kSecXPCOpSetCTExceptions:
+            return CFSTR("SetCTExceptions");
+        case kSecXPCOpCopyCTExceptions:
+            return CFSTR("CopyCTExceptions");
+        case sec_trust_get_exception_reset_count_id:
+            return CFSTR("GetExceptionResetCount");
+        case sec_trust_increment_exception_reset_count_id:
+            return CFSTR("IncrementExceptionResetCount");
         default:
             return CFSTR("Unknown xpc operation");
     }
@@ -435,6 +455,14 @@ bool SecXPCDictionaryGetBool(xpc_object_t message, const char *key, CFErrorRef *
     return xpc_dictionary_get_bool(message, key);
 }
 
+bool SecXPCDictionaryGetDouble(xpc_object_t message, const char *key, double *pvalue, CFErrorRef *error) {
+    *pvalue = xpc_dictionary_get_double(message, key);
+    if (*pvalue == NAN) {
+        return SecError(errSecParam, error, CFSTR("object for key %s bad double"), key);
+    }
+    return true;
+}
+
 bool SecXPCDictionaryCopyDataOptional(xpc_object_t message, const char *key, CFDataRef *pdata, CFErrorRef *error) {
     size_t size = 0;
     if (!xpc_dictionary_get_data(message, key, &size)) {
@@ -443,6 +471,20 @@ bool SecXPCDictionaryCopyDataOptional(xpc_object_t message, const char *key, CFD
     }
     *pdata = SecXPCDictionaryCopyData(message, key, error);
     return *pdata;
+}
+
+bool SecXPCDictionaryCopyURLOptional(xpc_object_t message, const char *key, CFURLRef *purl, CFErrorRef *error) {
+    size_t size = 0;
+    if (!xpc_dictionary_get_data(message, key, &size)) {
+        *purl = NULL;
+        return true;
+    }
+    CFDataRef data = SecXPCDictionaryCopyData(message, key, error);
+    if (data) {
+        *purl = CFURLCreateWithBytes(kCFAllocatorDefault, CFDataGetBytePtr(data), CFDataGetLength(data), kCFStringEncodingUTF8, NULL);
+    }
+    CFReleaseNull(data);
+    return *purl;
 }
 
 CFDictionaryRef SecXPCDictionaryCopyDictionary(xpc_object_t message, const char *key, CFErrorRef *error) {
@@ -524,4 +566,51 @@ bool SecXPCDictionaryCopyStringOptional(xpc_object_t message, const char *key, C
     }
     *pstring = SecXPCDictionaryCopyString(message, key, error);
     return *pstring;
+}
+
+static CFDataRef CFDataCreateWithXPCArrayAtIndex(xpc_object_t xpc_data_array, size_t index, CFErrorRef *error) {
+    CFDataRef data = NULL;
+    size_t length = 0;
+    const uint8_t *bytes = xpc_array_get_data(xpc_data_array, index, &length);
+    if (bytes) {
+        data = CFDataCreate(kCFAllocatorDefault, bytes, length);
+    }
+    if (!data)
+        SecError(errSecParam, error, CFSTR("data_array[%zu] failed to decode"), index);
+
+    return data;
+}
+
+static CFArrayRef CFDataXPCArrayCopyArray(xpc_object_t xpc_data_array, CFErrorRef *error) {
+    CFMutableArrayRef data_array = NULL;
+    require_action_quiet(xpc_get_type(xpc_data_array) == XPC_TYPE_ARRAY, exit,
+                         SecError(errSecParam, error, CFSTR("data_array xpc value is not an array")));
+    size_t count = xpc_array_get_count(xpc_data_array);
+    require_action_quiet(data_array = CFArrayCreateMutable(kCFAllocatorDefault, count, &kCFTypeArrayCallBacks), exit,
+                         SecError(errSecAllocate, error, CFSTR("failed to create CFArray of capacity %zu"), count));
+
+    size_t ix;
+    for (ix = 0; ix < count; ++ix) {
+        CFDataRef data = CFDataCreateWithXPCArrayAtIndex(xpc_data_array, ix, error);
+        if (!data) {
+            CFRelease(data_array);
+            return NULL;
+        }
+        CFArraySetValueAtIndex(data_array, ix, data);
+        CFRelease(data);
+    }
+
+exit:
+    return data_array;
+}
+
+bool SecXPCDictionaryCopyCFDataArrayOptional(xpc_object_t message, const char *key, CFArrayRef *data_array, CFErrorRef *error) {
+    xpc_object_t xpc_data_array = xpc_dictionary_get_value(message, key);
+    if (!xpc_data_array) {
+        if (data_array)
+            *data_array = NULL;
+        return true;
+    }
+    *data_array = CFDataXPCArrayCopyArray(xpc_data_array, error);
+    return *data_array != NULL;
 }

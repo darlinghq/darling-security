@@ -7,11 +7,13 @@
 //
 
 #import <Foundation/Foundation.h>
+#import <AssertMacros.h>
 
 #import <KeychainCircle/KCDer.h>
 #import <KeychainCircle/KCError.h>
 #import <KeychainCircle/KCJoiningMessages.h>
-
+#import <utilities/debugging.h>
+#import <Security/SecureObjectSync/SOSTypes.h>
 #include <corecrypto/ccder.h>
 
 
@@ -26,6 +28,13 @@
                                      data: (NSData*) firstData
                                     error: (NSError**) error {
     return [[KCJoiningMessage alloc] initWithType:type data:firstData payload:nil error:error];
+}
+
++ (nullable instancetype) messageWithType: (KCJoiningMessageType) type
+                                     data: (NSData*) firstData
+                               secondData: (NSData*) secondData
+                                    error: (NSError**) error {
+    return [[KCJoiningMessage alloc] initWithType:type data:firstData payload:secondData error:error];
 }
 
 + (nullable instancetype) messageWithType: (KCJoiningMessageType) type
@@ -253,7 +262,7 @@
 @end
 
 
-NSData* extractStartFromInitialMessage(NSData* initialMessage, NSError** error) {
+NSData* extractStartFromInitialMessage(NSData* initialMessage, uint64_t* version, NSString** uuidString, NSData** octagon, NSError** error) {
     NSData* result = nil;
     const uint8_t *der = [initialMessage bytes];
     const uint8_t *der_end = der + [initialMessage length];
@@ -263,8 +272,100 @@ NSData* extractStartFromInitialMessage(NSData* initialMessage, NSError** error) 
     if (parse_end == NULL) {
         return nil;
     }
+    else if (parse_end != der_end) {
+        NSData *extraStuff = nil;
+        NSData *uuidData = nil;
+        uint64_t piggy_version = 0;
+        NSData* octagonData = nil;
+
+        parse_end = decode_version2(&extraStuff, &uuidData, &octagonData, &piggy_version, error, parse_end, der_end);
+        require_action_quiet(parse_end != NULL, fail, secerror("decoding piggybacking message failed for version (%llu)", piggy_version));
+
+        switch(piggy_version){
+            case kPiggyV2:
+                *octagon = octagonData;
+                //fall through to pick up v1
+            case kPiggyV1:{
+                NSUUID *uuid = [[NSUUID alloc]initWithUUIDBytes:uuidData.bytes];
+                *uuidString = uuid.UUIDString;
+                *version = piggy_version;
+                break;
+            }
+            case kPiggyV0:
+                *version = kPiggyV0;
+                break;
+            default:
+                secerror("unsupported version");
+                break;
+        }
+    }
+fail:
     return result;
 
+}
+
+const uint8_t* decode_version1(NSData** data, NSData** uuid, uint64_t *piggy_version, NSError** error,
+                                     const uint8_t* der, const uint8_t *der_end)
+{
+    if (NULL == der)
+        return NULL;
+
+    uint64_t versionFromBlob = 0;
+    der = ccder_decode_uint64(&versionFromBlob, der, der_end);
+    
+    if (der == NULL) {
+        KCJoiningErrorCreate(kDERUnknownEncoding, error, @"Version mising");
+        return nil;
+    }
+    
+    if(versionFromBlob == 1){ //decode uuid 
+        size_t payloadSize = 0;
+        const uint8_t *payload = ccder_decode_tl(CCDER_OCTET_STRING, &payloadSize, der, der_end);
+        
+        *uuid = [NSData dataWithBytes: (void*)payload length: payloadSize];
+        *piggy_version = versionFromBlob;
+        der = payload + payloadSize;
+    }
+    else{
+        KCJoiningErrorCreate(kDERUnknownVersion, error, @"Bad version: %llu", versionFromBlob);
+        return nil;
+    }
+    
+    return der;
+}
+
+const uint8_t* decode_version2(NSData** data, NSData** uuid, NSData** octagon, uint64_t *piggy_version, NSError** error,
+                               const uint8_t* der, const uint8_t *der_end)
+{
+    const uint8_t* end = nil;
+
+    const uint8_t* parse_version1 = decode_version1(data, uuid, piggy_version, error, der, der_end);
+
+    if(parse_version1 == NULL){
+        secerror("error parsing version 1");
+        return NULL;
+    }
+    else if (parse_version1 == der_end){
+        secnotice("octagon", "first message is piggybacking v1, no more data");
+        return parse_version1;
+    }
+    else{
+        end = kcder_decode_data(octagon, error, parse_version1, der_end);
+
+        if(end == NULL){
+            secerror("failed to decode v2");
+            return NULL;
+        }
+        else if(*octagon && [*octagon length] != 0){
+            *piggy_version = kPiggyV2;
+        }
+        else{
+            secerror("no octagon version set");
+            return NULL;
+        }
+    }
+
+    return end;
 }
 
 const uint8_t* decode_initialmessage(NSData** data, NSError** error,
@@ -277,10 +378,9 @@ const uint8_t* decode_initialmessage(NSData** data, NSError** error,
     der = ccder_decode_constructed_tl(CCDER_CONSTRUCTED_SEQUENCE, &sequence_end, der, der_end);
 
     if (der == NULL || sequence_end != der_end) {
-        KCJoiningErrorCreate(kDERUnknownEncoding, error, @"decode failed");
+        KCJoiningErrorCreate(kDERUnknownEncoding, error, @"Decoding failed");
         return nil;
     }
-
     uint64_t version = 0;
     der = ccder_decode_uint64(&version, der, der_end);
 
@@ -290,10 +390,10 @@ const uint8_t* decode_initialmessage(NSData** data, NSError** error,
     }
 
     if (version != 0) {
-        KCJoiningErrorCreate(kDERUnknownEncoding, error, @"Bad version: %d", version);
+        KCJoiningErrorCreate(kDERUnknownEncoding, error, @"Bad version: %llu", version);
         return nil;
     }
-
+    
     return kcder_decode_data(data, error, der, der_end);
 }
 
@@ -313,11 +413,79 @@ uint8_t* encode_initialmessage(NSData* data, NSError**error,
                                const uint8_t *der, uint8_t *der_end)
 {
     return ccder_encode_constructed_tl(CCDER_CONSTRUCTED_SEQUENCE, der_end, der,
-                 ccder_encode_uint64(0, der,
-                 kcder_encode_data(data, error, der, der_end)));
+                                       ccder_encode_uint64(0, der,
+                                                           kcder_encode_data(data, error, der, der_end)));
+}
+
+size_t sizeof_initialmessage_version2(NSData*data, uint64_t version1, NSData *uuid, NSData* octagon)
+{
+    size_t version_size = ccder_sizeof_uint64(0);
+    if (version_size == 0) {
+        return 0;
+    }
+    size_t message_size = kcder_sizeof_data(data, nil);
+    if (message_size == 0) {
+        return 0;
+    }
+    size_t version1_size = ccder_sizeof_uint64(version1);
+    if (version1_size == 0) {
+        return 0;
+    }
+    size_t uuid_size = kcder_sizeof_data(uuid, nil);
+    if (uuid_size == 0) {
+        return 0;
+    }
+    size_t octagon_size = kcder_sizeof_data(octagon, nil);
+    if (octagon_size == 0) {
+        return 0;
+    }
+    return ccder_sizeof(CCDER_CONSTRUCTED_SEQUENCE, version_size + message_size +
+                        version1_size + uuid_size +
+                        octagon_size);
+}
+
+size_t sizeof_initialmessage_version1(NSData*data, uint64_t version1, NSData *uuid) {
+    size_t version_size = ccder_sizeof_uint64(0);
+    if (version_size == 0) {
+        return 0;
+    }
+    size_t message_size = kcder_sizeof_data(data, nil);
+    if (message_size == 0) {
+        return 0;
+    }
+    size_t version1_size = ccder_sizeof_uint64(version1);
+    if (version1_size == 0) {
+        return 0;
+    }
+    size_t uuid_size = kcder_sizeof_data(uuid, nil);
+    if (uuid_size == 0) {
+        return 0;
+    }
+    return ccder_sizeof(CCDER_CONSTRUCTED_SEQUENCE, version_size + message_size + version1_size + uuid_size);
+}
+
+
+uint8_t*  encode_initialmessage_version1(NSData* data, NSData* uuidData, uint64_t piggy_version, NSError**error,
+                                         const uint8_t *der, uint8_t *der_end)
+{
+    return ccder_encode_constructed_tl(CCDER_CONSTRUCTED_SEQUENCE, der_end, der,
+                                       ccder_encode_uint64(0, der,
+                                                           kcder_encode_data(data, error, der,
+                                                                             ccder_encode_uint64(piggy_version, der,
+                                                                                                 kcder_encode_data(uuidData, error, der, der_end)))));
     
 }
 
+uint8_t*  encode_initialmessage_version2(NSData* data, NSData* uuidData, NSData* octagon_version, NSError**error,
+                                         const uint8_t *der, uint8_t *der_end)
+{
+
+    return ccder_encode_constructed_tl(CCDER_CONSTRUCTED_SEQUENCE, der_end, der,
+                                       ccder_encode_uint64(0, der,
+                                                           kcder_encode_data(data, error, der,
+                                                                             ccder_encode_uint64(kPiggyV1, der,
+                                                                                                 kcder_encode_data(uuidData, error, der,                            kcder_encode_data(octagon_version, error, der, der_end))))));
+}
 
 size_t sizeof_seq_data_data(NSData*data1, NSData*data2, NSError**error) {
     size_t data1_size = kcder_sizeof_data(data1, error);

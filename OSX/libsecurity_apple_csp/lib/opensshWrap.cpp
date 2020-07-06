@@ -31,13 +31,14 @@
 #include "AppleCSPUtils.h"
 #include "AppleCSPKeys.h"
 #include "RSA_DSA_keys.h"
+#include "SecRandom.h"
 #include "opensshCoding.h"
 #include "cspdebugging.h"
 #include <CommonCrypto/CommonDigest.h>
 #include <CommonCrypto/CommonCryptor.h>
 #include <openssl/rsa_legacy.h>
 #include <openssl/bn_legacy.h>
-#include <security_utilities/devrandom.h>
+#include <utilities/SecCFRelease.h>
 
 static const char *authfile_id_string = "SSH PRIVATE KEY FILE FORMAT 1.1\n";
 
@@ -375,8 +376,7 @@ CSSM_RETURN encodeOpenSSHv1PrivKey(
 	
 	/* [0..3] check bytes */
 	UInt8 checkBytes[4];
-	DevRandomGenerator rng = DevRandomGenerator();
-	rng.random(checkBytes, 2);
+    MacOSError::check(SecRandomCopyBytes(kSecRandomDefault, 2, checkBytes)) ;
 	checkBytes[2] = checkBytes[0];
 	checkBytes[3] = checkBytes[1];
 	CFDataAppendBytes(ptext, checkBytes, 4);
@@ -401,7 +401,12 @@ CSSM_RETURN encodeOpenSSHv1PrivKey(
 	
 	/* encrypt it */
 	ptextLen = CFDataGetLength(ptext);
-	unsigned char ctext[ptextLen];
+	unsigned char *ctext = (unsigned char*)malloc(ptextLen);
+	if(ctext == NULL) {
+		ourRtn = CSSMERR_CSSM_MEMORY_ERROR;
+		goto errOut;
+	}
+
 	unsigned ctextLen;
 	ourRtn = ssh1DES3Crypt(cipherSpec, true, 
 		(unsigned char *)CFDataGetBytePtr(ptext), (unsigned)ptextLen,
@@ -414,8 +419,12 @@ CSSM_RETURN encodeOpenSSHv1PrivKey(
 	/* appended encrypted portion */
 	CFDataAppendBytes(cfOut, ctext, ctextLen);
 	*encodedKey = cfOut;
+    goto cleanup;
 errOut:
+    CFReleaseNull(cfOut);
+cleanup:
 	/* it would be proper to zero out ptext here, but we can't do that to a CFData */
+	free(ctext);
 	CFRelease(ptext);
 	return ourRtn;
 }
@@ -482,7 +491,7 @@ void AppleCSPSession::WrapKeyOpenSSH1(
 	CFIndex len = CFDataGetLength(cfOut);
 	setUpData(WrappedKey.KeyData, len, normAllocator);
 	memmove(WrappedKey.KeyData.Data, CFDataGetBytePtr(cfOut), len);
-	CFRelease(cfOut);
+	CFReleaseNull(cfOut);
 	
 	/* outgoing header */
 	WrappedKey.KeyHeader.BlobType = CSSM_KEYBLOB_WRAPPED;
@@ -708,6 +717,7 @@ void AppleCSPSession::UnwrapKeyOpenSSH1(
 	if(comment) {
 		setUpCssmData(DescriptiveData, commentLen, normAllocator);
 		memcpy(DescriptiveData.Data, comment, commentLen);
+        free(comment);
 	}
 
 	/* 

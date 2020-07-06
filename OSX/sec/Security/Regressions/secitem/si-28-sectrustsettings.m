@@ -12,6 +12,7 @@
 #include <Security/SecTrust.h>
 #include <Security/SecTrustSettings.h>
 #include <Security/SecTrustSettingsPriv.h>
+#include <Security/SecTrustPriv.h>
 #include <utilities/SecCFRelease.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -28,6 +29,7 @@
 
 /* Of course, the interface is different for OS X and iOS. */
 /* each call is 1 test */
+#define kNumberSetTSTests 1
 #if TARGET_OS_IPHONE
 #define setTS(cert, settings) \
 { \
@@ -60,6 +62,7 @@
 #endif
 
 /* each call is 1 test */
+#define kNumberRemoveTSTests 1
 #if TARGET_OS_IPHONE
 #define removeTS(cert) \
 { \
@@ -75,6 +78,7 @@
 #endif
 
 /* each call is 4 tests */
+#define kNumberCheckTrustTests 4
 #define check_trust(certs, policy, valid_date, expected) \
 { \
     SecTrustRef trust = NULL; \
@@ -198,7 +202,7 @@ static void cleanup_globals(void) {
 static void test_no_constraints(void) {
     /* root with the default TrustRoot result succeeds */
     setTS(cert0, NULL);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     removeTS(cert0);
 
     /* intermediate with the default TrustRoot result fails */
@@ -207,7 +211,7 @@ static void test_no_constraints(void) {
     /* root with TrustRoot result succeeds */
     NSDictionary *trustRoot = @{ (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustRoot)};
     setTS(cert0, (__bridge CFDictionaryRef)trustRoot);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     removeTS(cert0);
 
     /* intermediate with TrustRoot fails to set */
@@ -219,7 +223,7 @@ static void test_no_constraints(void) {
 
     /* intermediate with TrustAsRoot result succeeds */
     setTS(cert1, (__bridge CFDictionaryRef)trustAsRoot);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     removeTS(cert1);
 
     /* trusting the root but denying the intermediate fails */
@@ -238,7 +242,7 @@ static void test_no_constraints(void) {
 
     /* trusting one leaf doesn't make other leaf trusted */
     setTS(cert2, (__bridge CFDictionaryRef)trustAsRoot);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     check_trust(smimeChain, basicPolicy, verify_date, kSecTrustResultRecoverableTrustFailure);
     removeTS(cert2);
 }
@@ -249,7 +253,7 @@ static void test_policy_constraints(void) {
     NSDictionary *sslServerAllowed = @{ (__bridge NSString*)kSecTrustSettingsPolicy: (__bridge id)sslPolicy,
                                         (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustAsRoot) };
     setTS(cert1, (__bridge CFDictionaryRef)sslServerAllowed);
-    check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultProceed);
 
     /* SSL client policy fails. */
     SecPolicyRef sslClient = SecPolicyCreateSSL(false, NULL);
@@ -272,7 +276,7 @@ static void test_policy_string_constraints(void) {
                                   ];
     setTS(cert2, (__bridge CFArrayRef)hostnameAllowed);
     /* evaluating against trusted hostname passes */
-    check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultProceed);
 
     /* evaluating against hostname not in trust settings is recoverable failure */
     SecPolicyRef weirdnamePolicy = SecPolicyCreateSSL(true, CFSTR("weirdname.apple.com"));
@@ -294,7 +298,7 @@ static void test_policy_string_constraints(void) {
                                ];
     setTS(cert3, (__bridge CFArrayRef)emailAllowed);
     /* evaluating against trusted email passes */
-    check_trust(smimeChain, smimePolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(smimeChain, smimePolicy, verify_date, kSecTrustResultProceed);
 
     /* evaluating against hostname not in trust settings is recoverable failure */
     SecPolicyRef weirdemailPolicy = SecPolicyCreateSMIME(kSecAnyEncryptSMIME, CFSTR("weirdemail@apple.com"));
@@ -330,7 +334,7 @@ static void test_application_constraints(void) {
 
     /* This application Trust Setting succeeds */
     setTS(cert0, (__bridge CFDictionaryRef)thisAppTS);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     removeTS(cert0);
 
     /* Some other application Trust Setting fails */
@@ -349,20 +353,20 @@ static void test_key_usage_constraints(void) {
     NSDictionary *anyKeyUse = @{ (__bridge NSString*)kSecTrustSettingsKeyUsage: @(kSecTrustSettingsKeyUseAny),
                                  (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustRoot)};
     setTS(cert0, (__bridge CFDictionaryRef)anyKeyUse);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     removeTS(cert0);
 
     /* signCert key usage on an intermediate or root succeeds */
     NSDictionary *signCertUseRoot = @{ (__bridge NSString*)kSecTrustSettingsKeyUsage: @(kSecTrustSettingsKeyUseSignCert),
                                    (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustRoot)};
     setTS(cert0, (__bridge CFDictionaryRef)signCertUseRoot);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     removeTS(cert0)
 
     NSDictionary *signCertUseInt = @{ (__bridge NSString*)kSecTrustSettingsKeyUsage: @(kSecTrustSettingsKeyUseSignCert),
                                        (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustAsRoot)};
     setTS(cert1, (__bridge CFDictionaryRef)signCertUseInt);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     removeTS(cert1);
 
     /* intermediate without signCert key usage fails */
@@ -382,7 +386,7 @@ static void test_key_usage_constraints(void) {
 
     /* signature smime policy passes for signature use TS*/
     setTS(cert3, (__bridge CFDictionaryRef)signatureUse);
-    check_trust(smimeChain, smimeSignature, verify_date, kSecTrustResultUnspecified);
+    check_trust(smimeChain, smimeSignature, verify_date, kSecTrustResultProceed);
 
     /* any use policy fails for signature use TS */
     check_trust(smimeChain, smimePolicy, verify_date, kSecTrustResultRecoverableTrustFailure);
@@ -395,7 +399,7 @@ static void test_key_usage_constraints(void) {
     NSDictionary *keyEncryptUse = @{ (__bridge NSString*)kSecTrustSettingsKeyUsage: @(kSecTrustSettingsKeyUseEnDecryptKey),
                                       (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustAsRoot)};
     setTS(cert3, (__bridge CFDictionaryRef)keyEncryptUse);
-    check_trust(smimeChain, smimeKeyEncrypt, verify_date, kSecTrustResultUnspecified);
+    check_trust(smimeChain, smimeKeyEncrypt, verify_date, kSecTrustResultProceed);
     removeTS(cert3);
 
     /* multiple use smime policy against multiple uses */
@@ -403,7 +407,7 @@ static void test_key_usage_constraints(void) {
                                        kSecTrustSettingsKeyUseSignature),
                                       (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustAsRoot)};
     setTS(cert3, (__bridge CFDictionaryRef)multipleUse)
-    check_trust(smimeChain, smimeMultiple, verify_date, kSecTrustResultUnspecified);
+    check_trust(smimeChain, smimeMultiple, verify_date, kSecTrustResultProceed);
 
     /* signature smime policy against multiple uses */
     check_trust(smimeChain, smimeSignature, verify_date, kSecTrustResultRecoverableTrustFailure);
@@ -431,7 +435,7 @@ static void test_allowed_errors(void) {
                                     (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultUnspecified)};
     setTS(cert1, (__bridge CFDictionaryRef)allowExpired)
     setTS(cert2, (__bridge CFDictionaryRef)allowExpired);
-    check_trust(sslChain, basicPolicy, expired_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, expired_date, kSecTrustResultProceed);
     removeTS(cert2);
     removeTS(cert1);
 
@@ -444,7 +448,7 @@ static void test_allowed_errors(void) {
                                              (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultUnspecified) };
     setTS(cert2, (__bridge CFDictionaryRef)allowHostnameMismatch);
     sleep(1); // sleep a little extra so trustd gets trust settings event before evaluating leaf
-    check_trust(sslChain, wrongNameSSL, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, wrongNameSSL, verify_date, kSecTrustResultProceed);
     removeTS(cert2);
     CFReleaseNull(wrongNameSSL);
 
@@ -457,7 +461,7 @@ static void test_allowed_errors(void) {
                                           (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultUnspecified) };
     setTS(cert3, (__bridge CFDictionaryRef)allowEmailMismatch);
     sleep(1); // sleep a little extra so trustd gets trust settings event before evaluating leaf
-    check_trust(smimeChain, wrongNameSMIME, verify_date, kSecTrustResultUnspecified);
+    check_trust(smimeChain, wrongNameSMIME, verify_date, kSecTrustResultProceed);
     removeTS(cert3);
     CFReleaseNull(wrongNameSMIME);
 
@@ -467,7 +471,7 @@ static void test_allowed_errors(void) {
                                                (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultUnspecified)};
     setTS(cert1, (__bridge CFDictionaryRef)allowExpiredConstrained)
     setTS(cert2, (__bridge CFDictionaryRef)allowExpiredConstrained);
-    check_trust(sslChain, sslPolicy, expired_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, sslPolicy, expired_date, kSecTrustResultProceed);
     check_trust(sslChain, basicPolicy, expired_date, kSecTrustResultRecoverableTrustFailure);
     removeTS(cert2);
     removeTS(cert1);
@@ -485,7 +489,7 @@ static void test_multiple_constraints(void) {
                             ];
     setTS(cert0, (__bridge CFArrayRef)denyAllBut);
     check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultDeny);
-    check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultProceed);
     removeTS(cert0);
 
     /* allow all but */
@@ -495,7 +499,7 @@ static void test_multiple_constraints(void) {
                              @{(__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustRoot) }
                              ];
     setTS(cert0, (__bridge CFArrayRef)allowAllBut);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultRecoverableTrustFailure);
     removeTS(cert0);
 
@@ -507,7 +511,7 @@ static void test_multiple_constraints(void) {
                                        (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustRoot) }
                                      ];
     setTS(cert0, (__bridge CFArrayRef)specifyPolicyResult);
-    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultUnspecified);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
     check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultDeny);
     check_trust(smimeChain, smimePolicy, verify_date, kSecTrustResultRecoverableTrustFailure);
     removeTS(cert0);
@@ -525,22 +529,69 @@ static void test_multiple_constraints(void) {
     wrongNameSSL = SecPolicyCreateSSL(true, CFSTR("wrongname.apple.com"));
     setTS(cert2, (__bridge CFArrayRef)policyConstraintResult);
     sleep(1); // sleep a little extra so trustd gets trust settings event before evaluating leaf
-    check_trust(sslChain, wrongNameSSL, verify_date, kSecTrustSettingsResultUnspecified);
+    check_trust(sslChain, wrongNameSSL, verify_date, kSecTrustResultProceed);
     check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultRecoverableTrustFailure);
     removeTS(cert2);
     CFReleaseNull(wrongNameSSL);
 
 }
 
+#define kNumberChangeConstraintsTests (2*kNumberSetTSTests + kNumberRemoveTSTests + 4*kNumberCheckTrustTests)
+static void test_change_constraints(void) {
+    /* allow all but */
+    NSArray *allowAllBut = @[
+                             @{(__bridge NSString*)kSecTrustSettingsPolicy: (__bridge id)sslPolicy ,
+                               (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultUnspecified)},
+                             @{(__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustRoot) }
+                             ];
+    setTS(cert0, (__bridge CFArrayRef)allowAllBut);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
+    check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultRecoverableTrustFailure);
+
+    /* Don't clear trust settings. Just change them. */
+
+    /* root with the default TrustRoot result succeeds */
+    setTS(cert0, NULL);
+    check_trust(sslChain, basicPolicy, verify_date, kSecTrustResultProceed);
+    check_trust(sslChain, sslPolicy, verify_date, kSecTrustResultProceed);
+    removeTS(cert0);
+}
+
+#define kNumberPolicyNamePinnningConstraintsTests (kNumberSetTSTests + kNumberRemoveTSTests + 5)
+static void test_policy_name_pinning_constraints(void) {
+    /* allow all but */
+    NSArray *allowAllBut = @[
+                             @{(__bridge NSString*)kSecTrustSettingsPolicy: (__bridge id)sslPolicy ,
+                               (__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultUnspecified)},
+                             @{(__bridge NSString*)kSecTrustSettingsResult: @(kSecTrustSettingsResultTrustRoot) }
+                             ];
+    setTS(cert0, (__bridge CFArrayRef)allowAllBut);
+
+    SecTrustRef trust = NULL;
+    SecTrustResultType trust_result;
+    ok_status(SecTrustCreateWithCertificates(sslChain, sslPolicy, &trust), "create trust with ssl policy");
+    ok_status(SecTrustSetVerifyDate(trust, (__bridge CFDateRef)verify_date), "set trust verify date");
+    ok_status(SecTrustSetPinningPolicyName(trust, CFSTR("not-a-db-policy-name")), "set policy name");
+    ok_status(SecTrustEvaluate(trust, &trust_result), "evaluate trust");
+    is(trust_result, kSecTrustResultRecoverableTrustFailure, "check trust result for sslServer policy with policy name");
+    CFReleaseSafe(trust);
+
+    removeTS(cert0);
+}
+
+
 int si_28_sectrustsettings(int argc, char *const *argv)
 {
-    plan_tests(kNumberNoConstraintsTests +
-               kNumberPolicyConstraintsTests +
-               kNumberPolicyStringConstraintsTests +
-               kNumberApplicationsConstraintsTests +
-               kNumberKeyUsageConstraintsTests +
-               kNumberAllowedErrorsTests +
-               kNumberMultipleConstraintsTests);
+    plan_tests(kNumberNoConstraintsTests
+               + kNumberPolicyConstraintsTests
+               + kNumberPolicyStringConstraintsTests
+               + kNumberApplicationsConstraintsTests
+               + kNumberKeyUsageConstraintsTests
+               + kNumberAllowedErrorsTests
+               + kNumberMultipleConstraintsTests
+               + kNumberChangeConstraintsTests
+               + kNumberPolicyNamePinnningConstraintsTests
+               );
 
 #if !TARGET_OS_IPHONE
     if (getuid() != 0) {
@@ -558,6 +609,8 @@ int si_28_sectrustsettings(int argc, char *const *argv)
         test_key_usage_constraints();
         test_allowed_errors();
         test_multiple_constraints();
+        test_change_constraints();
+        test_policy_name_pinning_constraints();
         cleanup_globals();
     }
 

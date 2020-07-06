@@ -3,6 +3,36 @@
 <plist version="1.0">
 <array>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>AST2</string>
+		<key>MinorTestName</key>
+		<string>NegativeTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.42</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>bbasile-test.scv.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>generic_apple_server</string>
+		<key>Intermediates</key>
+		<string>AppleServerAuthentication</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>VerifyDate</key>
+		<date>2019-04-18T19:00:00Z</date>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AST2</string>
 		<key>MinorTestName</key>
@@ -33,32 +63,8 @@
 		<string>AppleServerAuthenticationAllowUATAST2</string>
 	</dict>
 	<dict>
-		<key>MajorTestName</key>
-		<string>AST2</string>
-		<key>MinorTestName</key>
-		<string>NegativeTest</string>
-		<key>Policies</key>
-		<dict>
-			<key>PolicyIdentifier</key>
-			<string>1.2.840.113635.100.1.42</string>
-			<key>Properties</key>
-			<dict>
-				<key>SecPolicyName</key>
-				<string>idiagnostics-uat.apple.com</string>
-			</dict>
-		</dict>
-		<key>Leaf</key>
-		<string>ast2</string>
-		<key>Intermediates</key>
-		<string>TestAppleServerAuthentication</string>
-		<key>Anchors</key>
-		<string>TestAppleRootCA</string>
-		<key>VerifyDate</key>
-		<date>2015-12-16T00:19:45Z</date>
-		<key>ExpectedResult</key>
-		<integer>5</integer>
-	</dict>
-	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>EscrowProxy</string>
 		<key>MinorTestName</key>
@@ -89,6 +95,8 @@
 		<string>AppleServerAuthenticationAllowUATEscrow</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>EscrowProxy</string>
 		<key>MinorTestName</key>
@@ -100,21 +108,23 @@
 			<key>Properties</key>
 			<dict>
 				<key>SecPolicyName</key>
-				<string>p04-escrowproxy.icloud.com</string>
+				<string>p04-fmip.icloud.com</string>
 			</dict>
 		</dict>
 		<key>Leaf</key>
-		<string>escrow</string>
+		<string>fmip</string>
 		<key>Intermediates</key>
 		<string>AppleServerAuthentication</string>
 		<key>Anchors</key>
 		<string>AppleRootCA</string>
 		<key>VerifyDate</key>
-		<date>2016-01-14T00:16:53Z</date>
+		<date>2017-02-14T00:16:53Z</date>
 		<key>ExpectedResult</key>
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>FMiP</string>
 		<key>MinorTestName</key>
@@ -145,6 +155,8 @@
 		<string>AppleServerAuthenticationAllowUATFMiP</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>FMiP</string>
 		<key>MinorTestName</key>
@@ -156,11 +168,11 @@
 			<key>Properties</key>
 			<dict>
 				<key>SecPolicyName</key>
-				<string>p04-fmip.icloud.com</string>
+				<string>p04-escrowproxy.icloud.com</string>
 			</dict>
 		</dict>
 		<key>Leaf</key>
-		<string>fmip</string>
+		<string>escrowproxy</string>
 		<key>Intermediates</key>
 		<string>AppleServerAuthentication</string>
 		<key>Anchors</key>
@@ -171,6 +183,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>HomeKit</string>
 		<key>MinorTestName</key>
@@ -199,6 +213,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>HomeKit</string>
 		<key>MinorTestName</key>
@@ -225,6 +241,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>SWUpdate</string>
 		<key>MinorTestName</key>
@@ -246,6 +264,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>SWUpdate</string>
 		<key>MinorTestName</key>
@@ -267,6 +287,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>SWUpdate</string>
 		<key>MinorTestName</key>
@@ -290,6 +312,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>SWUpdate</string>
 		<key>MinorTestName</key>
@@ -313,6 +337,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>ApplePinned</string>
 		<key>MinorTestName</key>
@@ -345,6 +371,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>ApplePinned</string>
 		<key>MinorTestName</key>
@@ -375,6 +403,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleSSLPinned</string>
 		<key>MinorTestName</key>
@@ -409,6 +439,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleSSLPinned</string>
 		<key>MinorTestName</key>
@@ -443,6 +475,8 @@
 		<string>ApplePinningAllowTestCertsTLSPinningTest</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleSSLPinned</string>
 		<key>MinorTestName</key>
@@ -473,36 +507,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
-		<key>MajorTestName</key>
-		<string>AppleSSLPinned</string>
-		<key>MinorTestName</key>
-		<string>NegativeTest-TestHierarchy</string>
-		<key>Policies</key>
-		<dict>
-			<key>PolicyIdentifier</key>
-			<string>1.2.840.113635.100.1.63</string>
-			<key>Properties</key>
-			<dict>
-				<key>SecPolicyPolicyName</key>
-				<string>TestAST2ServerAuth</string>
-				<key>SecPolicyLeafMarkerOid</key>
-				<string>1.2.840.113635.100.6.27.8.2</string>
-				<key>SecPolicyName</key>
-				<string>idiagnostics-uat.apple.com</string>
-			</dict>
-		</dict>
-		<key>Leaf</key>
-		<string>ast2</string>
-		<key>Intermediates</key>
-		<string>TestAppleServerAuthentication</string>
-		<key>Anchors</key>
-		<string>TestAppleRootCA</string>
-		<key>VerifyDate</key>
-		<date>2016-02-12T17:56:50Z</date>
-		<key>ExpectedResult</key>
-		<integer>5</integer>
-	</dict>
-	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleSSLPinned</string>
 		<key>MinorTestName</key>
@@ -537,6 +543,8 @@
 		<string>ApplePinningAllowTestCertsTestAST2ServerAuth</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>VPNProfile</string>
 		<key>MinorTestName</key>
@@ -562,6 +570,8 @@
 		<string>ApplePinningAllowTestCertsATVVPNProfile</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MinorTestName</key>
 		<string>NegativeTest</string>
 		<key>MajorTestName</key>
@@ -583,6 +593,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleTVOSAppSigning</string>
 		<key>MinorTestName</key>
@@ -606,6 +618,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleTVOSAppSigning</string>
 		<key>MinorTestName</key>
@@ -629,6 +643,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleTVOSAppSigning</string>
 		<key>MinorTestName</key>
@@ -650,6 +666,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>EAPTLS</string>
 		<key>MinorTestName</key>
@@ -671,6 +689,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleServerAuth</string>
 		<key>MinorTestName</key>
@@ -679,11 +699,6 @@
 		<dict>
 			<key>PolicyIdentifier</key>
 			<string>1.2.840.113635.100.1.33</string>
-			<key>Properties</key>
-			<dict>
-				<key>SecPolicyName</key>
-				<string>test.nosuchdomain</string>
-			</dict>
 		</dict>
 		<key>Leaf</key>
 		<string>generic_apple_server</string>
@@ -692,13 +707,15 @@
 		<key>Anchors</key>
 		<string>AppleRootCA</string>
 		<key>VerifyDate</key>
-		<date>2014-07-20T19:00:00Z</date>
+		<date>2019-07-20T19:00:00Z</date>
 		<key>ExpectedResult</key>
 		<integer>4</integer>
 		<key>ChainLength</key>
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleCorporate</string>
 		<key>MinorTestName</key>
@@ -727,6 +744,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleCorporate</string>
 		<key>MinorTestName</key>
@@ -737,8 +756,6 @@
 			<string>1.2.840.113635.100.1.3</string>
 			<key>Properties</key>
 			<dict>
-				<key>SecPolicyName</key>
-				<string>com.apple.ist.ds.appleconnect2.production.vpn.8F2B3ADCD72ED2EA08DDC26AD0255A983B1DEBEB</string>
 				<key>SecPolicyClient</key>
 				<true/>
 			</dict>
@@ -757,6 +774,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleCorporate</string>
 		<key>MinorTestName</key>
@@ -785,6 +804,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleCorporate</string>
 		<key>MinorTestName</key>
@@ -815,6 +836,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleCorporate</string>
 		<key>MinorTestName</key>
@@ -843,6 +866,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>TestSMP</string>
 		<key>MinorTestName</key>
@@ -866,6 +891,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>TestSMP</string>
 		<key>MinorTestName</key>
@@ -887,6 +914,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>SMP</string>
 		<key>MinorTestName</key>
@@ -910,6 +939,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>SMP</string>
 		<key>MinorTestName</key>
@@ -931,6 +962,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleIDRecordSigning</string>
 		<key>MinorTestName</key>
@@ -954,6 +987,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneApplicationSigning</string>
 		<key>MinorTestName</key>
@@ -975,6 +1010,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneApplicationSigning</string>
 		<key>MinorTestName</key>
@@ -1000,6 +1037,8 @@
 		<string>ApplePinningAllowTestCertsiPhoneApplicationSigning</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneApplicationSigning</string>
 		<key>MinorTestName</key>
@@ -1023,10 +1062,12 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneApplicationSigning</string>
 		<key>MinorTestName</key>
-		<string>PositiveTest-vpn</string>
+		<string>NegativeTest-vpn</string>
 		<key>Policies</key>
 		<dict>
 			<key>PolicyIdentifier</key>
@@ -1041,11 +1082,11 @@
 		<key>VerifyDate</key>
 		<date>2008-03-26T17:07:46Z</date>
 		<key>ExpectedResult</key>
-		<integer>4</integer>
-		<key>ChainLength</key>
-		<integer>3</integer>
+		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneProfileSigning</string>
 		<key>MinorTestName</key>
@@ -1069,6 +1110,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneProvisioningProfile</string>
 		<key>MinorTestName</key>
@@ -1092,6 +1135,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneProvisioningProfile</string>
 		<key>MinorTestName</key>
@@ -1117,6 +1162,8 @@
 		<string>ApplePinningAllowTestCertsiPhoneProvisioningProfileSigning</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>ExternalDeveloper</string>
 		<key>MinorTestName</key>
@@ -1140,6 +1187,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>ExternalDeveloper</string>
 		<key>MinorTestName</key>
@@ -1163,6 +1212,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>ExternalDeveloper</string>
 		<key>MinorTestName</key>
@@ -1186,6 +1237,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>ExternalDeveloper</string>
 		<key>MinorTestName</key>
@@ -1207,6 +1260,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>SoftwareSigning</string>
 		<key>MinorTestName</key>
@@ -1230,6 +1285,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>SoftwareSigning</string>
 		<key>MinorTestName</key>
@@ -1251,6 +1308,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>GrandSlam</string>
 		<key>MinorTestName</key>
@@ -1272,13 +1331,15 @@
 		<key>Anchors</key>
 		<string>AppleRootCA</string>
 		<key>VerifyDate</key>
-		<date>2015-04-20T19:00:00Z</date>
+		<date>2018-04-20T19:00:00Z</date>
 		<key>ExpectedResult</key>
 		<integer>4</integer>
 		<key>ChainLength</key>
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>IDS</string>
 		<key>MinorTestName</key>
@@ -1294,7 +1355,7 @@
 			</dict>
 		</dict>
 		<key>Leaf</key>
-		<string>ids</string>
+		<string>ids_qa</string>
 		<key>Intermediates</key>
 		<string>AppleServerAuthentication</string>
 		<key>Anchors</key>
@@ -1309,6 +1370,39 @@
 		<string>AppleServerAuthenticationAllowUATIDS</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>LegacyAPN</string>
+		<key>MinorTestName</key>
+		<string>NegativeTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.70</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>courier.push.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>apn_legacy</string>
+		<key>Intermediates</key>
+		<array>
+			<string>EntrustCAL1C</string>
+			<string>EntrustRootCA</string>
+		</array>
+		<key>VerifyDate</key>
+		<date>2015-05-11T19:00:00Z</date>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>IPSec</string>
 		<key>MinorTestName</key>
@@ -1337,6 +1431,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>IPSec</string>
 		<key>MinorTestName</key>
@@ -1365,6 +1461,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>IPSec</string>
 		<key>MinorTestName</key>
@@ -1393,6 +1491,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>IPSec</string>
 		<key>MinorTestName</key>
@@ -1421,6 +1521,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>EAP</string>
 		<key>MinorTestName</key>
@@ -1453,6 +1555,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>IPSec</string>
 		<key>MinorTestName</key>
@@ -1481,6 +1585,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>EAP</string>
 		<key>MinorTestName</key>
@@ -1510,6 +1616,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>Passbook</string>
 		<key>MinorTestName</key>
@@ -1539,6 +1647,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>Passbook</string>
 		<key>MinorTestName</key>
@@ -1565,6 +1675,8 @@
 		<integer>4</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>Passbook</string>
 		<key>MinorTestName</key>
@@ -1591,6 +1703,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>Passbook</string>
 		<key>MinorTestName</key>
@@ -1617,6 +1731,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>OTATasking</string>
 		<key>MinorTestName</key>
@@ -1638,6 +1754,8 @@
 		<integer>4</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>OTATasking</string>
 		<key>MinorTestName</key>
@@ -1659,6 +1777,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>MobileAsset</string>
 		<key>MinorTestName</key>
@@ -1680,6 +1800,8 @@
 		<integer>4</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>MobileAsset</string>
 		<key>MinorTestName</key>
@@ -1701,27 +1823,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
-		<key>MajorTestName</key>
-		<string>AppleIDAuthority</string>
-		<key>MinorTestName</key>
-		<string>PositiveTest</string>
-		<key>Policies</key>
-		<dict>
-			<key>PolicyIdentifier</key>
-			<string>1.2.840.113635.100.1.18</string>
-		</dict>
-		<key>Leaf</key>
-		<string>appleid_authority</string>
-		<key>Intermediates</key>
-		<string>AppleApplicationIntegrationCA</string>
-		<key>Anchors</key>
-		<string>AppleRootCA</string>
-		<key>VerifyDate</key>
-		<date>2011-09-01T19:00:00Z</date>
-		<key>ExpectedResult</key>
-		<integer>4</integer>
-	</dict>
-	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>AppleIDAuthority</string>
 		<key>MinorTestName</key>
@@ -1743,6 +1846,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>UniqueDeviceCert</string>
 		<key>MinorTestName</key>
@@ -1762,6 +1867,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>UniqueDeviceCert</string>
 		<key>MinorTestName</key>
@@ -1788,6 +1895,8 @@
 		<string>ApplePinningAllowTestCertsUCRT</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneActivation</string>
 		<key>MinorTestName</key>
@@ -1807,6 +1916,8 @@
 		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneActivation</string>
 		<key>MinorTestName</key>
@@ -1828,6 +1939,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>iPhoneDeviceCert</string>
 		<key>MinorTestName</key>
@@ -1850,6 +1963,8 @@
 		<date>2008-01-01T20:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>FactoryDeviceCert</string>
 		<key>MinorTestName</key>
@@ -1873,6 +1988,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>LockdownPairing</string>
 		<key>MinorTestName</key>
@@ -1894,6 +2011,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>LockdownPairing</string>
 		<key>MinorTestName</key>
@@ -1913,6 +2032,8 @@
 		<integer>2</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>LockdownPairing</string>
 		<key>MinorTestName</key>
@@ -1932,6 +2053,8 @@
 		<integer>5</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>ConfigurationProfile</string>
 		<key>MinorTestName</key>
@@ -1955,6 +2078,8 @@
 		<date>2016-01-01T20:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>MacAppStoreReceipt</string>
 		<key>MinorTestName</key>
@@ -1978,6 +2103,8 @@
 		<date>2016-01-01T20:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>MacAppStoreReceipt</string>
 		<key>MinorTestName</key>
@@ -1999,6 +2126,8 @@
 		<date>2016-03-01T20:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>MacAppStoreReceipt</string>
 		<key>MinorTestName</key>
@@ -2020,6 +2149,8 @@
 		<date>2016-03-01T20:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>EscrowProxyCompatibility</string>
 		<key>MinorTestName</key>
@@ -2046,10 +2177,14 @@
 		<date>2016-10-04T19:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>BridgeOSDisable</key>
+		<true/>
 		<key>MajorTestName</key>
-		<string>EscrowProxyCompatibility</string>
+		<string>EscrowProxy</string>
 		<key>MinorTestName</key>
-		<string>NegativeTest</string>
+		<string>PositiveTest</string>
 		<key>Policies</key>
 		<dict>
 			<key>PolicyIdentifier</key>
@@ -2067,11 +2202,13 @@
 		<key>Anchors</key>
 		<string>GeoTrustGlobalCA</string>
 		<key>ExpectedResult</key>
-		<integer>5</integer>
+		<integer>4</integer>
 		<key>VerifyDate</key>
 		<date>2016-10-04T19:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>EscrowProxyCompatibility</string>
 		<key>MinorTestName</key>
@@ -2101,6 +2238,8 @@
 		<date>2016-10-04T19:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>MMCSCompatibility</string>
 		<key>MinorTestName</key>
@@ -2127,10 +2266,14 @@
 		<date>2016-10-04T19:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>BridgeOSDisable</key>
+		<true/>
 		<key>MajorTestName</key>
 		<string>MMCSCompatibility</string>
 		<key>MinorTestName</key>
-		<string>NegativeTest</string>
+		<string>PositiveTest</string>
 		<key>Policies</key>
 		<dict>
 			<key>PolicyIdentifier</key>
@@ -2148,11 +2291,15 @@
 		<key>Anchors</key>
 		<string>GeoTrustGlobalCA</string>
 		<key>ExpectedResult</key>
-		<integer>5</integer>
+		<integer>4</integer>
 		<key>VerifyDate</key>
 		<date>2016-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>TLDWildcard</string>
 		<key>MinorTestName</key>
@@ -2170,15 +2317,17 @@
 		<key>Leaf</key>
 		<string>googleapis</string>
 		<key>Intermediates</key>
-		<string>GoogleInternetAuthority</string>
+		<string>GoogleInternetAuthorityG3</string>
 		<key>Anchors</key>
-		<string>GeoTrustGlobalCA</string>
+		<string>GlobalSignRootCAR2</string>
 		<key>ExpectedResult</key>
 		<integer>4</integer>
 		<key>VerifyDate</key>
-		<date>2016-10-04T19:00:00Z</date>
+		<date>2018-04-14T19:00:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>LASecureStaticIOAssets</string>
 		<key>MinorTestName</key>
@@ -2198,6 +2347,8 @@
 		<integer>4</integer>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>LASecureStaticIOAssets</string>
 		<key>MinorTestName</key>
@@ -2214,30 +2365,13 @@
 		<key>Anchors</key>
 		<string>TestAppleRootCA</string>
 		<key>ExpectedResult</key>
-		<integer>5</integer>
-	</dict>
-	<dict>
-		<key>MajorTestName</key>
-		<string>LASecureStaticIOAssets</string>
-		<key>MinorTestName</key>
-		<string>NegativeTest</string>
-		<key>Policies</key>
-		<dict>
-			<key>PolicyIdentifier</key>
-			<string>1.2.840.113635.100.1.75</string>
-		</dict>
-		<key>Leaf</key>
-		<string>LASecureIOStaticAssetSigningTest</string>
-		<key>Intermediates</key>
-		<string>TestAppleSystemIntegration2CA</string>
-		<key>Anchors</key>
-		<string>TestAppleRootCA</string>
-		<key>ExpectedResult</key>
-		<integer>5</integer>
+		<integer>4</integer>
 		<key>EnableTestCertificates</key>
 		<string>AllowAppleTestCertificatesSecureIOStaticAsset</string>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>FakeDOD</string>
 		<key>MinorTestName</key>
@@ -2269,6 +2403,8 @@
 		<date>2016-12-10T04:38:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>FakeDOD</string>
 		<key>MinorTestName</key>
@@ -2300,6 +2436,8 @@
 		<date>2016-12-10T04:38:00Z</date>
 	</dict>
 	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>FakeDOD</string>
 		<key>MinorTestName</key>
@@ -2331,30 +2469,8 @@
 		<date>2016-12-10T04:38:00Z</date>
 	</dict>
 	<dict>
-		<key>MajorTestName</key>
-		<string>DOD</string>
-		<key>MinorTestName</key>
-		<string>SHA2</string>
-		<key>Policies</key>
-		<dict>
-			<key>PolicyIdentifier</key>
-			<string>1.2.840.113635.100.1.2</string>
-		</dict>
-		<key>Leaf</key>
-		<string>ECARootCA4</string>
-		<key>Intermediates</key>
-		<array>
-			<string>FederalBridgeCA2013</string>
-			<string>DODInteroperabilityRootCA2</string>
-		</array>
-		<key>Anchors</key>
-		<string>FederalCommonPolicyCA</string>
-		<key>ExpectedResult</key>
-		<integer>4</integer>
-		<key>VerifyDate</key>
-		<date>2016-12-10T04:38:00Z</date>
-	</dict>
-	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
 		<key>MajorTestName</key>
 		<string>DOD</string>
 		<key>MinorTestName</key>
@@ -2384,6 +2500,1093 @@
 		<integer>4</integer>
 		<key>VerifyDate</key>
 		<date>2016-01-01T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>Systemwide-Baseline</string>
+		<key>MinorTestName</key>
+		<string>IDS-Prod</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>openmarket.ess.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_test</string>
+		<key>Intermediates</key>
+		<string>TestAppleServerAuthentication</string>
+		<key>Anchors</key>
+		<string>TestAppleRootCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+		<key>VerifyDate</key>
+		<date>2019-02-08T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>Systemwide-Baseline</string>
+		<key>MinorTestName</key>
+		<string>IDS-IST</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>static.ess.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_ist_static</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA2G1</string>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+		<key>VerifyDate</key>
+		<date>2017-12-08T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>Systemwide-Hostname</string>
+		<key>MinorTestName</key>
+		<string>IDS-PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>identity.ess.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_test</string>
+		<key>Intermediates</key>
+		<string>TestAppleServerAuthentication</string>
+		<key>Anchors</key>
+		<string>TestAppleRootCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+		<key>VerifyDate</key>
+		<date>2019-02-08T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>BridgeOSDisable</key>
+		<true/>
+		<key>MajorTestName</key>
+		<string>Systemwide-Hostname</string>
+		<key>MinorTestName</key>
+		<string>IDS-NegativeTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>identity.ess.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_ist_identity</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA2G1</string>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+		<key>VerifyDate</key>
+		<date>2017-02-08T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>Systemwide-PolicyName</string>
+		<key>MinorTestName</key>
+		<string>IDS-PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>openmarket.ess.apple.com</string>
+				<key>SecPolicyPolicyName</key>
+				<string>IDS</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_test</string>
+		<key>Intermediates</key>
+		<string>TestAppleServerAuthentication</string>
+		<key>Anchors</key>
+		<string>TestAppleRootCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+		<key>VerifyDate</key>
+		<date>2019-02-08T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>Systemwide-PolicyName</string>
+		<key>MinorTestName</key>
+		<string>IDS-NegativeTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>static.ess.apple.com</string>
+				<key>SecPolicyPolicyName</key>
+				<string>IDS</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_ist_static</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA2G1</string>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+		<key>VerifyDate</key>
+		<date>2017-02-08T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>Systemwide-Both</string>
+		<key>MinorTestName</key>
+		<string>IDS-PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>identity.ess.apple.com</string>
+				<key>SecPolicyPolicyName</key>
+				<string>IDS</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_test</string>
+		<key>Intermediates</key>
+		<string>TestAppleServerAuthentication</string>
+		<key>Anchors</key>
+		<string>TestAppleRootCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+		<key>VerifyDate</key>
+		<date>2019-02-08T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>BridgeOSDisable</key>
+		<true/>
+		<key>MajorTestName</key>
+		<string>Systemwide-Both</string>
+		<key>MinorTestName</key>
+		<string>IDS-NegativeTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>identity.ess.apple.com</string>
+				<key>SecPolicyPolicyName</key>
+				<string>IDS</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_ist_identity</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA2G1</string>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+		<key>VerifyDate</key>
+		<date>2017-02-08T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>BridgeOSDisable</key>
+		<true/>
+		<key>MajorTestName</key>
+		<string>Systemwide</string>
+		<key>MinorTestName</key>
+		<string>IDSBag-NegativeTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.67</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>identity.ess.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_ist_identity</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA2G1</string>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+		<key>VerifyDate</key>
+		<date>2017-02-08T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>Systemwide</string>
+		<key>MinorTestName</key>
+		<string>IDSBag-PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.67</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>static.ess.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>ids_ist_static</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA2G1</string>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2017-04-08T20:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>PPQSigning</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.35</string>
+		</dict>
+		<key>Leaf</key>
+		<string>ppq_signing</string>
+		<key>Intermediates</key>
+		<string>AppleSystemIntegration2CA</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>VerifyDate</key>
+		<date>2017-02-18T00:19:45Z</date>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>Systemwide</string>
+		<key>MinorTestName</key>
+		<string>ckdatabasews-PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>p62-ckdatabasews.icloud.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>wildcard_icloud</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA2G1</string>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2017-02-20T21:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>BridgeOSDisable</key>
+		<true/>
+		<key>MajorTestName</key>
+		<string>PCSEscrowService</string>
+		<key>MinorTestName</key>
+		<string>NegativeTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.34</string>
+		</dict>
+		<key>Leaf</key>
+		<string>escrow_service_key_9B6EEF8D</string>
+		<key>Intermediates</key>
+		<string>EscrowServiceRootCA100</string>
+		<key>Anchors</key>
+		<string>EscrowServiceRootCA100</string>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>BridgeOSDisable</key>
+		<true/>
+		<key>MajorTestName</key>
+		<string>EscrowService</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.24</string>
+		</dict>
+		<key>Leaf</key>
+		<string>escrow_service_key_9B6EEF8D</string>
+		<key>Intermediates</key>
+		<string>EscrowServiceRootCA100</string>
+		<key>Anchors</key>
+		<string>EscrowServiceRootCA100</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>2</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>macOSProfileSigning</string>
+		<key>MinorTestName</key>
+		<string>NegativeTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.81</string>
+		</dict>
+		<key>Leaf</key>
+		<string>iphone_developer</string>
+		<key>Intermediates</key>
+		<string>AppleWWDR-expired</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>VerifyDate</key>
+		<date>2015-06-16T19:00:00Z</date>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>macOSProfileSigning</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.81</string>
+		</dict>
+		<key>Leaf</key>
+		<string>developer_id</string>
+		<key>Intermediates</key>
+		<string>DeveloperIDCA</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>macOSProfileSigning</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.81</string>
+		</dict>
+		<key>Leaf</key>
+		<string>mac_developer</string>
+		<key>Intermediates</key>
+		<string>AppleWWDR-expired</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>iPhoneVPNApplicationSigning</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.86</string>
+		</dict>
+		<key>Leaf</key>
+		<string>ios_vpn_app_signing</string>
+		<key>Intermediates</key>
+		<string>AppleiPhoneCA</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>VerifyDate</key>
+		<date>2008-03-26T17:07:46Z</date>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>iPhoneVPNApplicationSigning</string>
+		<key>MinorTestName</key>
+		<string>Negative</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.86</string>
+		</dict>
+		<key>Leaf</key>
+		<string>ios_app_signing</string>
+		<key>Intermediates</key>
+		<string>AppleiPhoneCA</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>VerifyDate</key>
+		<date>2008-03-26T17:07:46Z</date>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>BAA_UCRT</string>
+		<key>MinorTestName</key>
+		<string>Positive</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.85</string>
+		</dict>
+		<key>Leaf</key>
+		<string>baa_ucrt_leaf</string>
+		<key>Intermediates</key>
+		<string>baa_user_subca1</string>
+		<key>Anchors</key>
+		<string>baa_user_root</string>
+		<key>VerifyDate</key>
+		<date>2017-08-10T06:00:00Z</date>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>BAA_SCRT</string>
+		<key>MinorTestName</key>
+		<string>Positive</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.84</string>
+		</dict>
+		<key>Leaf</key>
+		<string>baa_scrt_leaf</string>
+		<key>Intermediates</key>
+		<string>baa_system_subca1</string>
+		<key>Anchors</key>
+		<string>baa_system_root</string>
+		<key>VerifyDate</key>
+		<date>2018-05-09T13:00:00Z</date>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>AssetReceipt</string>
+		<key>MinorTestName</key>
+		<string>Positive-TemporallyValid</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.89</string>
+		</dict>
+		<key>Leaf</key>
+		<string>asset_receipt</string>
+		<key>Intermediates</key>
+		<string>AppleSystemIntegration2CA</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>VerifyDate</key>
+		<date>2018-04-10T06:00:00Z</date>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>AssetReceipt</string>
+		<key>MinorTestName</key>
+		<string>Positive-TemporallyInvalid</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.89</string>
+		</dict>
+		<key>Leaf</key>
+		<string>asset_receipt</string>
+		<key>Intermediates</key>
+		<string>AppleSystemIntegration2CA</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>VerifyDate</key>
+		<date>2019-06-02T06:00:00Z</date>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>AssetReceipt</string>
+		<key>MinorTestName</key>
+		<string>Negative</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.89</string>
+		</dict>
+		<key>Leaf</key>
+		<string>ppq_signing</string>
+		<key>Intermediates</key>
+		<string>AppleSystemIntegration2CA</string>
+		<key>Anchors</key>
+		<string>AppleRootCA</string>
+		<key>VerifyDate</key>
+		<date>2017-02-18T00:19:45Z</date>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>SSLClient</string>
+		<key>MinorTestName</key>
+		<string>NegativeTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>content.googleapis.com</string>
+				<key>SecPolicyClient</key>
+				<true/>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>googleapis</string>
+		<key>Intermediates</key>
+		<string>GoogleInternetAuthorityG3</string>
+		<key>Anchors</key>
+		<string>GlobalSignRootCAR2</string>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+		<key>VerifyDate</key>
+		<date>2018-04-14T19:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>IPSecServer</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.11</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>content.googleapis.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>googleapis</string>
+		<key>Intermediates</key>
+		<string>GoogleInternetAuthorityG3</string>
+		<key>Anchors</key>
+		<string>GlobalSignRootCAR2</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2018-04-14T19:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>BridgeOSDisable</key>
+		<true/>
+		<key>MajorTestName</key>
+		<string>ISTCrossSignPinning</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.74</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>caldav.icloud.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>caldav</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA2G1-Baltimore</string>
+		<key>Anchors</key>
+		<string>BaltimoreCyberTrustRoot</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>BridgeOSDisable</key>
+		<true/>
+		<key>MajorTestName</key>
+		<string>ISTCrossSignPinning</string>
+		<key>MinorTestName</key>
+		<string>BothPositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.74</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>caldav.icloud.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>caldav</string>
+		<key>Intermediates</key>
+		<array>
+			<string>AppleISTCA2G1</string>
+			<string>AppleISTCA2G1-Baltimore</string>
+		</array>
+		<key>Anchors</key>
+		<string>BaltimoreCyberTrustRoot</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ISTCrossSignPinning</string>
+		<key>MinorTestName</key>
+		<string>BothPositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.74</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>caldav.icloud.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>caldav</string>
+		<key>Intermediates</key>
+		<array>
+			<string>AppleISTCA2G1</string>
+			<string>AppleISTCA2G1-Baltimore</string>
+		</array>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ISTCrossSign</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>caldav.icloud.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>caldav</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA2G1-Baltimore</string>
+		<key>Anchors</key>
+		<string>BaltimoreCyberTrustRoot</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ISTCrossSignCA8Baltimore</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>hls-slive.itunes.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>itunes</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA8G1-Baltimore</string>
+		<key>Anchors</key>
+		<string>BaltimoreCyberTrustRoot</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ISTCrossSignCA8DigiCert</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>hls-slive.itunes.apple.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>itunes</string>
+		<key>Intermediates</key>
+		<string>AppleISTCA8G1-DigiCert</string>
+		<key>Anchors</key>
+		<string>DigiCertGlobalRootG3</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ISTCrossSign</string>
+		<key>MinorTestName</key>
+		<string>BothPositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>caldav.icloud.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>caldav</string>
+		<key>Intermediates</key>
+		<array>
+			<string>AppleISTCA2G1-Baltimore</string>
+			<string>AppleISTCA2G1</string>
+		</array>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ISTCrossSign</string>
+		<key>MinorTestName</key>
+		<string>BothPositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>caldav.icloud.com</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>caldav</string>
+		<key>Intermediates</key>
+		<array>
+			<string>AppleISTCA2G1-Baltimore</string>
+			<string>AppleISTCA2G1</string>
+		</array>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>Anchors</key>
+		<string>BaltimoreCyberTrustRoot</string>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ISTCrossSignOldPin</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.74</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>caldav.icloud.com</string>
+				<key>SecPolicyPolicyName</key>
+				<string>no-system-pinning-rules</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>caldav</string>
+		<key>Intermediates</key>
+		<array>
+			<string>AppleISTCA2G1-Baltimore</string>
+			<string>AppleISTCA2G1</string>
+		</array>
+		<key>Anchors</key>
+		<string>GeoTrustGlobalCA</string>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ISTCrossSignOldPin</string>
+		<key>MinorTestName</key>
+		<string>PositiveTest</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.74</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>caldav.icloud.com</string>
+				<key>SecPolicyPolicyName</key>
+				<string>no-system-pinning-rules</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>caldav</string>
+		<key>Intermediates</key>
+		<array>
+			<string>AppleISTCA2G1-Baltimore</string>
+			<string>AppleISTCA2G1</string>
+		</array>
+		<key>Anchors</key>
+		<string>BaltimoreCyberTrustRoot</string>
+		<key>ExpectedResult</key>
+		<integer>5</integer>
+		<key>VerifyDate</key>
+		<date>2019-10-04T19:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ValidPolicyConstraints</string>
+		<key>MinorTestName</key>
+		<string>SmimeCA-SmimeLeaf</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.8</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>test@validsmime.apple.geoffk.net</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>Valid-leaf-serial+invalid+policysmime+complete-smime</string>
+		<key>Intermediates</key>
+		<array>
+			<string>Valid-ca-serial+invalid+policysmime+complete</string>
+		</array>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>Anchors</key>
+		<string>Valid-root</string>
+		<key>VerifyDate</key>
+		<date>2019-03-01T16:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
+	</dict>
+	<dict>
+		<key>CertDirectory</key>
+		<string>si-20-sectrust-policies-data</string>
+		<key>MajorTestName</key>
+		<string>ValidPolicyConstraints</string>
+		<key>MinorTestName</key>
+		<string>SSLCA-SSLServerLeaf</string>
+		<key>Policies</key>
+		<dict>
+			<key>PolicyIdentifier</key>
+			<string>1.2.840.113635.100.1.3</string>
+			<key>Properties</key>
+			<dict>
+				<key>SecPolicyName</key>
+				<string>validssl.apple.geoffk.net</string>
+			</dict>
+		</dict>
+		<key>Leaf</key>
+		<string>Valid-leaf-serial+invalid+policyssl+complete-ssl</string>
+		<key>Intermediates</key>
+		<array>
+			<string>Valid-ca-serial+invalid+policyssl+complete</string>
+		</array>
+		<key>ExpectedResult</key>
+		<integer>4</integer>
+		<key>Anchors</key>
+		<string>Valid-root</string>
+		<key>VerifyDate</key>
+		<date>2019-03-01T16:00:00Z</date>
+		<key>ChainLength</key>
+		<integer>3</integer>
 	</dict>
 </array>
 </plist>

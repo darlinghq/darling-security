@@ -32,8 +32,9 @@
 #include "filediskrep.h"
 #include "bundlediskrep.h"
 #include "slcrep.h"
+#if TARGET_OS_OSX
 #include "diskimagerep.h"
-
+#endif
 
 namespace Security {
 namespace CodeSigning {
@@ -77,7 +78,6 @@ void DiskRep::Writer::addDiscretionary(CodeDirectory::Builder &)
 	// do nothing
 }
 
-
 //
 // Given a file system path, come up with the most likely correct
 // disk representation for what's there.
@@ -110,8 +110,10 @@ DiskRep *DiskRep::bestGuess(const char *path, const Context *ctx)
 		AutoFileDesc fd(path, O_RDONLY);
 		if (MachORep::candidate(fd))
 			return new MachORep(path, ctx);
+#if TARGET_OS_OSX
 		if (DiskImageRep::candidate(fd))
 			return new DiskImageRep(path);
+#endif
 		if (DYLDCacheRep::candidate(fd))
 			return new DYLDCacheRep(path);
 
@@ -197,6 +199,11 @@ size_t DiskRep::signingBase()
 	return 0;		// whole file (start at beginning)
 }
 
+size_t DiskRep::execSegBase(const Architecture *)
+{
+	return 0;		// whole file (start at beginning)
+}
+    
 CFArrayRef DiskRep::modifiedFiles()
 {
 	// by default, claim (just) the main executable modified
@@ -291,6 +298,9 @@ std::string DiskRep::canonicalIdentifier(const std::string &name)
 	// foo3^.5, foo.3^.5, foo3^, foo.3^, foo^
 	return s.substr(0, p);
 }
+
+void DiskRep::registerStapledTicket()
+{ /* do nothing */ }
 
 
 //

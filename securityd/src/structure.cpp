@@ -33,11 +33,13 @@
 // but its dump support is conditionally included.
 //
 NodeCore::~NodeCore()
-{
+try {
 #if defined(DEBUGDUMP)
 	StLock<Mutex> _(mCoreLock);
 	mCoreNodes.erase(this);
 #endif //DEBUGDUMP
+} catch(...) {
+    return;
 }
 
 
@@ -60,8 +62,6 @@ void NodeCore::referent(NodeCore &r)
 void NodeCore::clearReferent()
 {
 	StLock<Mutex> _(*this);
-	if (mReferent)
-		assert(!mReferent->hasReference(*this));
 	mReferent = NULL;
 }
 
@@ -76,20 +76,8 @@ void NodeCore::addReference(NodeCore &p)
 void NodeCore::removeReference(NodeCore &p)
 {
 	StLock<Mutex> _(*this);
-	assert(hasReference(p));
 	mReferences.erase(&p);
 }
-
-#if !defined(NDEBUG)
-
-bool NodeCore::hasReference(NodeCore &p)
-{
-	assert(p.refCountForDebuggingOnly() > 0);
-	return mReferences.find(&p) != mReferences.end();
-}
-
-#endif //NDEBUG
-
 
 //
 // ClearReferences clears the reference set but does not propagate
@@ -98,8 +86,7 @@ bool NodeCore::hasReference(NodeCore &p)
 void NodeCore::clearReferences()
 {
 	StLock<Mutex> _(*this);
-	secinfo("ssnode", "%p clearing all %d references",
-		this, int(mReferences.size()));
+	secinfo("ssnode", "%p clearing all %d references", this, int(mReferences.size()));
 	mReferences.erase(mReferences.begin(), mReferences.end());
 }
 
@@ -123,7 +110,6 @@ void NodeCore::kill()
 void NodeCore::kill(NodeCore &ref)
 {
 	StLock<Mutex> _(*this);
-	assert(hasReference(ref));
 	ref.kill();
 	removeReference(ref);
 }

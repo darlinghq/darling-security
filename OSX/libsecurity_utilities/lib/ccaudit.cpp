@@ -32,22 +32,18 @@ namespace CommonCriteria
 
 TerminalId::TerminalId()
 {
-#ifndef DARLING
 	if (audit_set_terminal_id(this) != kAUNoErr)
 	{
 		Syslog::warning("setting terminal ID info failed; using defaults");
 		port = 0;
 		machine = 0;
 	}
-#endif
 }
 
 AuditToken::AuditToken(const audit_token_t &token)
     : mAuditToken(token)
 {
-#ifndef DARLING
     ::audit_token_to_au32(token, &mAuditId, &mEuid, &mEgid, &mRuid, &mRgid, &mPid, &mSessionId, &mTerminalId);
-#endif
 }
 
 
@@ -56,58 +52,47 @@ AuditToken::AuditToken(const audit_token_t &token)
 //
 void AuditInfo::get()
 {
-#ifndef DARLING
 	this->clearPod();
 	UnixError::check(::getaudit_addr(this, sizeof(*this)));
-#endif
 }
 
 void AuditInfo::get(au_asid_t session)
 {
-#ifndef DARLING
 	this->get();
 	if (session != this->ai_asid) {
 		// need to use higher-privileged call to get info about a session that is not our own
 		this->ai_asid = session;
 		UnixError::check(::auditon(A_GETSINFO_ADDR, this, sizeof(*this)));
 	}
-#endif
 }
 
 void AuditInfo::getPid(pid_t pid)
 {
-#ifndef DARLING
 	auditpinfo_addr_t pinfo;
 	memset(&pinfo, 0, sizeof(pinfo));
 	pinfo.ap_pid = pid;
 	UnixError::check(::auditon(A_GETPINFO_ADDR, &pinfo, sizeof(pinfo)));
 	get(pinfo.ap_asid);
-#endif
 }
 
 void AuditInfo::set()
 {
-#ifndef DARLING
 	UnixError::check(::setaudit_addr(this, sizeof(*this)));
-#endif
 }
 
 void AuditInfo::create(uint64_t flags, uid_t auid /* = AU_DEFAUDITID */)
 {
-#ifndef DARLING
 	this->clearPod();
 	ai_auid = auid;
 	ai_asid = AU_ASSIGN_ASID;
 	ai_termid.at_type = AU_IPv4;
 	ai_flags = flags;
 	UnixError::check(::setaudit_addr(this, sizeof(*this)));
-#endif
 }
 
 
 void AuditSession::registerSession(void)
 {
-#ifndef DARLING
     auditinfo_t auinfo;
 
     auinfo.ai_auid = mAuditId;
@@ -122,13 +107,11 @@ void AuditSession::registerSession(void)
 		else
 			Syslog::warning("Could not initialize auditing (%m); continuing");
 	}
-#endif
 }
 
 void AuditRecord::submit(const short event_code, const int returnCode, 
 			 const char *msg)
 {
-#ifndef DARLING
     // If we're not auditing, do nothing
     if (!(au_get_state() == AUC_AUDITING))
 		return;
@@ -162,7 +145,6 @@ void AuditRecord::submit(const short event_code, const int returnCode,
     }
     if (ret != kAUNoErr)
 		MacOSError::throwMe(ret);
-#endif
 }
 
 

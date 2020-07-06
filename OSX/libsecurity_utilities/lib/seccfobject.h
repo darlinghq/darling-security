@@ -29,6 +29,7 @@
 #include <CoreFoundation/CFRuntime.h>
 #include <new>
 #include "threading.h"
+#include <os/lock.h>
 
 #if( __cplusplus <= 201103L)
 #include <stdatomic.h>
@@ -45,7 +46,9 @@ operator APIPTR() const \
 \
 OBJTYPE *retain() \
 { SecCFObject::handle(true); return this; } \
-APIPTR handle(bool retain = true) \
+APIPTR CF_RETURNS_RETAINED handle() \
+{ return (APIPTR)SecCFObject::handle(true); } \
+APIPTR handle(bool retain) \
 { return (APIPTR)SecCFObject::handle(retain); }
 
 #define SECCFFUNCTIONS_CREATABLE(OBJTYPE, APIPTR, CFCLASS) \
@@ -82,7 +85,7 @@ private:
 	static const size_t kAlignedRuntimeSize = SECALIGNUP(sizeof(SecRuntimeBase), 4);
 
     uint32_t mRetainCount;
-    OSSpinLock mRetainSpinLock;
+    os_unfair_lock mRetainLock;
 
 public:
 	// For use by SecPointer only. Returns true once the first time it's called after the object has been created.

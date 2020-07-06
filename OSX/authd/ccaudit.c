@@ -9,6 +9,7 @@
 #include <Security/AuthorizationPlugin.h>
 #include <bsm/libbsm.h>
 
+AUTHD_DEFINE_LOG
 
 struct _ccaudit_s {
     __AUTH_BASE_STRUCT_HEADER__;
@@ -27,8 +28,8 @@ _ccaudit_finalizer(CFTypeRef value)
 {
     ccaudit_t ccaudit = (ccaudit_t)value;
 
-    CFReleaseSafe(ccaudit->auth);
-    CFReleaseSafe(ccaudit->proc);
+    CFReleaseNull(ccaudit->auth);
+    CFReleaseNull(ccaudit->proc);
 }
 
 AUTH_TYPE_INSTANCE(ccaudit,
@@ -88,7 +89,7 @@ static bool _enabled()
                 enabled = true;
                 break;
             default:
-                LOGE("ccaudit: error checking auditing status (%d)", acond);
+                os_log_error(AUTHD_LOG, "ccaudit: error checking auditing status (%d)", acond);
         }
     });
 
@@ -105,7 +106,7 @@ static bool _open(ccaudit_t ccaudit)
         return true;
 
     if ((ccaudit->fd = au_open()) < 0) {
-        LOGE("ccaudit: au_open() failed (%s)", strerror(errno));
+        os_log_error(AUTHD_LOG, "ccaudit: au_open() failed (%{public}s)", strerror(errno));
         return false;
     }
 
@@ -118,7 +119,7 @@ static void _close(ccaudit_t ccaudit)
         int err = au_close(ccaudit->fd, AU_TO_WRITE, (short)ccaudit->event);
         ccaudit->fd = -1;
         if (err < 0) {
-            LOGE("ccaudit: au_close() failed; record not committed");
+            os_log_error(AUTHD_LOG, "ccaudit: au_close() failed; record not committed");
         }
     }
 }
@@ -128,11 +129,11 @@ static bool _write(ccaudit_t ccaudit, token_t * token, const char * name)
     const char *tokenName = name ?  name : "<unidentified>";
     if (NULL == token)
     {
-        LOGE("ccaudit: invalid '%s' token", tokenName);
+        os_log_error(AUTHD_LOG, "ccaudit: invalid '%{public}s' token", tokenName);
         return false;
     }
     if (au_write(ccaudit->fd, token) < 0) {
-        LOGE("ccaudit: error writing '%s' token (%s)", tokenName, strerror(errno));
+        os_log_error(AUTHD_LOG, "ccaudit: error writing '%{public}s' token (%{public}s)", tokenName, strerror(errno));
         return false;
     }
     return true;
@@ -147,7 +148,6 @@ static bool _subject(ccaudit_t ccaudit)
 
 void ccaudit_log_authorization(ccaudit_t ccaudit, const char * right, OSStatus err)
 {
-
     if (!_open(ccaudit)) {
         return;
     }
@@ -175,7 +175,6 @@ void ccaudit_log_authorization(ccaudit_t ccaudit, const char * right, OSStatus e
 
 void ccaudit_log_success(ccaudit_t ccaudit, credential_t cred, const char * right)
 {
-
     if (!_open(ccaudit)) {
         return;
     }
@@ -196,7 +195,6 @@ void ccaudit_log_success(ccaudit_t ccaudit, credential_t cred, const char * righ
 
 void ccaudit_log_failure(ccaudit_t ccaudit, const char * credName, const char * right)
 {
-
     if (!_open(ccaudit)) {
         return;
     }
@@ -214,7 +212,6 @@ void ccaudit_log_failure(ccaudit_t ccaudit, const char * credName, const char * 
 
 void ccaudit_log_mechanism(ccaudit_t ccaudit, const char * right, const char * mech, uint32_t status, const char * interrupted)
 {
-
     if (!_open(ccaudit)) {
         return;
     }

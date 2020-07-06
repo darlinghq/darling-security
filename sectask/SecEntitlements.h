@@ -36,16 +36,30 @@ __BEGIN_DECLS
    can be debugged. */
 #define kSecEntitlementGetTaskAllow CFSTR("get-task-allow")
 
-#if TARGET_OS_IPHONE
 /* The identifier of this application, typically the same as the
-   CFBundleIdentifier.  Used as the default access group for any keychain
-   items this application creates and accesses. */
+ CFBundleIdentifier. On iOS, the identifier is prefixed with the team-id and
+ for some uses, the same applies to macOS.
+
+ This is used as the default access group for any keychain items this
+ application creates and accesses unless there is a
+ keychain-access-group-entitlement.
+
+ Note that iOS and macOS uses different value for the same constant.
+ */
+
+#if TARGET_OS_IPHONE
 #define kSecEntitlementApplicationIdentifier CFSTR("application-identifier")
 #else
-/* The identifier of this application, for Mac App Store applications. */
 #define kSecEntitlementAppleApplicationIdentifier CFSTR("com.apple.application-identifier")
 #define kSecEntitlementApplicationIdentifier kSecEntitlementAppleApplicationIdentifier
 #endif
+
+/* Marzipan apps distributed through the App Store cannot share an application
+   identifier with their iOS versions, so they have an associated application
+   identifier which matches the iOS identifier. It will be preferred, when
+   present, over the 'regular' application identifier. This avoids developers
+   having to jump through hoops to port iOS apps to the Mac. */
+#define kSecEntitlementAssociatedApplicationIdentifier CFSTR("com.apple.developer.associated-application-identifier")
 
 /* The value should be an array of strings.  Each string is the name of an
    access group that the application has access to.  The
@@ -63,6 +77,8 @@ __BEGIN_DECLS
    kSecEntitlementAppleSecurityApplicationGroups to have a value becomes the default
    application group for keychain clients that don't specify an explicit one. */
 #define kSecEntitlementAppleSecurityApplicationGroups CFSTR("com.apple.security.application-groups")
+
+#define kSecEntitlementNetworkExtensionAccessGroups CFSTR("com.apple.networkextension.keychain")
 
 /* Boolean entitlement, if present the application with the entitlement is
    allowed to modify the which certificates are trusted as anchors using
@@ -90,6 +106,9 @@ __BEGIN_DECLS
 /* Boolean entitlement, if present you get access to the SPIs for keychain sync circle manipulation */
 #define kSecEntitlementKeychainCloudCircle CFSTR("keychain-cloud-circle")
 
+/* Boolean entitlement, if present you get access to the SPIs for keychain initial sync */
+#define kSecEntitlementKeychainInitialSync CFSTR("com.apple.private.security.initial-sync")
+
 /* Associated Domains entitlement (contains array of fully-qualified domain names) */
 #define kSecEntitlementAssociatedDomains CFSTR("com.apple.developer.associated-domains")
 
@@ -111,11 +130,48 @@ __BEGIN_DECLS
 /* Entitlement to control usage of deletion of keychain items on app uninstallation */
 #define kSecEntitlementPrivateUninstallDeletion CFSTR("com.apple.private.uninstall.deletion")
 
+/* Entitlement to control usage of deletion of keychain items wholesale */
+#define kSecEntitlementPrivateDeleteAll CFSTR("com.apple.private.security.delete.all")
+
 /* Entitlement to allow access to circle joining APIs in SOSCC */
 #define kSecEntitlementCircleJoin CFSTR("com.apple.private.keychain.circle.join")
 
 /* Entitlement to deny use of keychain APIs, only effective on iOS keychain */
 #define kSecEntitlementKeychainDeny CFSTR("com.apple.private.keychain.deny")
+
+/* Entitlement to control use of keychain certificate fetching functions */
+#define kSecEntitlementPrivateCertificateAllAccess CFSTR("com.apple.private.keychain.certificates")
+
+/* Entitlement to control use of CKKS */
+#define kSecEntitlementPrivateCKKS CFSTR("com.apple.private.ckks")
+
+/* Entitlement to allow manipulation of backup keybags in keychain table */
+#define kSecEntitlementBackupTableOperations CFSTR("com.apple.private.keychain.backuptableops")
+
+/* Entitlement to allow use of CKKS plaintext fields */
+#define kSecEntitlementPrivateCKKSPlaintextFields CFSTR("com.apple.private.ckks.plaintextfields")
+
+/* Entitlement to allow use of CKKS 'current item' changing SPI */
+#define kSecEntitlementPrivateCKKSWriteCurrentItemPointers CFSTR("com.apple.private.ckks.currentitempointers_write")
+
+/* Entitlement to allow use of CKKS 'current item' reading SPI */
+#define kSecEntitlementPrivateCKKSReadCurrentItemPointers CFSTR("com.apple.private.ckks.currentitempointers_read")
+
+/* Entitlement to allow use of sysbound field */
+#define kSecEntitlementPrivateSysBound CFSTR("com.apple.private.keychain.sysbound")
+
+#define kSecEntitlementBackupTableOperationsDeleteAll CFSTR("com.apple.private.keychain.backuptableops.deleteall")
+
+/* Entitlement to allow executing keychain control actions */
+#define kSecEntitlementKeychainControl CFSTR("com.apple.private.keychain.keychaincontrol")
+
+#if __OBJC__
+/* Entitlement to control use of OT */
+#define kSecEntitlementPrivateOctagon @"com.apple.private.octagon"
+
+/* Entitlement to control use of Escrow Update */
+#define kSecEntitlementPrivateEscrowRequest @"com.apple.private.escrow-update"
+#endif
 
 __END_DECLS
 

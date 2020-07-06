@@ -35,7 +35,7 @@
 #include "Globals.h"
 #include "StorageManager.h"
 #include <Security/SecKeychainItemPriv.h>
-#include <SecBase.h>
+#include <Security/SecBase.h>
 #include <Security/SecBasePriv.h>
 #include <utilities/array_size.h>
 
@@ -223,9 +223,6 @@ KCCursorImpl::next(Item &item)
             }
 
             Keychain &kc = *mCurrent;
-
-            // Grab a read lock on the keychain
-            StReadWriteLock __(*(kc->getKeychainReadWriteLock()), StReadWriteLock::Read);
 
             Mutex* mutex = kc->getKeychainMutex();
             StLock<Mutex> _(*mutex);

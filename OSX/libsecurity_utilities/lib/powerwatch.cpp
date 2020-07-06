@@ -28,6 +28,7 @@
 #include "powerwatch.h"
 #include <IOKit/IOMessage.h>
 
+#if TARGET_OS_OSX
 
 namespace Security {
 namespace MachPlusPlus {
@@ -61,111 +62,18 @@ void PowerWatcher::systemWillPowerOn()
 // IOPowerWatchers
 //
 
-void
-IOPowerWatcher::iopmcallback(void *				param, 
-			     IOPMConnection                    connection,
-			     IOPMConnectionMessageToken        token, 
-			     IOPMSystemPowerStateCapabilities	capabilities)
-{
-    IOPowerWatcher *me = (IOPowerWatcher *)param;
-
-	secnotice("powerwatch", "powerstates");
-	if (capabilities & kIOPMSystemPowerStateCapabilityDisk)
-	    secnotice("powerwatch", "disk");
-	if (capabilities & kIOPMSystemPowerStateCapabilityNetwork)
-	    secnotice("powerwatch", "net");
-	if (capabilities & kIOPMSystemPowerStateCapabilityAudio) 
-	    secnotice("powerwatch", "audio");
-	if (capabilities & kIOPMSystemPowerStateCapabilityVideo)
-	    secnotice("powerwatch", "video");
-
-    /* if cpu and no display -> in DarkWake */
-    if ((capabilities & (kIOPMSystemPowerStateCapabilityCPU|kIOPMSystemPowerStateCapabilityVideo)) == kIOPMSystemPowerStateCapabilityCPU) {
-        secnotice("powerwatch", "enter DarkWake");
-	me->mInDarkWake = true;
-    } else if (me->mInDarkWake) {
-        secnotice("powerwatch", "exit DarkWake");
-	me->mInDarkWake = false;
-    }
-
-    (void)IOPMConnectionAcknowledgeEvent(connection, token);
-
-    return;
-}
-
-
-void
-IOPowerWatcher::setupDarkWake()
-{
-    IOReturn            ret;
-    
-    mInDarkWake = false;
-
-    ret = ::IOPMConnectionCreate(CFSTR("IOPowerWatcher"),
-				 kIOPMSystemPowerStateCapabilityDisk 
-				 | kIOPMSystemPowerStateCapabilityNetwork
-				 | kIOPMSystemPowerStateCapabilityAudio 
-				 | kIOPMSystemPowerStateCapabilityVideo,
-				 &mIOPMconn);
-    if (ret == kIOReturnSuccess) {
-        ret = ::IOPMConnectionSetNotification(mIOPMconn, this,
-                          (IOPMEventHandlerType)iopmcallback);
-        if (ret == kIOReturnSuccess) {
-            ::IOPMConnectionSetDispatchQueue(mIOPMconn, mIOPMqueue);
-        }
-    }
-
-    mUserActiveHandle = IOPMScheduleUserActiveChangedNotification(mIOPMqueue, ^(bool active) {
-        if (active) {
-            mInDarkWake = false;
-        }
-    });
-
-    dispatch_group_leave(mDarkWakeGroup);
-}
-
 IOPowerWatcher::IOPowerWatcher() :
-    mKernelPort(0), mIOPMconn(NULL), mIOPMqueue(NULL), mDarkWakeGroup(NULL), mUserActiveHandle(NULL)
+    mKernelPort(0)
 {
-#ifndef DARLING
 	if (!(mKernelPort = ::IORegisterForSystemPower(this, &mPortRef, ioCallback, &mHandle)))
 		UnixError::throwMe(EINVAL);	// no clue
-
-	mIOPMqueue = dispatch_queue_create("com.apple.security.IOPowerWatcher", NULL);
-	if (mIOPMqueue == NULL)
-		return;
-
-	// Running in background since this will wait for the power
-	// management in configd and we are not willing to block on
-	// that, power events will come in when they do.
-	mDarkWakeGroup = dispatch_group_create();
-	dispatch_group_enter(mDarkWakeGroup);
-	dispatch_async(mIOPMqueue, ^ { setupDarkWake(); });
-#endif
 }
 
 IOPowerWatcher::~IOPowerWatcher()
 {
-	// Make sure to wait until the asynchronous method
-	// finishes, to avoid <rdar://problem/14355434>
-	if (mDarkWakeGroup) {
-		::dispatch_group_wait(mDarkWakeGroup, DISPATCH_TIME_FOREVER);
-		::dispatch_release(mDarkWakeGroup);
-	}
 	if (mKernelPort)
 		::IODeregisterForSystemPower(&mHandle);
-
-	if (mIOPMconn) {
-		::IOPMConnectionSetDispatchQueue(mIOPMconn, NULL);
-		::IOPMConnectionRelease(mIOPMconn);
-	}
-	if (mUserActiveHandle)
-		::IOPMUnregisterNotification(mUserActiveHandle);
-	if (mIOPMqueue)
-		::dispatch_release(mIOPMqueue);
-
 }
-
 
 //
 // The callback dispatcher
@@ -241,9 +149,7 @@ void IOPowerWatcher::ioCallback(void *refCon, io_service_t service,
 //
 PortPowerWatcher::PortPowerWatcher()
 {
-#ifndef DARLING
     port(IONotificationPortGetMachPort(mPortRef));
-#endif
 }
 
 boolean_t PortPowerWatcher::handle(mach_msg_header_t *in)
@@ -256,3 +162,5 @@ boolean_t PortPowerWatcher::handle(mach_msg_header_t *in)
 } // end namespace MachPlusPlus
 
 } // end namespace Security
+
+#endif //TARGET_OS_OSX

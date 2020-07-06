@@ -8,7 +8,7 @@
 
 @class UbiqitousKVSProxy;
 
-@protocol CKDStore
+@protocol CKDStore <NSObject>
 
 - (void)connectToProxy: (UbiqitousKVSProxy*) proxy;
 
@@ -24,5 +24,8 @@
 
 - (void)pushWrites;
 - (BOOL)pullUpdates:(NSError**) failure;
+
+- (void)perfCounters:(void(^)(NSDictionary *counters))callback;
+- (void)addOneToOutGoing;
 
 @end

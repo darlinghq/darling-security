@@ -10,7 +10,7 @@
 #ifndef _CERT_H_
 #define _CERT_H_ 1
 
-#include "SecCmsBase.h"
+#include <Security/SecCmsBase.h>
 #include <Security/nameTemplates.h>
 #include <Security/SecCertificate.h>
 #include <CoreFoundation/CFDate.h>
@@ -21,7 +21,9 @@
 /************************************************************************/
 SEC_BEGIN_PROTOS
 
+#if !USE_CDSA_CRYPTO
 bool CERT_CheckIssuerAndSerial(SecCertificateRef cert, SecAsn1Item *issuer, SecAsn1Item *serial);
+#endif
 
 typedef void CERTVerifyLog;
 
@@ -38,7 +40,7 @@ SecCertificateRef CERT_FindUserCertByUsage(SecKeychainRef dbhandle,
 SecCertificateRef CERT_FindCertByNicknameOrEmailAddr(SecKeychainRef dbhandle, char *name);
 
 SecPublicKeyRef SECKEY_CopyPublicKey(SecPublicKeyRef pubKey);
-void SECKEY_DestroyPublicKey(SecPublicKeyRef pubKey);
+void SECKEY_DestroyPublicKey(SecPublicKeyRef CF_CONSUMED pubKey);
 SecPublicKeyRef SECKEY_CopyPrivateKey(SecPublicKeyRef privKey);
 void SECKEY_DestroyPrivateKey(SecPublicKeyRef privKey);
 void CERT_DestroyCertificate(SecCertificateRef cert);
@@ -57,9 +59,9 @@ SecCertificateRef CERT_DupCertificate(SecCertificateRef cert);
 
 // Generate a certificate chain from a certificate.
 
-CF_RETURNS_RETAINED CFArrayRef CERT_CertChainFromCert(SecCertificateRef cert, SECCertUsage usage,Boolean includeRoot);
+CF_RETURNS_RETAINED CFArrayRef CERT_CertChainFromCert(SecCertificateRef cert, SECCertUsage usage,Boolean includeRoot, Boolean mustIncludeRoot);
 
-CFArrayRef CERT_CertListFromCert(SecCertificateRef cert);
+CF_RETURNS_RETAINED CFArrayRef CERT_CertListFromCert(SecCertificateRef cert);
 
 CFArrayRef CERT_DupCertList(CFArrayRef oldList);
 
@@ -86,6 +88,7 @@ SecIdentityRef CERT_FindIdentityByIssuerAndSN (CFTypeRef keychainOrArray, const 
 SecCertificateRef CERT_FindCertificateByIssuerAndSN (CFTypeRef keychainOrArray, const SecCmsIssuerAndSN *issuerAndSN);
 
 SecIdentityRef CERT_FindIdentityBySubjectKeyID (CFTypeRef keychainOrArray, const SecAsn1Item *subjKeyID);
+SecCertificateRef CERT_FindCertificateBySubjectKeyID(CFTypeRef keychainOrArray, const SecAsn1Item *subjKeyID);
 
 // find the smime symmetric capabilities profile for a given cert
 SecAsn1Item *CERT_FindSMimeProfile(SecCertificateRef cert);
@@ -107,8 +110,13 @@ SECStatus CERT_SaveSMimeProfile(SecCertificateRef cert, SecAsn1Item *emailProfil
 // is given in the common name of the certificate.
 SECStatus CERT_VerifyCertName(SecCertificateRef cert, const char *hostname);
 
+#if USE_CDSA_CRYPTO
+SECStatus CERT_VerifyCert(SecKeychainRef keychainOrArray, SecCertificateRef cert,
+			  CFTypeRef policies, CFAbsoluteTime stime, SecTrustRef *trustRef);
+#else
 SECStatus CERT_VerifyCert(SecKeychainRef keychainOrArray, CFArrayRef cert,
 			  CFTypeRef policies, CFAbsoluteTime stime, SecTrustRef *trustRef);
+#endif
 
 CFTypeRef CERT_PolicyForCertUsage(SECCertUsage certUsage);
 

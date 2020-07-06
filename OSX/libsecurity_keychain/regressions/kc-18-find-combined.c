@@ -51,7 +51,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/param.h>
-#include "test/testenv.h"
+#include "regressions/test/testenv.h"
 #include "utilities/SecCFRelease.h"
 
 #include "keychain_regressions.h"
@@ -1052,6 +1052,12 @@ static void PrintStringToMatch(CFStringRef nameStr)
 	}
 }
 
+static void PrintStringToMatchRelease(CFStringRef CF_CONSUMED nameStr)
+{
+    PrintStringToMatch(nameStr);
+    CFReleaseNull(nameStr);
+}
+
 
 static void PrintSecCertificate(SecCertificateRef certificate)
 {
@@ -1671,7 +1677,7 @@ static int FindCertificateByNameAndValidDate(SecKeychainRef keychain,
 	CFTypeRef results = NULL;
 	if (debug) {
 		PrintStringToMatch(nameStr);
-		PrintStringToMatch(CFCopyDescription(validOnDate));
+		PrintStringToMatchRelease(CFCopyDescription(validOnDate));
 	}
 
 	OSStatus status = SecItemCopyMatching(query, &results);
@@ -1732,8 +1738,8 @@ static int FindCertificateForSMIMEEncryption(SecKeychainRef keychain,
 	CFTypeRef results = NULL;
 	if (debug) {
 		PrintStringToMatch(emailAddr);
-		PrintStringToMatch(CFCopyDescription(kSecPolicyAppleSMIME));
-		PrintStringToMatch(CFCopyDescription(validOnDate));
+		PrintStringToMatchRelease(CFCopyDescription(kSecPolicyAppleSMIME));
+		PrintStringToMatchRelease(CFCopyDescription(validOnDate));
 	}
 
 	OSStatus status = SecItemCopyMatching(query, &results);
@@ -1806,7 +1812,7 @@ static int FindPreferredCertificateForSMIMEEncryption(SecKeychainRef keychain,
 
 		if (debug) {
 			PrintStringToMatch(emailAddr);
-			PrintStringToMatch(CFCopyDescription(validOnDate));
+			PrintStringToMatchRelease(CFCopyDescription(validOnDate));
 		}
 
 		status = SecItemCopyMatching(query, (CFTypeRef*)&validatedCertificate);
@@ -2031,7 +2037,7 @@ static int FindIdentityByPolicyAndValidDate(SecKeychainRef keychain,
 		&kCFTypeDictionaryKeyCallBacks,
 		&kCFTypeDictionaryValueCallBacks);
 
-	if (debug) PrintStringToMatch(CFCopyDescription(policyIdentifier));
+	if (debug) PrintStringToMatchRelease(CFCopyDescription(policyIdentifier));
 
 	status = SecItemCopyMatching(query, &results);
 
@@ -2100,7 +2106,7 @@ static int FindIdentityByNameAndValidDate(SecKeychainRef keychain,
 	CFTypeRef results = NULL;
 	if (debug) {
 		PrintStringToMatch(nameStr);
-		PrintStringToMatch(CFCopyDescription(validOnDate));
+		PrintStringToMatchRelease(CFCopyDescription(validOnDate));
 	}
 
 	OSStatus status = SecItemCopyMatching(query, &results);
@@ -2170,7 +2176,7 @@ static int FindPreferredIdentityForSMIMESigning(SecKeychainRef keychain, CFStrin
 
 		if (debug) {
 			PrintStringToMatch(emailAddr);
-			PrintStringToMatch(CFCopyDescription(validOnDate));
+			PrintStringToMatchRelease(CFCopyDescription(validOnDate));
 		}
 
 		status = SecItemCopyMatching(query, (CFTypeRef*)&validatedIdentity);
@@ -2501,9 +2507,9 @@ static int FindMailPassword(SecKeychainRef keychain,
 
 
 
-const CFStringRef gPrefix = CFSTR("Test Key");
-const CFStringRef gLabel = CFSTR("Test AES Encryption Key");
-const CFStringRef gUUID = CFSTR("550e8400-e29b-41d4-a716-446655441234");
+const CFStringRef g18Prefix = CFSTR("Test Key");
+const CFStringRef g18Label = CFSTR("Test AES Encryption Key");
+const CFStringRef g18UUID = CFSTR("550e8400-e29b-41d4-a716-446655441234");
 
 // CreateSymmetricKey will create a new AES-128 symmetric encryption key
 // with the provided label, application label, and application tag.
@@ -2530,7 +2536,7 @@ static int CreateSymmetricKey(
 	// note: the access descriptor should be the same string as will be used for the item's label,
 	// since it's the string that is displayed by the access confirmation dialog to describe the item.
 	SecAccessRef access = NULL;
-	status = SecAccessCreate(gLabel, NULL, &access);
+	status = SecAccessCreate(g18Label, NULL, &access);
 
 	// create a dictionary of parameters describing the key we want to create
 	CFMutableDictionaryRef params = CFDictionaryCreateMutable(NULL, 0,
@@ -2767,9 +2773,11 @@ static int TestIdentityLookup(SecKeychainRef keychain)
 
 	// look up identity by policy, want first result as a CFDictionary of attributes (should find "Test SSL User" identity)
 	result += FindIdentityByPolicy(keychain, sslPolicy, kSecReturnAttributes, kSecMatchLimitOne, 1, noErr);
+    CFReleaseNull(sslPolicy);
 
 	// look up identity by policy, expect errSecItemNotFound error (this assumes no code signing identity is present!)
 	result += FindIdentityByPolicy(keychain, codeSigningPolicy, kSecReturnRef, kSecMatchLimitOne, 0, errSecItemNotFound);
+    CFReleaseNull(codeSigningPolicy);
 
 	// -------------------------
 	// test kSecMatchValidOnDate
@@ -3047,12 +3055,12 @@ static int TestSymmetricKeyLookup(SecKeychainRef keychain)
 	int result = 0;
 
 	// look up our symmetric key by label and UUID (it might not exist yet)
-	if (FindSymmetricKey(keychain, gLabel, gUUID, NULL, errSecItemNotFound) != errSecSuccess) {
+	if (FindSymmetricKey(keychain, g18Label, g18UUID, NULL, errSecItemNotFound) != errSecSuccess) {
 		// create test key (unique by UUID only)
-		if (CreateSymmetricKey(keychain, gLabel, gUUID, NULL, errSecSuccess) != errSecSuccess)
+		if (CreateSymmetricKey(keychain, g18Label, g18UUID, NULL, errSecSuccess) != errSecSuccess)
 			++result;
 		// look it up again (it should exist now!)
-		if (FindSymmetricKey(keychain, gLabel, gUUID, NULL, errSecSuccess) != errSecSuccess)
+		if (FindSymmetricKey(keychain, g18Label, g18UUID, NULL, errSecSuccess) != errSecSuccess)
 			++result;
 	}
 
@@ -3060,7 +3068,7 @@ static int TestSymmetricKeyLookup(SecKeychainRef keychain)
 	// (so we can make sure on a daily basis that SecKeyGenerateSymmetric is still working)
 	CFGregorianDate curGDate = CFAbsoluteTimeGetGregorianDate(CFAbsoluteTimeGetCurrent(), NULL);
 	CFStringRef curDateLabel = CFStringCreateWithFormat(NULL, NULL, CFSTR("%@ (%4d-%02d-%02d)"),
-		gPrefix, (int32_t) curGDate.year, (int8_t) curGDate.month, (int8_t) curGDate.day);
+		g18Prefix, (int32_t) curGDate.year, (int8_t) curGDate.month, (int8_t) curGDate.day);
 
 	//
 	//%%% FIXME Creating a symmetric key with attributes that would duplicate an existing
@@ -3070,17 +3078,17 @@ static int TestSymmetricKeyLookup(SecKeychainRef keychain)
 	CFStringRef curAppTag = CFSTR("SecItemFind");
 
 	// look up our date-based symmetric key by label, UUID, and tag (it might not exist yet)
-	if (FindSymmetricKey(keychain, curDateLabel, gUUID, curAppTag, errSecItemNotFound) != errSecSuccess) {
+	if (FindSymmetricKey(keychain, curDateLabel, g18UUID, curAppTag, errSecItemNotFound) != errSecSuccess) {
 		// create test key (unique by combination of UUID and application tag)
-		if (CreateSymmetricKey(keychain, curDateLabel, gUUID, curAppTag, errSecSuccess) != errSecSuccess)
+		if (CreateSymmetricKey(keychain, curDateLabel, g18UUID, curAppTag, errSecSuccess) != errSecSuccess)
 			++result;
 		// look it up again (it should exist now!)
-		if (FindSymmetricKey(keychain, curDateLabel, gUUID, curAppTag, errSecSuccess) != errSecSuccess)
+		if (FindSymmetricKey(keychain, curDateLabel, g18UUID, curAppTag, errSecSuccess) != errSecSuccess)
 			++result;
 	}
 
 	// test handling of duplicate symmetric key items (<rdar://8289559>)
-	if (CreateSymmetricKey(keychain, curDateLabel, gUUID, curAppTag, errSecDuplicateItem) != errSecDuplicateItem)
+	if (CreateSymmetricKey(keychain, curDateLabel, g18UUID, curAppTag, errSecDuplicateItem) != errSecDuplicateItem)
 		++result;
 
 	CFRelease(curDateLabel);
@@ -3262,11 +3270,11 @@ static int TestDeleteItems(SecKeychainRef keychain)
 		++result;
 
 	// delete our test symmetric keys (no partial string matching for key items! need an ER Radar...)
-	if (FindAndDeleteItemsByName(keychain, gLabel, NULL, kSecClassKey, kSecMatchLimitAll, 1, noErr))
+	if (FindAndDeleteItemsByName(keychain, g18Label, NULL, kSecClassKey, kSecMatchLimitAll, 1, noErr))
 		++result;
 	CFGregorianDate curGDate = CFAbsoluteTimeGetGregorianDate(CFAbsoluteTimeGetCurrent(), NULL);
 	CFStringRef curDateLabel = CFStringCreateWithFormat(NULL, NULL, CFSTR("%@ (%4d-%02d-%02d)"),
-		gPrefix, (int32_t) curGDate.year, (int8_t) curGDate.month, (int8_t) curGDate.day);
+		g18Prefix, (int32_t) curGDate.year, (int8_t) curGDate.month, (int8_t) curGDate.day);
 	if (FindAndDeleteItemsByName(keychain, curDateLabel, NULL, kSecClassKey, kSecMatchLimitAll, 1, noErr))
 		++result;
 	CFRelease(curDateLabel);

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "0810"
+   LastUpgradeVersion = "1000"
    version = "2.0">
    <BuildAction
-      parallelizeBuildables = "YES"
+      parallelizeBuildables = "NO"
       buildImplicitDependencies = "NO">
       <BuildActionEntries>
          <BuildActionEntry
@@ -28,6 +28,16 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4727FBB61F9918580003AE36"
+               BuildableName = "secdxctests_ios.xctest"
+               BlueprintName = "secdxctests_ios"
+               ReferencedContainer = "container:Security.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <MacroExpansion>
          <BuildableReference
@@ -65,6 +75,10 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "-l"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_36_ks_encrypt"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
@@ -132,6 +146,10 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "secd_33_keychain_backup"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "secd_35_keychain_migrate_inet"
             isEnabled = "NO">
          </CommandLineArgument>
@@ -145,6 +163,10 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "secd_50_message"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_50_account"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
@@ -200,7 +222,19 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "secd_64_circlereset"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "secd_65_account_retirement_reset"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_66_account_recovery"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_68_ghosts"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
@@ -221,6 +255,14 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "secd_75_engine_views"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_76_idstransport"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_77_ids_messaging"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
@@ -252,15 +294,27 @@
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "sc_140_hsa2"
-            isEnabled = "NO">
-         </CommandLineArgument>
-         <CommandLineArgument
             argument = "secd_154_engine_backoff"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
+            argument = "secd_156_timers"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_155_otr_negotiation_monitor"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
             argument = "secd_95_escrow_persistence"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_100_initialsync"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_130_other_peer_views"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
@@ -269,6 +323,14 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "secd_202_recoverykey"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_230_keybagtable"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "secd_700_sftm"
             isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
@@ -297,7 +359,7 @@
       </AdditionalOptions>
    </LaunchAction>
    <ProfileAction
-      buildConfiguration = "Release"
+      buildConfiguration = "Debug"
       shouldUseLaunchSchemeArgsEnv = "YES"
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"

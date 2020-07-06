@@ -27,7 +27,11 @@
 #include "reqreader.h"
 #include <Security/SecTrustSettingsPriv.h>
 #include <security_utilities/memutils.h>
+
+#if TARGET_OS_OSX
 #include <security_cdsa_utilities/cssmdata.h>	// for hex encoding
+#endif
+
 #include "csutilities.h"
 
 namespace Security {
@@ -69,6 +73,15 @@ CFDataRef Requirement::Reader::getHash()
 	const unsigned char *s; size_t length;
 	getData(s, length);
 	return makeCFData(s, length);
+}
+
+CFAbsoluteTime Requirement::Reader::getAbsoluteTime()
+{
+	// timestamps are saved as 64bit ints internally for
+	// portability, but CoreFoundation wants CFAbsoluteTimes,
+	// which are doubles.
+	// This cuts off subseconds.
+	return static_cast<CFAbsoluteTime>(get<int64_t>());
 }
 
 const unsigned char *Requirement::Reader::getSHA1()

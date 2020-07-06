@@ -76,6 +76,7 @@ KernelStaticCode::KernelStaticCode()
 //
 SecCode *KernelCode::locateGuest(CFDictionaryRef attributes)
 {
+#if TARGET_OS_OSX
 	CFNumberRef pidNumber = NULL;
 	CFDataRef auditData = NULL;
 	cfscan(attributes, "{%O=%NO}", kSecGuestAttributePid, &pidNumber);
@@ -105,11 +106,14 @@ SecCode *KernelCode::locateGuest(CFDictionaryRef attributes)
 					MacOSError::throwMe(errSecCSInvalidAttributeValues);
 
 			try {
-				diskRep = new PidDiskRep(pid, infoPlist);
+				diskRep = new PidDiskRep(pid, audit, infoPlist);
 			} catch (...) { }
 	}
 	
 	return (new ProcessCode(pid, audit, diskRep))->retain();
+#else
+    MacOSError::throwMe(errSecCSUnimplemented);
+#endif
 }
 
 
@@ -126,17 +130,16 @@ SecStaticCode *KernelCode::identifyGuest(SecCode *iguest, CFDataRef *cdhash)
                        
                         SecPointer<SecStaticCode> code = new ProcessDynamicCode(guest);
 						guest->pidBased()->setCredentials(code->codeDirectory());
-#ifndef DARLING
+
                         SHA1::Digest kernelHash;
                         MacOSError::check(guest->csops(CS_OPS_CDHASH, kernelHash, sizeof(kernelHash)));
                         *cdhash = makeCFData(kernelHash, sizeof(kernelHash));
-#endif
+
                         return code.yield();
                 }
                 
 		char path[2 * MAXPATHLEN];	// reasonable upper limit
 		if (::proc_pidpath(guest->pid(), path, sizeof(path))) {
-#ifndef DARLING
 			off_t offset;
 			csops(guest, CS_OPS_PIDOFFSET, &offset, sizeof(offset));
 			SecPointer<SecStaticCode> code = new ProcessStaticCode(DiskRep::bestGuess(path, (size_t)offset));
@@ -157,9 +160,6 @@ SecStaticCode *KernelCode::identifyGuest(SecCode *iguest, CFDataRef *cdhash)
 					*cdhash = makeCFData(kernelHash, sizeof(kernelHash));
 				CODESIGN_GUEST_CDHASH_PROCESS(guest, kernelHash, sizeof(kernelHash));
 			}
-#else
-			SecPointer<SecStaticCode> code = new ProcessStaticCode(DiskRep::bestGuess(path));
-#endif
 			return code.yield();
 		} else
 			UnixError::throwMe();
@@ -225,7 +225,6 @@ void KernelCode::identify()
 //
 void KernelCode::csops(ProcessCode *proc, unsigned int op, void *addr, size_t length)
 {
-#ifndef DARLING
 	if (proc->csops(op, addr, length) == -1) {
 		switch (errno) {
 		case ESRCH:
@@ -234,7 +233,6 @@ void KernelCode::csops(ProcessCode *proc, unsigned int op, void *addr, size_t le
 			UnixError::throwMe();
 		}
 	}
-#endif
 }
 
 

@@ -36,15 +36,22 @@
 
 #define kECKeySize 256
 
-static void GenerateHashForKey(ccec_pub_ctx_t public_key, void *output)
+static OSStatus GenerateHashForKey(ccec_pub_ctx_t public_key, void *output)
 {
     size_t size = ccec_export_pub_size(public_key);
 
-    uint8_t pub_key_bytes_buffer[size];
+    uint8_t *pub_key_bytes_buffer = malloc(size);
+    if (pub_key_bytes_buffer == NULL) {
+        return errSecMemoryError;
+    }
 
     ccec_export_pub(public_key, pub_key_bytes_buffer);
 
     ccdigest(ccsha1_di(), size, pub_key_bytes_buffer, output);
+
+    free(pub_key_bytes_buffer);
+
+    return errSecSuccess;
 }
 
 
@@ -70,9 +77,9 @@ static size_t AppendECPublicKeyAsDATA(CFMutableDataRef data, ccec_pub_ctx_t publ
 
 static size_t AppendECCompactPublicKey(CFMutableDataRef data, ccec_pub_ctx_t public_key)
 {
-    size_t size = ccec_compact_export_size(false, public_key._full);
+    size_t size = ccec_compact_export_size(false, public_key);
 
-    ccec_compact_export(false, CFDataIncreaseLengthAndGetMutableBytes(data, (CFIndex)size), public_key._full);
+    ccec_compact_export(false, CFDataIncreaseLengthAndGetMutableBytes(data, (CFIndex)size), (ccec_full_ctx_t)public_key);
 
     return size;
 }
@@ -104,7 +111,7 @@ static CFStringRef SecOTRFullDHKeyCopyFormatDescription(CFTypeRef cf, CFDictiona
     SecOTRFullDHKeyRef fullDHKey = (SecOTRFullDHKeyRef)cf;
     __block CFStringRef description = NULL;
 
-    withXandY(fullDHKey->_key, ^(CFStringRef x, CFStringRef y) {
+    withXandY(ccec_ctx_pub(fullDHKey->_key), ^(CFStringRef x, CFStringRef y) {
         BufferPerformWithHexString(fullDHKey->keyHash, sizeof(fullDHKey->keyHash), ^(CFStringRef dataString) {
             description = CFStringCreateWithFormat(kCFAllocatorDefault,NULL,CFSTR("<SecOTRFullDHKeyRef@%p: x: %@ y: %@ [%@]>"), fullDHKey, x, y, dataString);
         });
@@ -128,9 +135,9 @@ static void SecOTRFullDHKeyDestroy(CFTypeRef cf)
     bzero(fullKey->_key, sizeof(fullKey->_key));
 }
 
-static inline void SecOTRFDHKUpdateHash(SecOTRFullDHKeyRef fullKey)
+static inline OSStatus SecOTRFDHKUpdateHash(SecOTRFullDHKeyRef fullKey)
 {
-    GenerateHashForKey(fullKey->_key, fullKey->keyHash);
+    return GenerateHashForKey(ccec_ctx_pub(fullKey->_key), fullKey->keyHash);
 }
 
 SecOTRFullDHKeyRef SecOTRFullDHKCreate(CFAllocatorRef allocator)
@@ -152,14 +159,14 @@ SecOTRFullDHKeyRef SecOTRFullDHKCreateFromBytes(CFAllocatorRef allocator, const 
     require_noerr(ReadLong(bytes, size, &publicKeySize), fail);
 
     require(publicKeySize <= *size, fail);
-    require_noerr(ccec_import_pub(ccec_cp_256(), publicKeySize, *bytes, newFDHK->_key), fail);
+    require_noerr(ccec_import_pub(ccec_cp_256(), publicKeySize, *bytes, ccec_ctx_pub(newFDHK->_key)), fail);
     
     *size -= publicKeySize;
     *bytes += publicKeySize;
 
     require_noerr(ReadMPI(bytes, size, ccec_ctx_n(newFDHK->_key), ccec_ctx_k(newFDHK->_key)), fail);
 
-    SecOTRFDHKUpdateHash(newFDHK);
+    require_noerr(SecOTRFDHKUpdateHash(newFDHK), fail);
 
     return newFDHK;
 
@@ -168,7 +175,7 @@ fail:
     return NULL;
 }
 
-void SecFDHKNewKey(SecOTRFullDHKeyRef fullKey)
+OSStatus SecFDHKNewKey(SecOTRFullDHKeyRef fullKey)
 {
     struct ccrng_state *rng=ccDRBGGetRngState();
 
@@ -176,28 +183,30 @@ void SecFDHKNewKey(SecOTRFullDHKeyRef fullKey)
     // ccecdh_generate_key or ccechd_generate_compact_key, but for now ecdh are fine for compact use IFF we don't
     // use the non-compact pub part.
 
+    // ccec_cmp() assumes public keys are 65 bytes or shorter.
+    // If we ever generate different DHKeys, we will need to make a change there too.
+
     ccec_compact_generate_key(ccec_cp_256(), rng, fullKey->_key);
 
-    SecOTRFDHKUpdateHash(fullKey);
-
+    return SecOTRFDHKUpdateHash(fullKey);
 }
 
 void SecFDHKAppendSerialization(SecOTRFullDHKeyRef fullKey, CFMutableDataRef appendTo)
 {
-    AppendECPublicKeyAsDATA(appendTo, fullKey->_key);
+    AppendECPublicKeyAsDATA(appendTo, ccec_ctx_pub(fullKey->_key));
     AppendMPI(appendTo, ccec_ctx_n(fullKey->_key), ccec_ctx_k(fullKey->_key));
 }
 
 void SecFDHKAppendPublicSerialization(SecOTRFullDHKeyRef fullKey, CFMutableDataRef appendTo)
 {
     if(ccec_ctx_bitlen(fullKey->_key) != kECKeySize) return;
-    AppendECPublicKeyAsDATA(appendTo, fullKey->_key);
+    AppendECPublicKeyAsDATA(appendTo, ccec_ctx_pub(fullKey->_key));
 }
 
 void SecFDHKAppendCompactPublicSerialization(SecOTRFullDHKeyRef fullKey, CFMutableDataRef appendTo)
 {
     if(ccec_ctx_bitlen(fullKey->_key) != kECKeySize) return;
-    AppendECCompactPublicKey(appendTo, fullKey->_key);
+    AppendECCompactPublicKey(appendTo, ccec_ctx_pub(fullKey->_key));
 }
 
 
@@ -247,23 +256,22 @@ static void SecOTRPublicDHKeyDestroy(CFTypeRef cf) {
     (void) pubKey;
 }
 
-static inline void SecOTRPDHKUpdateHash(SecOTRPublicDHKeyRef pubKey)
+static inline OSStatus SecOTRPDHKUpdateHash(SecOTRPublicDHKeyRef pubKey)
 {
-    GenerateHashForKey(pubKey->_key, pubKey->keyHash);
+    return GenerateHashForKey(pubKey->_key, pubKey->keyHash);
 }
 
 static void ccec_copy_public(ccec_pub_ctx_t source, ccec_pub_ctx_t dest)
 {
-    ccec_ctx_cp(dest) = ccec_ctx_cp(source);
-    // TODO: +1?!
-    ccn_set(3*ccec_ctx_n(source), (cc_unit*) ccec_ctx_point(dest)._p, (cc_unit*) ccec_ctx_point(source)._p);
+    cc_size sourceKeyN = ccec_ctx_n(source);
+    memcpy(dest, source, ccec_pub_ctx_size(ccn_sizeof_n(sourceKeyN)));
 }
 
 SecOTRPublicDHKeyRef SecOTRPublicDHKCreateFromFullKey(CFAllocatorRef allocator, SecOTRFullDHKeyRef full)
 {
     SecOTRPublicDHKeyRef newPDHK = CFTypeAllocate(SecOTRPublicDHKey, struct _SecOTRPublicDHKey, allocator);
     
-    ccec_copy_public(full->_key, newPDHK->_key);
+    ccec_copy_public(ccec_ctx_pub(full->_key), newPDHK->_key);
     memcpy(newPDHK->keyHash, full->keyHash, CCSHA1_OUTPUT_SIZE);
 
     return newPDHK;
@@ -300,7 +308,7 @@ SecOTRPublicDHKeyRef SecOTRPublicDHKCreateFromCompactSerialization(CFAllocatorRe
     *size -= publicKeySize;
     *bytes += publicKeySize;
 
-    SecOTRPDHKUpdateHash(newPDHK);
+    require_noerr(SecOTRPDHKUpdateHash(newPDHK), fail);
 
     return newPDHK;
 fail:
@@ -318,7 +326,7 @@ SecOTRPublicDHKeyRef SecOTRPublicDHKCreateFromBytes(CFAllocatorRef allocator, co
     *bytes += *size;
     *size = 0;
 
-    SecOTRPDHKUpdateHash(newPDHK);
+    require_noerr(SecOTRPDHKUpdateHash(newPDHK), fail);
 
     return newPDHK;
 fail:
@@ -360,12 +368,20 @@ static int ccec_cmp(ccec_pub_ctx_t l, ccec_pub_ctx_t r)
     int result = 0;
     
     if (lsize == rsize) {
-        uint8_t lpub[lsize];
-        uint8_t rpub[rsize];
+        // Keys should never be larger than 256.
+        // But if they are, we want to draw attention to it.
+        if (lsize > 65) {
+            secerror("The size of an SecOTRDHKey is larger than 65 bytes. \
+                     This is not supported in SecOTR and will result in malformed ciphertexts.");
+            return false;
+        }
+
+        uint8_t lpub[65];
+        uint8_t rpub[65];
         
         ccec_export_pub(l, lpub);
         ccec_export_pub(r, rpub);
-        
+
         result = memcmp(lpub, rpub, lsize);
     } else {
         result = rsize < lsize ? -1 : 1;
@@ -376,7 +392,7 @@ static int ccec_cmp(ccec_pub_ctx_t l, ccec_pub_ctx_t r)
 
 bool SecDHKIsGreater(SecOTRFullDHKeyRef myKey, SecOTRPublicDHKeyRef theirKey)
 {
-    return ccec_cmp(myKey->_key, theirKey->_key) > 0;
+    return ccec_cmp(ccec_ctx_pub(myKey->_key), theirKey->_key) > 0;
 }
 
 static void DeriveKeys(CFDataRef dataToHash,

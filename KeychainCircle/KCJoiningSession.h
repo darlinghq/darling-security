@@ -7,10 +7,15 @@
 #import <KeychainCircle/KCSRPContext.h>
 #import <KeychainCircle/KCAESGCMDuplexSession.h>
 #include <Security/SecureObjectSync/SOSPeerInfo.h>
+#include <Security/SecureObjectSync/SOSCloudCircle.h>
+
+
+bool KCJoiningOctagonPiggybackingEnabled(void);
+bool KCSetJoiningOctagonPiggybackingEnabled(bool value);
 
 NS_ASSUME_NONNULL_BEGIN
 
-@protocol KCJoiningRequestCircleDelegate
+@protocol KCJoiningRequestCircleDelegate <NSObject>
 /*!
  Get this devices peer info (As Application)
 
@@ -24,13 +29,16 @@ NS_ASSUME_NONNULL_BEGIN
 
  @parameter circleJoinData
  Data the acceptor made to allow us to join the circle.
+ 
+ @parameter version
+ Piggybacking protocol version, let's secd know to expect more data
 
  */
-- (bool) processCircleJoinData: (NSData*) circleJoinData error: (NSError**)error;
-
+- (bool) processCircleJoinData: (NSData*) circleJoinData version:(PiggyBackProtocolVersion) version error: (NSError**)error;
+    
 @end
 
-@protocol KCJoiningRequestSecretDelegate
+@protocol KCJoiningRequestSecretDelegate <NSObject>
 /*!
  Get the shared secret for this session.
  Not called during creation or initialMessage: to allow the initial message to be sent before
@@ -84,7 +92,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-
+@class OTControl;
 @interface KCJoiningRequestCircleSession : NSObject
 
 - (bool) isDone;
@@ -98,13 +106,19 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype) initWithCircleDelegate: (NSObject<KCJoiningRequestCircleDelegate>*) circleDelegate
                                 session: (KCAESGCMDuplexSession*) session
-                                  error: (NSError**) error NS_DESIGNATED_INITIALIZER;
+                                  error: (NSError**) error;
+
+
+- (instancetype)initWithCircleDelegate:(NSObject<KCJoiningRequestCircleDelegate>*) circleDelegate
+                               session:(KCAESGCMDuplexSession*) session
+                             otcontrol:(OTControl*)otcontrol
+                                 error:(NSError**) error NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
 @end
 
 
-@protocol KCJoiningAcceptCircleDelegate
+@protocol KCJoiningAcceptCircleDelegate <NSObject>
 /*!
  Handle the request's peer info and get the blob they can use to get in circle
  @param peer
@@ -116,6 +130,15 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (NSData*) circleJoinDataFor: (SOSPeerInfoRef) peer
                         error: (NSError**) error;
+
+/*!
+ Retrieves initial sync data from the following initial sync views: backupV0, iCloud identity, and ckks tlk
+ @param error
+ Error returns an error if encoding the initial sync data was successful or not
+ @result
+ Data blob contains tlks, icloud identities, and backupv0
+ */
+-(NSData*) circleGetInitialSyncViews:(SOSInitialSyncFlags)flags error:(NSError**) error;
 @end
 
 typedef enum {
@@ -124,7 +147,7 @@ typedef enum {
     kKCRetryWithNewChallenge
 } KCRetryOrNot;
 
-@protocol KCJoiningAcceptSecretDelegate
+@protocol KCJoiningAcceptSecretDelegate <NSObject>
 /*!
     Get the shared secret for this session
     @result

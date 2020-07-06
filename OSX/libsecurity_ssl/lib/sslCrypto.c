@@ -48,30 +48,6 @@
 
 #include <tls_helpers.h>
 
-/*
- * Get algorithm id for a SSLPubKey object.
- */
-CFIndex sslPubKeyGetAlgorithmID(SecKeyRef pubKey)
-{
-#if TARGET_OS_IPHONE
-	return SecKeyGetAlgorithmID(pubKey);
-#else
-	return SecKeyGetAlgorithmId(pubKey);
-#endif
-}
-
-/*
- * Get algorithm id for a SSLPrivKey object.
- */
-CFIndex sslPrivKeyGetAlgorithmID(SecKeyRef privKey)
-{
-#if TARGET_OS_IPHONE
-	return SecKeyGetAlgorithmID(privKey);
-#else
-	return SecKeyGetAlgorithmId(privKey);
-#endif
-}
-
 
 OSStatus
 sslCreateSecTrust(
@@ -118,21 +94,14 @@ sslGetMatchingCertInArray(
 		return NULL;
 	}
 
-	CFDataRef certData = SecCertificateCopyData(certRef);
-	if (certData) {
-		CFIndex idx, count = CFArrayGetCount(certArray);
-		for(idx=0; idx<count; idx++) {
-			SecCertificateRef aCert = (SecCertificateRef)CFArrayGetValueAtIndex(certArray, idx);
-			CFDataRef aData = SecCertificateCopyData(aCert);
-			if (aData && CFEqual(aData, certData)) {
-				matchedCert = aCert;
-			}
-			CFReleaseSafe(aData);
-			if (matchedCert)
-				break;
-		}
-		CFReleaseSafe(certData);
-	}
+    CFIndex idx, count = CFArrayGetCount(certArray);
+    for (idx = 0; idx < count; idx++) {
+        SecCertificateRef otherCert = (SecCertificateRef) CFArrayGetValueAtIndex(certArray, idx);
+        if (CFEqual(certRef, otherCert)) {
+            matchedCert = otherCert;
+            break;
+        }
+    }
 
     return matchedCert;
 }
@@ -178,7 +147,8 @@ static OSStatus sslVerifyCertChain(
 	}
 
 	SecTrustResultType secTrustResult;
-	require_noerr(status = SecTrustEvaluate(trust, &secTrustResult), errOut);
+    require_noerr(status = SecTrustEvaluate(trust, &secTrustResult), errOut);
+
 	switch (secTrustResult) {
         case kSecTrustResultUnspecified:
             /* cert chain valid, no special UserTrust assignments */
@@ -187,7 +157,6 @@ static OSStatus sslVerifyCertChain(
             status = errSecSuccess;
             break;
         case kSecTrustResultDeny:
-        case kSecTrustResultConfirm:
         case kSecTrustResultRecoverableTrustFailure:
         default:
             if(ctx->allowAnyRoot) {
@@ -226,37 +195,6 @@ errOut:
 	ctx->peerSecTrust = trust;
 
 	return status;
-}
-
-/* Convert cert in DER format into an CFArray of SecCertificateRef */
-CFArrayRef
-tls_get_peer_certs(const SSLCertificate *certs)
-{
-    const SSLCertificate *cert;
-
-    CFMutableArrayRef certArray = NULL;
-    CFDataRef certData = NULL;
-    SecCertificateRef cfCert = NULL;
-
-    certArray = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
-    require(certArray, out);
-    cert = certs;
-    while(cert) {
-        require((certData = CFDataCreate(kCFAllocatorDefault, cert->derCert.data, cert->derCert.length)), out);
-        require((cfCert = SecCertificateCreateWithData(kCFAllocatorDefault, certData)), out);
-        CFArrayAppendValue(certArray, cfCert);
-        CFReleaseNull(cfCert);
-        CFReleaseNull(certData);
-        cert=cert->next;
-    }
-
-    return certArray;
-
-out:
-    CFReleaseNull(cfCert);
-    CFReleaseNull(certData);
-    CFReleaseNull(certArray);
-    return NULL;
 }
 
 int
@@ -397,7 +335,7 @@ OSStatus sslVerifySelectedCipher(SSLContext *ctx)
     }
 
     /* Check the alg of our signing key. */
-    CFIndex keyAlg = sslPrivKeyGetAlgorithmID(ctx->signingPrivKeyRef);
+    CFIndex keyAlg = SecKeyGetAlgorithmId(ctx->signingPrivKeyRef);
     if (requireAlg != keyAlg) {
 	sslErrorLog("sslVerifySelectedCipher: signing key alg mismatch\n");
 	return errSSLBadConfiguration;

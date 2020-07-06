@@ -8,30 +8,24 @@
 	<array>
 		<dict>
 			<key>TestName</key>
-			<string>BackupNegativeTest</string>
-			<key>Command</key>
-			<array>
-				<string>/AppleInternal/CoreOS/tests/Security/secbackupntest</string>
-			</array>
-		</dict>
-		<dict>
-			<key>TestName</key>
 			<string>keystorectl-get-lock-state</string>
 			<key>Command</key>
 			<array>
 				<string>/usr/local/bin/keystorectl</string>
 				<string>get-lock-state</string>
 			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_keystorectl_get_lock_state</string>
 		</dict>
 		<dict>
 			<key>TestName</key>
-			<string>BackupTest</string>
+			<string>security-sysdiagnose</string>
 			<key>Command</key>
 			<array>
-				<string>/AppleInternal/CoreOS/tests/Security/secbackuptest</string>
+				<string>/usr/libexec/security-sysdiagnose</string>
 			</array>
-			<key>EligibleResource</key>
-			<string>cpuArchitecture BEGINSWITH &apos;arm&apos;</string>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_security_sysdiagnose</string>
 		</dict>
 		<dict>
 			<key>TestName</key>
@@ -40,50 +34,127 @@
 			<array>
 				<string>/AppleInternal/CoreOS/tests/Security/secedumodetest</string>
 			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_EduModeTest</string>
 		</dict>
 		<dict>
 			<key>TestName</key>
-			<string>secitemstresstest</string>
+			<string>keychainnetworkextensionsharing-1</string>
 			<key>Command</key>
 			<array>
-				<string>/AppleInternal/CoreOS/tests/Security/secitemstresstest</string>
+				<string>/AppleInternal/CoreOS/tests/Security/seckeychainnetworkextensionstest</string>
 			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_keychainnetworkextensionsharing_1</string>
 		</dict>
 		<dict>
 			<key>TestName</key>
-			<string>secitemnotifications</string>
+			<string>keychainnetworkextensionsharing-2</string>
 			<key>Command</key>
 			<array>
-				<string>/AppleInternal/CoreOS/tests/Security/secitemnotifications</string>
+				<string>/AppleInternal/CoreOS/tests/Security/seckeychainnetworkextensionsystemdaemontest</string>
 			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_keychainnetworkextensionsharing_2</string>
 		</dict>
 		<dict>
 			<key>TestName</key>
-			<string>secitemfunctionality</string>
+			<string>keychainnetworkextensionsharing-3</string>
 			<key>Command</key>
 			<array>
-				<string>/AppleInternal/CoreOS/tests/Security/secitemfunctionality</string>
+				<string>/AppleInternal/CoreOS/tests/Security/seckeychainnetworkextensionunauthorizedaccesstest</string>
 			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_keychainnetworkextensionsharing_3</string>
 		</dict>
 		<dict>
 			<key>TestName</key>
-			<string>secd_02_upgrade_while_locked</string>
+			<string>KCPairingTest</string>
+			<key>ShowSubtestResults</key>
+			<true/>
 			<key>Command</key>
 			<array>
-				<string>/usr/local/bin/secdtests</string>
-				<string>-1</string>
-				<string>secd_02_upgrade_while_locked </string>
+				<string>/AppleInternal/CoreOS/tests/Security/KeychainEntitledTestRunner</string>
+				<string>-t</string>
+				<string>KCPairingTests</string>
 			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_KCPairingTest</string>
 		</dict>
 		<dict>
 			<key>TestName</key>
-			<string>secd_35_keychain_migrate_inet</string>
+			<string>AuthorizationTest</string>
 			<key>Command</key>
 			<array>
-				<string>/usr/local/bin/secdtests</string>
-				<string>-1</string>
-				<string>secd_35_keychain_migrate_inet</string>
+				<string>/AppleInternal/CoreOS/tests/Security/authdtest</string>
 			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_AuthorizationTest</string>
+		</dict>
+		<dict>
+			<key>TestName</key>
+			<string>KeychainAnalyticsTests</string>
+			<key>ShowSubtestResults</key>
+			<true/>
+			<key>Command</key>
+			<array>
+				<string>BATS_XCTEST_CMD</string>
+				<string>/AppleInternal/XCTests/com.apple.security/KeychainAnalyticsTests.xctest</string>
+			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_KeychainAnalyticsTests</string>
+		</dict>
+		<dict>
+			<key>TestName</key>
+			<string>KeychainMockAKSTests</string>
+			<key>ShowSubtestResults</key>
+			<true/>
+			<key>Command</key>
+			<array>
+				<string>BATS_XCTEST_CMD</string>
+				<string>/AppleInternal/XCTests/com.apple.security/secdmockaks.xctest</string>
+			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_KeychainMockAKSTests</string>
+		</dict>
+		<dict>
+			<key>TestName</key>
+			<string>KeychainSecd_macOS</string>
+			<key>ShowSubtestResults</key>
+			<true/>
+			<key>Command</key>
+			<array>
+				<string>BATS_XCTEST_CMD</string>
+				<string>/AppleInternal/XCTests/com.apple.security/secdxctests_mac.xctest</string>
+			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_KeychainSecd_macOS</string>
+		</dict>
+		<dict>
+			<key>TestName</key>
+			<string>KeychainSecd_iOS</string>
+			<key>ShowSubtestResults</key>
+			<true/>
+			<key>Command</key>
+			<array>
+				<string>BATS_XCTEST_CMD</string>
+				<string>/AppleInternal/XCTests/com.apple.security/secdxctests_ios.xctest</string>
+			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_KeychainSecd_iOS</string>
+		</dict>
+		<dict>
+			<key>TestName</key>
+			<string>SecurityUtiltitesTests</string>
+			<key>ShowSubtestResults</key>
+			<true/>
+			<key>Command</key>
+			<array>
+				<string>BATS_XCTEST_CMD</string>
+				<string>/AppleInternal/XCTests/com.apple.security/SecurityUtilitiesTests.xctest</string>
+			</array>
+			<key>Disabled</key>
+			<string>BATS_UTD_Disabled_SecurityUtiltitesTests</string>
 		</dict>
 	</array>
 </dict>

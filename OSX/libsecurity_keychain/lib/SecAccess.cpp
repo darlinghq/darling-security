@@ -21,7 +21,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#include <SecBase.h>
+#include <Security/SecBase.h>
 #include <Security/SecAccess.h>
 #include <Security/SecAccessPriv.h>
 #include <Security/SecTrustedApplication.h>
@@ -321,8 +321,7 @@ SecAccessRef SecAccessCreateWithOwnerAndACL(uid_t userId, gid_t groupId, SecAcce
 	CFRelease(debugStr);
 #endif
 
-	CSSM_ACL_AUTHORIZATION_TAG rights[numAcls];
-	memset(rights, 0, sizeof(rights));
+	std::vector<CSSM_ACL_AUTHORIZATION_TAG> rights(numAcls);
 
 	for (CFIndex iCnt = 0; iCnt < numAcls; iCnt++)
 	{
@@ -382,7 +381,7 @@ SecAccessRef SecAccessCreateWithOwnerAndACL(uid_t userId, gid_t groupId, SecAcce
 				{ CSSM_LIST_TYPE_UNKNOWN, &subject1, &subject2 },
 				false,	// Delegate
 				// rights for this entry
-				{ (uint32)(sizeof(rights) / sizeof(rights[0])), rights },
+				{ (uint32)numAcls, rights.data() },
 				// rest is defaulted
 			}
 		}
@@ -579,9 +578,6 @@ CFArrayRef copyTrustedAppListFromBundle(CFStringRef bundlePath, CFStringRef trus
     if (!trustedAppsURL)
         goto xit;
 
-    if ( trustedAppListFileNameWithoutExtension )
-		CFRelease(trustedAppListFileNameWithoutExtension);
-
 	if (!CFURLCreateDataAndPropertiesFromResource(kCFAllocatorDefault,trustedAppsURL,&xmlDataRef,NULL,NULL,&errorCode))
         goto xit;
 
@@ -589,6 +585,7 @@ CFArrayRef copyTrustedAppListFromBundle(CFStringRef bundlePath, CFStringRef trus
     trustedAppList = (CFArrayRef)trustedAppsPlist;
 
 xit:
+    CFReleaseNull(trustedAppListFileNameWithoutExtension);
     if (bundleURL)
         CFRelease(bundleURL);
     if (secBundle)

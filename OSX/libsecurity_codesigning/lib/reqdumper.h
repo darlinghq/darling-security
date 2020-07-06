@@ -77,13 +77,14 @@ protected:
 		isBinary		// contains binary bytes (use 0xnnn form)
 	};
 	void data(PrintMode bestMode = isSimple, bool dotOkay = false);
+	void timestamp();
 	void dotString() { data(isSimple, true); }
 	void quotedString() { data(isPrintable); }
 	void hashData();	// H"bytes"
 	void certSlot();	// symbolic certificate slot indicator (explicit)
 	void match();		// a match suffix (op + value)
 	
-	void print(const char *format, ...);
+	void print(const char *format, ...) __attribute((format(printf,2,3)));
 
 private:
 	void printBytes(const Byte *data, size_t length); // just write hex bytes

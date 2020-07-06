@@ -27,7 +27,7 @@
 #ifndef _SECURITY_DEFAULTCREDS_H
 #define _SECURITY_DEFAULTCREDS_H
 
-#include "SecBase.h"
+#include <Security/SecBase.h>
 #include <security_cdsa_utilities/cssmcred.h>
 #include <security_utilities/trackingallocator.h>
 #include <security_cdsa_client/dlclient.h>
@@ -63,6 +63,8 @@ private:
 	void keyReferral(const CssmClient::UnlockReferralRecord &ref);
 	bool unlockKey(const CssmClient::UnlockReferralRecord &ref, const KeychainList &list);
 	
+	void keybagReferral(const CssmClient::UnlockReferralRecord &ref);
+
 	KeychainList fallbackSearchList(const DLDbIdentifier &ident);
 	
 private:

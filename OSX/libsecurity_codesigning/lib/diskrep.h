@@ -70,11 +70,19 @@ public:
 	virtual Universal *mainExecutableImage();				// Mach-O image if Mach-O based [null]
 	virtual size_t signingBase();							// start offset of signed area in main executable [zero]
 	virtual size_t signingLimit() = 0;						// size of signed area in main executable
+
+	// The executable segment, if present, denotes which part of the image can be mapped
+	// into a virtual address space as executable. Not all platforms check this.
+	virtual size_t execSegBase(const Architecture *arch);			// start offset of executable segment in main executable [zero]
+	virtual size_t execSegLimit(const Architecture *arch) = 0;		// size of executable segment in main executable
+
 	virtual std::string format() = 0;						// human-readable type string
 	virtual CFArrayRef modifiedFiles();						// list of files modified by signing [main execcutable only]
 	virtual UnixPlusPlus::FileDesc &fd() = 0;				// a cached file descriptor for main executable file
 	virtual void flush();									// flush caches (refetch as needed)
     virtual CFDictionaryRef diskRepInformation();           // information from diskrep
+
+	virtual void registerStapledTicket();
 
 	// default values for signing operations
 	virtual std::string recommendedIdentifier(const SigningContext &ctx) = 0; // default identifier
@@ -84,7 +92,10 @@ public:
 	virtual size_t pageSize(const SigningContext &ctx);		// default main executable page size [infinite, i.e. no paging]
 
 	virtual void strictValidate(const CodeDirectory* cd, const ToleratedErrors& tolerated, SecCSFlags flags); // perform strict validation
+	virtual void strictValidateStructure(const CodeDirectory* cd, const ToleratedErrors& tolerated, SecCSFlags flags) { }; // perform structural strict validation
 	virtual CFArrayRef allowedResourceOmissions();			// allowed (default) resource omission rules
+
+	virtual bool appleInternalForcePlatform() const {return false;};
 
 	bool mainExecutableIsMachO() { return mainExecutableImage() != NULL; }
 
@@ -148,6 +159,27 @@ public:
 	static const size_t monolithicPageSize = 0;		// default page size for non-Mach-O executables
 };
 
+/*
+ * Editable Disk Reps allow editing of their existing code signature.
+ * Specifically, they allow for individual components to be replaced,
+ * while preserving all other components.
+ * Lots of restrictions apply, e.g. machO signatures' superblobs may
+ * not change in size, and components covered by the code directory
+ * cannot be replaced without adjusting the code directory.
+ * Replacing or adding CMS blobs (having reserved enough size in the
+ * superblob beforehand) is the original reason this trait exists.
+ */
+class EditableDiskRep {
+public:
+	typedef std::map<CodeDirectory::Slot, CFCopyRef<CFDataRef>> RawComponentMap;
+	
+	/* Return all components in raw form.
+	 * Signature editing will add all the components obtained hereby
+	 * back to their specific slots, though some of them may have
+	 * been replaced in the map.
+	 */
+	virtual RawComponentMap createRawComponents() = 0;
+};
 
 //
 // Write-access objects.
@@ -180,10 +212,18 @@ public:
 	void signature(CFDataRef data)			{ component(cdSignatureSlot, data); }
 	void codeDirectory(const CodeDirectory *cd, CodeDirectory::SpecialSlot slot)
 		{ component(slot, CFTempData(cd->data(), cd->length())); }
-	
+
+#if TARGET_OS_OSX
+	bool getPreserveAFSC()					{ return mPreserveAFSC; }
+	void setPreserveAFSC(bool flag)			{ mPreserveAFSC = flag; }
+#endif
+
 private:
 	Architecture mArch;
 	uint32_t mAttributes;
+#if TARGET_OS_OSX
+	bool mPreserveAFSC = false; // preserve AFSC compression
+#endif
 };
 
 //
@@ -219,6 +259,8 @@ public:
 	Universal *mainExecutableImage()		{ return mOriginal->mainExecutableImage(); }
 	size_t signingBase()					{ return mOriginal->signingBase(); }
 	size_t signingLimit()					{ return mOriginal->signingLimit(); }
+	size_t execSegBase(const Architecture *arch)					{ return mOriginal->execSegBase(arch); }
+	size_t execSegLimit(const Architecture *arch)					{ return mOriginal->execSegLimit(arch); }
 	std::string format()					{ return mOriginal->format(); }
 	CFArrayRef modifiedFiles()				{ return mOriginal->modifiedFiles(); }
 	UnixPlusPlus::FileDesc &fd()			{ return mOriginal->fd(); }
@@ -233,6 +275,7 @@ public:
 	size_t pageSize(const SigningContext &ctx) { return mOriginal->pageSize(ctx); }
 
 	void strictValidate(const CodeDirectory* cd, const ToleratedErrors& tolerated, SecCSFlags flags) { mOriginal->strictValidate(cd, tolerated, flags); }
+	void strictValidateStructure(const CodeDirectory* cd, const ToleratedErrors& tolerated, SecCSFlags flags) { mOriginal->strictValidateStructure(cd, tolerated, flags); }
 	CFArrayRef allowedResourceOmissions() { return mOriginal->allowedResourceOmissions(); }
 
 private:

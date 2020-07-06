@@ -50,7 +50,6 @@ void *ArenaAllocator::malloc(size_t len) throw(std::bad_alloc)
 /* intentionally not implemented, should never be called */
 void ArenaAllocator::free(void *p) throw()
 {
-	throw std::bad_alloc();
 }
 	
 void *ArenaAllocator::realloc(void *p, size_t len) throw(std::bad_alloc)
@@ -827,7 +826,7 @@ void CL_qualCertStatementsToCssm(
 		return;
 	}
 	cdsaObj.qcStatements = (CE_QC_Statement *)alloc.malloc(
-		numQcs * sizeof(CE_AccessDescription));
+		numQcs * sizeof(CE_QC_Statement));
 	cdsaObj.numQCStatements = numQcs;
 	for(unsigned dex=0; dex<numQcs; dex++) {
 		CE_QC_Statement *dst = &cdsaObj.qcStatements[dex];

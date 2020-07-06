@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2015 Apple Inc.  All Rights Reserved.
+ * Copyright (c) 2007-2017 Apple Inc.  All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -21,30 +21,43 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#include <Security/SecureObjectSync/SOSPeerInfoDER.h>
+#if TARGET_DARWINOS
+#undef OCTAGON
+#undef SECUREOBJECTSYNC
+#undef SHAREDWEBCREDENTIALS
+#endif
+
+#include <os/transaction_private.h>
+#include <os/variant_private.h>
+
+#include "keychain/SecureObjectSync/SOSPeerInfoDER.h"
 #include <Security/SecureObjectSync/SOSCloudCircle.h>
 #include <Security/SecureObjectSync/SOSCloudCircleInternal.h>
-#include <Security/SecureObjectSync/SOSInternal.h>
-#include <Security/SecureObjectSync/SOSPeerInfoCollections.h>
+#include "keychain/SecureObjectSync/SOSInternal.h"
+#include "keychain/SecureObjectSync/SOSPeerInfoCollections.h"
+#include "keychain/SecureObjectSync/SOSControlServer.h"
+#include <Security/SecBase.h>
 #include <Security/SecBasePriv.h>
 #include <Security/SecCertificatePriv.h>
 #include <Security/SecEntitlements.h>
 #include <Security/SecInternal.h>
-#include <Security/SecItemPriv.h> /* For SecItemDeleteAll */
+#include <Security/SecItem.h>
+#include <Security/SecItemPriv.h>
+#include <Security/SecPolicy.h>
 #include <Security/SecPolicyInternal.h>
 #include <Security/SecTask.h>
 #include <Security/SecTrustInternal.h>
 #include <Security/SecuritydXPC.h>
-#include <securityd/OTATrustUtilities.h>
-#include <securityd/SOSCloudCircleServer.h>
-#include <securityd/SecItemBackupServer.h>
-#include <securityd/SecItemServer.h>
-#include <securityd/SecLogSettingsServer.h>
-#include <securityd/SecOTRRemote.h>
-#include <securityd/SecTrustServer.h>
-#include <securityd/SecTrustStoreServer.h>
-#include <securityd/iCloudTrace.h>
-#include <securityd/spi.h>
+#include "trust/trustd/OTATrustUtilities.h"
+#include "keychain/securityd/SOSCloudCircleServer.h"
+#include "keychain/securityd/SecItemBackupServer.h"
+#include "keychain/securityd/SecItemServer.h"
+#include "keychain/securityd/SecLogSettingsServer.h"
+#include "keychain/securityd/SecOTRRemote.h"
+#include "trust/trustd/SecTrustServer.h"
+#include "trust/trustd/SecTrustStoreServer.h"
+#include "keychain/securityd/iCloudTrace.h"
+#include "keychain/securityd/spi.h"
 #include <utilities/SecCFError.h>
 #include <utilities/SecCFWrappers.h>
 #include <utilities/SecDb.h>
@@ -52,18 +65,26 @@
 #include <utilities/SecXPCError.h>
 #include <utilities/debugging.h>
 #include <utilities/SecInternalReleasePriv.h>
+#include <utilities/der_plist_internal.h>
 #include <utilities/der_plist.h>
-#include <securityd/personalization.h>
+#include "trust/trustd/personalization.h"
+#include "trust/trustd/SecPinningDb.h"
+#include "keychain/securityd/SFKeychainControlManager.h"
+
+#include <keychain/ckks/CKKS.h>
+#include <keychain/ckks/CKKSControlServer.h>
+#include "keychain/ot/OctagonControlServer.h"
+
+#include "keychain/securityd/SFKeychainServer.h"
+#if !TARGET_OS_BRIDGE
+#include "keychain/securityd/PolicyReporter.h"
+#endif
 
 #include <AssertMacros.h>
 #include <CoreFoundation/CFXPCBridge.h>
 #include <CoreFoundation/CoreFoundation.h>
 // <rdar://problem/22425706> 13B104+Roots:Device never moved past spinner after using approval to ENABLE icdp
 
-#if __has_include(<MobileKeyBag/MobileKeyBag.h>) && TARGET_HAS_KEYSTORE
-#include <MobileKeyBag/MobileKeyBag.h>
-#define HAVE_MOBILE_KEYBAG_SUPPORT 1
-#endif
 #if TARGET_OS_OSX
 #include <Security/SecTaskPriv.h>
 #include <login/SessionAgentStatusCom.h>
@@ -78,349 +99,93 @@
 #include <stdlib.h>
 #include <sys/queue.h>
 #include <sys/sysctl.h>
-#include <sys/stat.h>
 #include <syslog.h>
 #include <xpc/private.h>
 #include <xpc/xpc.h>
 
-#if TARGET_OS_IPHONE
-static int inMultiUser = 0;
-#endif
+#include <ipc/server_security_helpers.h>
+#include <ipc/server_entitlement_helpers.h>
 
+#include "keychain/ot/OT.h"
+#include "keychain/escrowrequest/EscrowRequestXPCServer.h"
+#include "keychain/escrowrequest/EscrowRequestServerHelpers.h"
 
-static CFStringRef SecTaskCopyStringForEntitlement(SecTaskRef task,
-    CFStringRef entitlement)
-{
-    CFStringRef value = (CFStringRef)SecTaskCopyValueForEntitlement(task,
-        entitlement, NULL);
-    if (value && CFGetTypeID(value) != CFStringGetTypeID()) {
-        CFRelease(value);
-        value = NULL;
-    }
-
-    return value;
-}
-
-static CFArrayRef SecTaskCopyArrayOfStringsForEntitlement(SecTaskRef task,
-    CFStringRef entitlement)
-{
-    CFArrayRef value = (CFArrayRef)SecTaskCopyValueForEntitlement(task,
-        entitlement, NULL);
-    if (value) {
-        if (CFGetTypeID(value) == CFArrayGetTypeID()) {
-            CFIndex ix, count = CFArrayGetCount(value);
-            for (ix = 0; ix < count; ++ix) {
-                CFStringRef string = (CFStringRef)CFArrayGetValueAtIndex(value, ix);
-                if (CFGetTypeID(string) != CFStringGetTypeID()) {
-                    CFRelease(value);
-                    value = NULL;
-                    break;
-                }
-            }
-        } else {
-            CFRelease(value);
-            value = NULL;
-        }
-    }
-
-    return value;
-}
-
-static CFStringRef SecTaskCopyApplicationIdentifier(SecTaskRef task) {
-    return SecTaskCopyStringForEntitlement(task,
-        kSecEntitlementApplicationIdentifier);
-}
-
-#if TARGET_OS_IOS
-static CFArrayRef SecTaskCopySharedWebCredentialDomains(SecTaskRef task) {
-    return SecTaskCopyArrayOfStringsForEntitlement(task,
-        kSecEntitlementAssociatedDomains);
-}
-#endif
-
-static CFArrayRef SecTaskCopyAccessGroups(SecTaskRef task) {
-    CFMutableArrayRef groups = NULL;
-    CFArrayRef keychainAccessGroups = SecTaskCopyArrayOfStringsForEntitlement(task,
-        kSecEntitlementKeychainAccessGroups);
-    CFArrayRef appleSecurityApplicationGroups = SecTaskCopyArrayOfStringsForEntitlement(task,
-        kSecEntitlementAppleSecurityApplicationGroups);
-    CFStringRef appID = SecTaskCopyApplicationIdentifier(task);
-    CFIndex kagLen = keychainAccessGroups ? CFArrayGetCount(keychainAccessGroups) : 0;
-    CFIndex asagLen = appleSecurityApplicationGroups ? CFArrayGetCount(appleSecurityApplicationGroups) : 0;
-    bool entitlementsValidated = true;
-    bool hasEntitlements = (kagLen + asagLen + (appID ? 1 : 0)) > 0;
 #if TARGET_OS_OSX
-    entitlementsValidated = SecTaskEntitlementsValidated(task);
-    if ((appID || asagLen) && !entitlementsValidated) {
-        CFReleaseNull(appID);
-        asagLen = 0;
-    }
+#include <sandbox.h>
+#include <pwd.h>
+#include <err.h>
 #endif
-    CFIndex len = kagLen + asagLen + (appID ? 1 : 0);
-    // Always allow access to com.apple.token access group, unless entitlement validation explicitly failed.
-    CFIndex tokenLen = (!hasEntitlements || entitlementsValidated) ? 1 : 0;
-#if TARGET_OS_IPHONE
-    if (len + tokenLen)
-#endif
-    {
-        groups = CFArrayCreateMutable(kCFAllocatorDefault, len + tokenLen, &kCFTypeArrayCallBacks);
-        if (kagLen)
-            CFArrayAppendArray(groups, keychainAccessGroups, CFRangeMake(0, kagLen));
-        if (appID)
-            CFArrayAppendValue(groups, appID);
-        if (asagLen)
-            CFArrayAppendArray(groups, appleSecurityApplicationGroups, CFRangeMake(0, asagLen));
-        if (tokenLen)
-            CFArrayAppendValue(groups, kSecAttrAccessGroupToken);
-#if TARGET_IPHONE_SIMULATOR
-    } else {
-        secwarning("No keychain access group specified while running in simulator, falling back to default set");
-        groups = (CFMutableArrayRef)CFRetainSafe(SecAccessGroupsGetCurrent());
-#endif
-    }
 
-    CFReleaseSafe(appID);
-    CFReleaseSafe(keychainAccessGroups);
-    CFReleaseSafe(appleSecurityApplicationGroups);
-    return groups;
+#include "util.h"
+
+#if SECUREOBJECTSYNC
+
+CF_RETURNS_RETAINED
+static CFStringRef
+_xpc_dictionary_copy_CFString(xpc_object_t xdict, const char *key)
+{
+    CFStringRef result = NULL;
+    const char *str = xpc_dictionary_get_string(xdict, key);
+    if (str != NULL) {
+        result = CFStringCreateWithCString(kCFAllocatorDefault, str, kCFStringEncodingUTF8);
+    }
+    return result;
 }
 
-#if TARGET_OS_IPHONE
-static pthread_key_t taskThreadKey;
-static void secTaskDiagnoseEntitlements(CFArrayRef accessGroups) {
-    SecTaskRef taskRef = pthread_getspecific(taskThreadKey);
-    if (taskRef == NULL)
-        return;
-
-    CFErrorRef error = NULL;
-    CFArrayRef entitlementNames = CFArrayCreateForCFTypes(NULL,
-                                                          kSecEntitlementApplicationIdentifier,
-                                                          kSecEntitlementKeychainAccessGroups,
-                                                          kSecEntitlementAppleSecurityApplicationGroups,
-                                                          NULL);
-    CFDictionaryRef rawEntitlements = SecTaskCopyValuesForEntitlements(taskRef, entitlementNames, &error);
-    CFReleaseNull(entitlementNames);
-    
-    // exclude some error types because they're accounted-for and not the reason we're here
-    if (rawEntitlements == NULL && error) {
-        CFErrorDomain domain = CFErrorGetDomain(error);
-        if (domain && CFEqual(domain, kCFErrorDomainPOSIX)) {
-            CFIndex c = CFErrorGetCode(error);
-            int err = (int) c;
-
-            switch (err) {
-            case ESRCH:     // no such process (bad pid or process died)
-                return;
-            default:
-                break;
-            }
-        }
+CF_RETURNS_RETAINED
+static CFDataRef
+_xpc_dictionary_copy_CFDataNoCopy(xpc_object_t xdict, const char *key)
+{
+    CFDataRef result = NULL;
+    size_t len = 0;
+    const void *ptr = xpc_dictionary_get_data(xdict, key, &len);
+    if (ptr != NULL) {
+        result = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, ptr, len, kCFAllocatorNull);
     }
-	
-	uint32_t cs_flags = SecTaskGetCodeSignStatus(taskRef);
-	CFStringRef identifier = SecTaskCopySigningIdentifier(taskRef, NULL);
-	CFStringRef message = NULL;
-	
-    if (rawEntitlements == NULL) {	// NULL indicates failure-to-fetch (SecTask entitlements not initialized)
-		message = CFStringCreateWithFormat(NULL, NULL, CFSTR("failed to fetch keychain client entitlements. task=%@ procid=%@ cs_flags=0x%08.8x error=%@"),
-													   taskRef, identifier, cs_flags, error);
-        secerror("MISSING keychain entitlements: retrieve-entitlements error %@", error);
-	} else {
-		// non-NULL entitlement return => SecTaskCopyEntitlements succeeeded, no error
-		// but note that kernel EINVAL => no entitlements, no error to deal with unsigned code
-		message = CFStringCreateWithFormat(NULL, NULL, CFSTR("found no keychain client entitlements. task=%@ procid=%@ cs_flags=0x%08.8x"),
-													   taskRef, identifier, cs_flags);
-		secerror("MISSING keychain entitlements: raw entitlement values: %@", rawEntitlements);
-		secerror("MISSING keychain entitlements: original ag: %@", accessGroups);
-		CFArrayRef newAccessGroups = SecTaskCopyAccessGroups(taskRef);
-		secerror("MISSING keychain entitlements: newly parsed ag: %@", newAccessGroups);
-		CFReleaseNull(newAccessGroups);
-	}
-	char buffer[1000] = "?";
-	CFStringGetCString(message, buffer, sizeof(buffer), kCFStringEncodingUTF8);
-	syslog(LOG_NOTICE, "%s", buffer);
-	__security_simulatecrash(message, __sec_exception_code_MissingEntitlements);
-
-	CFReleaseNull(rawEntitlements);
-	CFReleaseNull(message);
-	CFReleaseNull(identifier);
-	CFReleaseNull(error);
-}
-#endif
-
-static bool SecTaskGetBooleanValueForEntitlement(SecTaskRef task,
-    CFStringRef entitlement) {
-    CFStringRef canModify = (CFStringRef)SecTaskCopyValueForEntitlement(task,
-        entitlement, NULL);
-    if (!canModify)
-        return false;
-    CFTypeID canModifyType = CFGetTypeID(canModify);
-    bool ok = (CFBooleanGetTypeID() == canModifyType) && CFBooleanGetValue((CFBooleanRef)canModify);
-    CFRelease(canModify);
-    return ok;
+    return result;
 }
 
-#if !TRUSTD_SERVER
 static void with_label_and_password(xpc_object_t message, void (^action)(CFStringRef label, CFDataRef password)) {
-    const char *label_utf8 = xpc_dictionary_get_string(message, kSecXPCKeyUserLabel);
-    
-    if (label_utf8) {   // Anything we would do here requires a user label
-        size_t password_length = 0;
-        const void *password_data = xpc_dictionary_get_data(message, kSecXPCKeyUserPassword, &password_length);
-        
-        CFDataRef user_password = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, password_data, password_length, kCFAllocatorNull);
-        CFStringRef user_label = CFStringCreateWithCString(kCFAllocatorDefault, label_utf8, kCFStringEncodingUTF8);
-        
-        action(user_label, user_password);
+    CFStringRef user_label = _xpc_dictionary_copy_CFString(message, kSecXPCKeyUserLabel);
+    CFDataRef user_password = _xpc_dictionary_copy_CFDataNoCopy(message, kSecXPCKeyUserPassword);
 
-        CFReleaseNull(user_password);
-        CFReleaseNull(user_label);
+    if (user_label != NULL && user_password != NULL) {
+        action(user_label, user_password);
     }
+
+    CFReleaseNull(user_label);
+    CFReleaseNull(user_password);
 }
 
 static void with_label_and_password_and_dsid(xpc_object_t message, void (^action)(CFStringRef label, CFDataRef password, CFStringRef dsid)) {
-    const char *label_utf8 = xpc_dictionary_get_string(message, kSecXPCKeyUserLabel);
-    
-    if (label_utf8) {   // Anything we would do here requires a user label
-        size_t password_length = 0;
-        const void *password_data = xpc_dictionary_get_data(message, kSecXPCKeyUserPassword, &password_length);
-        const char *xdsid = xpc_dictionary_get_string(message, kSecXPCKeyDSID);
-        
-        CFDataRef user_password = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, password_data, password_length, kCFAllocatorNull);
-        CFStringRef user_label = CFStringCreateWithCString(kCFAllocatorDefault, label_utf8, kCFStringEncodingUTF8);
-        CFStringRef dsid = CFStringCreateWithCString(kCFAllocatorDefault, xdsid, kCFStringEncodingUTF8);
-        
+    CFStringRef user_label = _xpc_dictionary_copy_CFString(message, kSecXPCKeyUserLabel);
+    CFDataRef user_password = _xpc_dictionary_copy_CFDataNoCopy(message, kSecXPCKeyUserPassword);
+    CFStringRef dsid = _xpc_dictionary_copy_CFString(message, kSecXPCKeyDSID);
+
+    /* dsid is optional */
+    if (user_label != NULL && user_password != NULL) {
         action(user_label, user_password, dsid);
-        
-        CFReleaseNull(dsid);
-        CFReleaseNull(user_password);
-        CFReleaseNull(user_label);
     }
-}
 
-static void with_label_and_number(xpc_object_t message, void (^action)(CFStringRef label, uint64_t number)) {
-    const char *label_utf8 = xpc_dictionary_get_string(message, kSecXPCKeyViewName);
-    const int64_t number = xpc_dictionary_get_int64(message, kSecXPCKeyViewActionCode);
-    CFStringRef user_label = CFStringCreateWithCString(kCFAllocatorDefault, label_utf8, kCFStringEncodingUTF8);
-
-    action(user_label, number);
     CFReleaseNull(user_label);
-}
-#endif /* !TRUSTD_SERVER */
-
-static bool SecXPCDictionarySetChainOptional(xpc_object_t message, const char *key, SecCertificatePathRef path, CFErrorRef *error) {
-    if (!path)
-        return true;
-    xpc_object_t xpc_chain = SecCertificatePathCopyXPCArray(path, error);
-    if (!xpc_chain)
-        return false;
-
-    xpc_dictionary_set_value(message, key, xpc_chain);
-    xpc_release(xpc_chain);
-    return true;
+    CFReleaseNull(user_password);
+    CFReleaseNull(dsid);
 }
 
-static SecCertificateRef SecXPCDictionaryCopyCertificate(xpc_object_t message, const char *key, CFErrorRef *error) {
-    size_t length = 0;
-    const void *bytes = xpc_dictionary_get_data(message, key, &length);
-    if (bytes) {
-        SecCertificateRef certificate = SecCertificateCreateWithBytes(kCFAllocatorDefault, bytes, length);
-        if (certificate)
-            return certificate;
-        SecError(errSecDecode, error, CFSTR("object for key %s failed to create certificate from data"), key);
-    } else {
-        SecError(errSecParam, error, CFSTR("object for key %s missing"), key);
+static void with_view_and_action(xpc_object_t message, void (^action)(CFStringRef view_name, uint64_t view_action_code)) {
+    CFStringRef view = _xpc_dictionary_copy_CFString(message, kSecXPCKeyViewName);
+    const int64_t number = xpc_dictionary_get_int64(message, kSecXPCKeyViewActionCode);
+
+    if (view != NULL) {
+        action(view, number);
     }
-    return NULL;
-}
 
-static bool SecXPCDictionaryCopyCertificates(xpc_object_t message, const char *key, CFArrayRef *certificates, CFErrorRef *error) {
-    xpc_object_t xpc_certificates = xpc_dictionary_get_value(message, key);
-    if (!xpc_certificates)
-        return SecError(errSecAllocate, error, CFSTR("no certs for key %s"), key);
-    *certificates = SecCertificateXPCArrayCopyArray(xpc_certificates, error);
-    return *certificates;
-}
-
-static bool SecXPCDictionaryCopyCertificatesOptional(xpc_object_t message, const char *key, CFArrayRef *certificates, CFErrorRef *error) {
-    xpc_object_t xpc_certificates = xpc_dictionary_get_value(message, key);
-    if (!xpc_certificates) {
-        *certificates = NULL;
-        return true;
-    }
-    *certificates = SecCertificateXPCArrayCopyArray(xpc_certificates, error);
-    return *certificates;
-}
-
-static bool SecXPCDictionaryCopyPoliciesOptional(xpc_object_t message, const char *key, CFArrayRef *policies, CFErrorRef *error) {
-    xpc_object_t xpc_policies = xpc_dictionary_get_value(message, key);
-    if (!xpc_policies) {
-        if (policies)
-            *policies = NULL;
-        return true;
-    }
-    *policies = SecPolicyXPCArrayCopyArray(xpc_policies, error);
-    return *policies != NULL;
-}
-
-static SecTrustStoreRef SecXPCDictionaryGetTrustStore(xpc_object_t message, const char *key, CFErrorRef *error) {
-    SecTrustStoreRef ts = NULL;
-    CFStringRef domain = SecXPCDictionaryCopyString(message, key, error);
-    if (domain) {
-        ts = SecTrustStoreForDomainName(domain, error);
-        CFRelease(domain);
-    }
-    return ts;
-}
-
-static bool SecXPCDictionaryGetDouble(xpc_object_t message, const char *key, double *pvalue, CFErrorRef *error) {
-    *pvalue = xpc_dictionary_get_double(message, key);
-    if (*pvalue == NAN) {
-        return SecError(errSecParam, error, CFSTR("object for key %s bad double"), key);
-    }
-    return true;
+    CFReleaseNull(view);
 }
 
 static CFArrayRef SecXPCDictionaryCopyPeerInfoArray(xpc_object_t dictionary, const char *key, CFErrorRef *error) {
     return CreateArrayOfPeerInfoWithXPCObject(xpc_dictionary_get_value(dictionary, key), error);
 }
-
-static CFDataRef CFDataCreateWithXPCArrayAtIndex(xpc_object_t xpc_data_array, size_t index, CFErrorRef *error) {
-    CFDataRef data = NULL;
-    size_t length = 0;
-    const uint8_t *bytes = xpc_array_get_data(xpc_data_array, index, &length);
-    if (bytes) {
-        data = CFDataCreate(kCFAllocatorDefault, bytes, length);
-    }
-    if (!data)
-        SecError(errSecParam, error, CFSTR("data_array[%zu] failed to decode"), index);
-
-    return data;
-}
-
-static CFArrayRef CFDataXPCArrayCopyArray(xpc_object_t xpc_data_array, CFErrorRef *error) {
-    CFMutableArrayRef data_array = NULL;
-    require_action_quiet(xpc_get_type(xpc_data_array) == XPC_TYPE_ARRAY, exit,
-                         SecError(errSecParam, error, CFSTR("data_array xpc value is not an array")));
-    size_t count = xpc_array_get_count(xpc_data_array);
-    require_action_quiet(data_array = CFArrayCreateMutable(kCFAllocatorDefault, count, &kCFTypeArrayCallBacks), exit,
-                         SecError(errSecAllocate, error, CFSTR("failed to create CFArray of capacity %zu"), count));
-
-    size_t ix;
-    for (ix = 0; ix < count; ++ix) {
-        CFDataRef data = CFDataCreateWithXPCArrayAtIndex(xpc_data_array, ix, error);
-        if (!data) {
-            CFRelease(data_array);
-            return NULL;
-        }
-        CFArraySetValueAtIndex(data_array, ix, data);
-        CFRelease(data);
-    }
-
-exit:
-    return data_array;
-}
-
 
 static CFDataRef SecXPCDictionaryCopyCFDataRef(xpc_object_t message, const char *key, CFErrorRef *error) {
     CFDataRef retval = NULL;
@@ -435,25 +200,30 @@ errOut:
     return retval;
 }
 
-static bool SecXPCDictionaryCopyCFDataArrayOptional(xpc_object_t message, const char *key, CFArrayRef *data_array, CFErrorRef *error) {
-    xpc_object_t xpc_data_array = xpc_dictionary_get_value(message, key);
-    if (!xpc_data_array) {
-        if (data_array)
-            *data_array = NULL;
-        return true;
+static CFSetRef CreateCFSetRefFromXPCObject(xpc_object_t xpcSetDER, CFErrorRef* error) {
+    CFSetRef retval = NULL;
+    require_action_quiet(xpcSetDER, errOut, SecCFCreateErrorWithFormat(kSecXPCErrorUnexpectedNull, sSecXPCErrorDomain, NULL, error, NULL, CFSTR("Unexpected Null Set to decode")));
+
+    require_action_quiet(xpc_get_type(xpcSetDER) == XPC_TYPE_DATA, errOut, SecCFCreateErrorWithFormat(kSecXPCErrorUnexpectedType, sSecXPCErrorDomain, NULL, error, NULL, CFSTR("xpcSetDER not data, got %@"), xpcSetDER));
+
+    const uint8_t* der = xpc_data_get_bytes_ptr(xpcSetDER);
+    const uint8_t* der_end = der + xpc_data_get_length(xpcSetDER);
+    der = der_decode_set(kCFAllocatorDefault, kCFPropertyListMutableContainersAndLeaves, &retval, error, der, der_end);
+    if (der != der_end) {
+        SecError(errSecDecode, error, CFSTR("trailing garbage at end of SecAccessControl data"));
+        goto errOut;
     }
-    *data_array = CFDataXPCArrayCopyArray(xpc_data_array, error);
-    return *data_array != NULL;
+    return retval;
+errOut:
+    CFReleaseNull(retval);
+    return NULL;
 }
 
 static SOSPeerInfoRef SecXPCDictionaryCopyPeerInfo(xpc_object_t message, const char *key, CFErrorRef *error) {
     size_t length = 0;
     const uint8_t *der = xpc_dictionary_get_data(message, key, &length);
 
-    SecRequirementError(der != NULL, error, CFSTR("No data for key %s"), key);
-
-    return der ? SOSPeerInfoCreateFromDER(kCFAllocatorDefault, error, &der, der + length) : NULL;
-
+    return SecRequirementError(der != NULL, error, CFSTR("No data for key %s"), key) ? SOSPeerInfoCreateFromDER(kCFAllocatorDefault, error, &der, der + length) : NULL;
 }
 
 static CFSetRef SecXPCSetCreateFromXPCDictionaryElement(xpc_object_t event, const char *key) {
@@ -490,6 +260,8 @@ bool xpc_dictionary_set_and_consume_PeerInfoArray(xpc_object_t xdict, const char
     CFReleaseNull(cf_array);
     return success;
 }
+
+#endif /* SECUREOBJECTSYNC */
 
 static CFDataRef
 SecDataCopyMmapFileDescriptor(int fd, void **mem, size_t *size, CFErrorRef *error)
@@ -532,7 +304,6 @@ SecDataWriteFileDescriptor(int fd, CFDataRef data)
     return writeResult;
 }
 
-
 // Returns error if entitlement isn't present.
 static bool
 EntitlementPresentAndTrue(uint64_t op, SecTaskRef clientTask, CFStringRef entitlement, CFErrorRef *error)
@@ -543,18 +314,6 @@ EntitlementPresentAndTrue(uint64_t op, SecTaskRef clientTask, CFStringRef entitl
     }
     return true;
 }
-
-// Per <rdar://problem/13315020> Disable the entitlement check for "keychain-cloud-circle"
-//  we disable entitlement enforcement. However, we still log so we know who needs the entitlement
-static bool
-EntitlementPresentOrWhine(uint64_t op, SecTaskRef clientTask, CFStringRef entitlement, CFErrorRef *error)
-{
-    if (!SecTaskGetBooleanValueForEntitlement(clientTask, entitlement))
-        secnotice("serverxpc", "%@: %@ lacks entitlement %@", SOSCCGetOperationDescription((enum SecXPCOperation)op), clientTask, entitlement);
-
-    return true;
-}
-
 
 static bool
 EntitlementAbsentOrFalse(uint64_t op, SecTaskRef clientTask, CFStringRef entitlement, CFErrorRef *error)
@@ -581,9 +340,7 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
         .allowSystemKeychain = false,
         .allowSyncBubbleKeychain = false,
         .isNetworkExtension = false,
-#if TARGET_OS_IPHONE
-        .inMultiUser = inMultiUser,
-#endif
+        .canAccessNetworkExtensionAccessGroups = false,
     };
 
     secdebug("serverxpc", "entering");
@@ -591,77 +348,51 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
         // TODO: Find out what we're dispatching.
         replyMessage = xpc_dictionary_create_reply(event);
 
-#if HAVE_MOBILE_KEYBAG_SUPPORT && TARGET_OS_EMBEDDED
-
-        if (inMultiUser) {
-            client.activeUser = MKBForegroundUserSessionID(&error);
-            if (client.activeUser == -1 || client.activeUser == 0) {
-                assert(0);
-                client.activeUser = 0;
-            }
-
-            /*
-             * If we are a edu mode user, and its not the active user,
-             * then the request is coming from inside the syncbubble.
-             *
-             * otherwise we are going to execute the request as the
-             * active user.
-             */
-
-            if (client.uid > 501 && (uid_t)client.activeUser != client.uid) {
-                secinfo("serverxpc", "securityd client: sync bubble user");
-                client.musr = SecMUSRCreateSyncBubbleUserUUID(client.uid);
-                client.keybag = KEYBAG_DEVICE;
-            } else {
-                secinfo("serverxpc", "securityd client: active user");
-                client.musr = SecMUSRCreateActiveUserUUID(client.activeUser);
-                client.uid = (uid_t)client.activeUser;
-                client.keybag = KEYBAG_DEVICE;
-            }
-        }
-#endif
-
         uint64_t operation = xpc_dictionary_get_uint64(event, kSecXPCKeyOperation);
 
         audit_token_t auditToken = {};
         xpc_connection_get_audit_token(connection, &auditToken);
-
-        client.task = SecTaskCreateWithAuditToken(kCFAllocatorDefault, auditToken);
         clientAuditToken = CFDataCreate(kCFAllocatorDefault, (const UInt8*)&auditToken, sizeof(auditToken));
-#if TARGET_OS_IPHONE
-        pthread_setspecific(taskThreadKey, client.task);
-#endif
-        client.accessGroups = SecTaskCopyAccessGroups(client.task);
+
+        if (!fill_security_client(&client, xpc_connection_get_euid(connection), auditToken)) {
+            CFReleaseNull(clientAuditToken);
+            xpc_connection_send_message(connection, replyMessage);
+            xpc_release(replyMessage);
+            return;
+        }
 
 #if TARGET_OS_IOS
         if (operation == sec_add_shared_web_credential_id || operation == sec_copy_shared_web_credential_id) {
             domains = SecTaskCopySharedWebCredentialDomains(client.task);
         }
 #endif
-
-#if TARGET_OS_IPHONE
-        client.allowSystemKeychain = SecTaskGetBooleanValueForEntitlement(client.task, kSecEntitlementPrivateSystemKeychain);
-        client.isNetworkExtension = SecTaskGetBooleanValueForEntitlement(client.task, kSecEntitlementPrivateNetworkExtension);
-#endif
-#if HAVE_MOBILE_KEYBAG_SUPPORT && TARGET_OS_EMBEDDED
-        if (client.inMultiUser) {
-            client.allowSyncBubbleKeychain = SecTaskGetBooleanValueForEntitlement(client.task, kSecEntitlementPrivateKeychainSyncBubble);
-        }
-#endif
         secinfo("serverxpc", "XPC [%@] operation: %@ (%" PRIu64 ")", client.task, SOSCCGetOperationDescription((enum SecXPCOperation)operation), operation);
 
         switch (operation)
             {
-#if !TRUSTD_SERVER
             case sec_item_add_id:
             {
                 if (EntitlementAbsentOrFalse(sec_item_add_id, client.task, kSecEntitlementKeychainDeny, &error)) {
                     CFDictionaryRef query = SecXPCDictionaryCopyDictionary(event, kSecXPCKeyQuery, &error);
                     if (query) {
+                        // Check for any entitlement-required attributes
+                        bool entitlementsCorrect = true;
+                        if(CFDictionaryGetValue(query, kSecAttrDeriveSyncIDFromItemAttributes) ||
+                           CFDictionaryGetValue(query, kSecAttrPCSPlaintextServiceIdentifier) ||
+                           CFDictionaryGetValue(query, kSecAttrPCSPlaintextPublicKey) ||
+                           CFDictionaryGetValue(query, kSecAttrPCSPlaintextPublicIdentity)) {
+                            entitlementsCorrect = EntitlementPresentAndTrue(sec_item_add_id, client.task, kSecEntitlementPrivateCKKSPlaintextFields, &error);
+                        }
+                        if (entitlementsCorrect && CFDictionaryGetValue(query, kSecAttrSysBound)) {
+                            entitlementsCorrect = EntitlementPresentAndTrue(sec_item_add_id, client.task, kSecEntitlementPrivateSysBound, &error);
+                        }
+
                         CFTypeRef result = NULL;
-                        if (_SecItemAdd(query, &client, &result, &error) && result) {
-                            SecXPCDictionarySetPList(replyMessage, kSecXPCKeyResult, result, &error);
-                            CFReleaseNull(result);
+                        if(entitlementsCorrect) {
+                            if (_SecItemAdd(query, &client, &result, &error) && result) {
+                                SecXPCDictionarySetPList(replyMessage, kSecXPCKeyResult, result, &error);
+                                CFReleaseNull(result);
+                            }
                         }
                         CFReleaseNull(query);
                     }
@@ -685,13 +416,27 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
             }
             case sec_item_update_id:
             {
-                if (EntitlementAbsentOrFalse(sec_item_add_id, client.task, kSecEntitlementKeychainDeny, &error)) {
+                if (EntitlementAbsentOrFalse(sec_item_update_id, client.task, kSecEntitlementKeychainDeny, &error)) {
                     CFDictionaryRef query = SecXPCDictionaryCopyDictionary(event, kSecXPCKeyQuery, &error);
                     if (query) {
                         CFDictionaryRef attributesToUpdate = SecXPCDictionaryCopyDictionary(event, kSecXPCKeyAttributesToUpdate, &error);
                         if (attributesToUpdate) {
-                            bool result = _SecItemUpdate(query, attributesToUpdate, &client, &error);
-                            xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, result);
+                            // Check for any entitlement-required attributes
+                            bool entitlementsCorrect = true;
+                            if(CFDictionaryGetValue(query, kSecAttrDeriveSyncIDFromItemAttributes) ||
+                               CFDictionaryGetValue(attributesToUpdate, kSecAttrPCSPlaintextServiceIdentifier) ||
+                               CFDictionaryGetValue(attributesToUpdate, kSecAttrPCSPlaintextPublicKey) ||
+                               CFDictionaryGetValue(attributesToUpdate, kSecAttrPCSPlaintextPublicIdentity)) {
+                                entitlementsCorrect = EntitlementPresentAndTrue(sec_item_update_id, client.task, kSecEntitlementPrivateCKKSPlaintextFields, &error);
+                            }
+                            if (entitlementsCorrect && CFDictionaryGetValue(query, kSecAttrSysBound)) {
+                                entitlementsCorrect = EntitlementPresentAndTrue(sec_item_update_id, client.task, kSecEntitlementPrivateSysBound, &error);
+                            }
+
+                            if(entitlementsCorrect) {
+                                bool result = _SecItemUpdate(query, attributesToUpdate, &client, &error);
+                                xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, result);
+                            }
                             CFReleaseNull(attributesToUpdate);
                         }
                         CFReleaseNull(query);
@@ -725,169 +470,32 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             }
-            case sec_trust_store_contains_id:
-            {
-                SecTrustStoreRef ts = SecXPCDictionaryGetTrustStore(event, kSecXPCKeyDomain, &error);
-                if (ts) {
-                    CFDataRef digest = SecXPCDictionaryCopyData(event, kSecXPCKeyDigest, &error);
-                    if (digest) {
-                        bool contains;
-                        if (SecTrustStoreContainsCertificateWithDigest(ts, digest, &contains, &error))
-                            xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, contains);
-                        CFReleaseNull(digest);
-                    }
-                }
-                break;
-            }
-            case sec_trust_store_set_trust_settings_id:
-            {
-                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementModifyAnchorCertificates, &error)) {
-                    SecTrustStoreRef ts = SecXPCDictionaryGetTrustStore(event, kSecXPCKeyDomain, &error);
-                    if (ts) {
-                        SecCertificateRef certificate = SecXPCDictionaryCopyCertificate(event, kSecXPCKeyCertificate, &error);
-                        if (certificate) {
-                            CFTypeRef trustSettingsDictOrArray = NULL;
-                            if (SecXPCDictionaryCopyPListOptional(event, kSecXPCKeySettings, &trustSettingsDictOrArray, &error)) {
-                                bool result = _SecTrustStoreSetTrustSettings(ts, certificate, trustSettingsDictOrArray, &error);
-                                xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, result);
-                                CFReleaseSafe(trustSettingsDictOrArray);
-                            }
-                            CFReleaseNull(certificate);
-                        }
-                    }
-                }
-                break;
-            }
-            case sec_trust_store_remove_certificate_id:
-            {
-                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementModifyAnchorCertificates, &error)) {
-                    SecTrustStoreRef ts = SecXPCDictionaryGetTrustStore(event, kSecXPCKeyDomain, &error);
-                    if (ts) {
-                        CFDataRef digest = SecXPCDictionaryCopyData(event, kSecXPCKeyDigest, &error);
-                        if (digest) {
-                            bool result = SecTrustStoreRemoveCertificateWithDigest(ts, digest, &error);
-                            xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, result);
-                            CFReleaseNull(digest);
-                        }
-                    }
-                }
-                break;
-            }
-            case sec_trust_store_copy_all_id:
-            {
-                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementModifyAnchorCertificates, &error)) {
-                    SecTrustStoreRef ts = SecXPCDictionaryGetTrustStore(event, kSecXPCKeyDomain, &error);
-                    if (ts) {
-                        CFArrayRef trustStoreContents = NULL;
-                        if(_SecTrustStoreCopyAll(ts, &trustStoreContents, &error) && trustStoreContents) {
-                            SecXPCDictionarySetPList(replyMessage, kSecXPCKeyResult, trustStoreContents, &error);
-                            CFReleaseNull(trustStoreContents);
-                        }
-                    }
-                }
-                break;
-            }
-            case sec_trust_store_copy_usage_constraints_id:
-            {
-                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementModifyAnchorCertificates, &error)) {
-                    SecTrustStoreRef ts = SecXPCDictionaryGetTrustStore(event, kSecXPCKeyDomain, &error);
-                    if (ts) {
-                        CFDataRef digest = SecXPCDictionaryCopyData(event, kSecXPCKeyDigest, &error);
-                        if (digest) {
-                            CFArrayRef usageConstraints = NULL;
-                            if(_SecTrustStoreCopyUsageConstraints(ts, digest, &usageConstraints, &error) && usageConstraints) {
-                                SecXPCDictionarySetPList(replyMessage, kSecXPCKeyResult, usageConstraints, &error);
-                                CFReleaseNull(usageConstraints);
-                            }
-                            CFReleaseNull(digest);
-                        }
-                    }
-                }
-                break;
-            }
             case sec_delete_all_id:
-                xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, _SecItemDeleteAll(&error));
-                break;
-#endif /* !TRUSTD_SERVER */
-            case sec_trust_evaluate_id:
             {
-                CFArrayRef certificates = NULL, anchors = NULL, policies = NULL, responses = NULL, scts = NULL, trustedLogs = NULL;
-                bool anchorsOnly = xpc_dictionary_get_bool(event, kSecTrustAnchorsOnlyKey);
-                bool keychainsAllowed = xpc_dictionary_get_bool(event, kSecTrustKeychainsAllowedKey);
-                double verifyTime;
-                if (SecXPCDictionaryCopyCertificates(event, kSecTrustCertificatesKey, &certificates, &error) &&
-                    SecXPCDictionaryCopyCertificatesOptional(event, kSecTrustAnchorsKey, &anchors, &error) &&
-                    SecXPCDictionaryCopyPoliciesOptional(event, kSecTrustPoliciesKey, &policies, &error) &&
-                    SecXPCDictionaryCopyCFDataArrayOptional(event, kSecTrustResponsesKey, &responses, &error) &&
-                    SecXPCDictionaryCopyCFDataArrayOptional(event, kSecTrustSCTsKey, &scts, &error) &&
-                    SecXPCDictionaryCopyArrayOptional(event, kSecTrustTrustedLogsKey, &trustedLogs, &error) &&
-                    SecXPCDictionaryGetDouble(event, kSecTrustVerifyDateKey, &verifyTime, &error)) {
-                    // If we have no error yet, capture connection and reply in block and properly retain them.
-                    xpc_retain(connection);
-                    CFRetainSafe(client.task);
-                    CFRetainSafe(clientAuditToken);
+                bool retval = false;
+#if TARGET_OS_IPHONE
+                /* buddy is temporary allowed to do this */
+                CFStringRef applicationIdentifier = SecTaskCopyApplicationIdentifier(client.task);
+                bool isBuddy = applicationIdentifier &&
+                    CFEqual(applicationIdentifier, CFSTR("com.apple.purplebuddy"));
+                CFReleaseNull(applicationIdentifier);
 
-                    // Clear replyMessage so we don't send a synchronous reply.
-                    xpc_object_t asyncReply = replyMessage;
-                    replyMessage = NULL;
-
-                    SecTrustServerEvaluateBlock(clientAuditToken,
-                                                certificates, anchors, anchorsOnly, keychainsAllowed, policies, responses, scts, trustedLogs, verifyTime, client.accessGroups,
-                                                ^(SecTrustResultType tr, CFArrayRef details, CFDictionaryRef info, SecCertificatePathRef chain, CFErrorRef replyError) {
-                        // Send back reply now
-                        if (replyError) {
-                            CFRetain(replyError);
-                        } else {
-                            xpc_dictionary_set_int64(asyncReply, kSecTrustResultKey, tr);
-                            SecXPCDictionarySetPListOptional(asyncReply, kSecTrustDetailsKey, details, &replyError) &&
-                            SecXPCDictionarySetPListOptional(asyncReply, kSecTrustInfoKey, info, &replyError) &&
-                            SecXPCDictionarySetChainOptional(asyncReply, kSecTrustChainKey, chain, &replyError);
-                        }
-                        if (replyError) {
-                            secdebug("ipc", "%@ %@ %@", client.task, SOSCCGetOperationDescription((enum SecXPCOperation)operation), replyError);
-                            xpc_object_t xpcReplyError = SecCreateXPCObjectWithCFError(replyError);
-                            if (xpcReplyError) {
-                                xpc_dictionary_set_value(asyncReply, kSecXPCKeyError, xpcReplyError);
-                                xpc_release(xpcReplyError);
-                            }
-                            CFReleaseNull(replyError);
-                        } else {
-                            secdebug("ipc", "%@ %@ responding %@", client.task, SOSCCGetOperationDescription((enum SecXPCOperation)operation), asyncReply);
-                        }
-
-                        xpc_connection_send_message(connection, asyncReply);
-                        xpc_release(asyncReply);
-                        xpc_release(connection);
-                        CFReleaseSafe(client.task);
-                        CFReleaseSafe(clientAuditToken);
-                    });
+                if (isBuddy || EntitlementPresentAndTrue(operation, client.task, kSecEntitlementPrivateDeleteAll, &error))
+                {
+                    retval = _SecItemDeleteAll(&error);
                 }
-                CFReleaseSafe(policies);
-                CFReleaseSafe(anchors);
-                CFReleaseSafe(certificates);
-                CFReleaseSafe(responses);
-                CFReleaseSafe(scts);
-                CFReleaseSafe(trustedLogs);
-                break;
-            }
-            case sec_device_is_internal_id:
-            {
-#ifndef DARLING
-                bool retval = SecIsDeviceInternal(NULL);
-#else
-                bool retval = true;
 #endif
                 xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, retval);
                 break;
             }
-#if !TRUSTD_SERVER
             case sec_keychain_backup_id:
             {
                 if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementRestoreKeychain, &error)) {
                     CFDataRef keybag = NULL, passcode = NULL;
                     if (SecXPCDictionaryCopyDataOptional(event, kSecXPCKeyKeybag, &keybag, &error)) {
                         if (SecXPCDictionaryCopyDataOptional(event, kSecXPCKeyUserPassword, &passcode, &error)) {
-                            CFDataRef backup = _SecServerKeychainCreateBackup(&client, keybag, passcode, &error);
+                            bool emcs = SecXPCDictionaryGetBool(event, kSecXPCKeyEMCSBackup, NULL);
+                            CFDataRef backup = _SecServerKeychainCreateBackup(&client, keybag, passcode, emcs, &error);
                             if (backup) {
                                 int fd = SecXPCDictionaryDupFileDescriptor(event, kSecXPCKeyFileDescriptor, NULL);
                                 if (fd < 0) {
@@ -970,6 +578,7 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             }
+#if SECUREOBJECTSYNC
             case sec_keychain_sync_update_message_id:
             {
                 CFDictionaryRef updates = SecXPCDictionaryCopyDictionary(event, kSecXPCKeyQuery, &error);
@@ -1097,15 +706,9 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             }
-            case sec_ota_pki_asset_version_id:
-            {
-                xpc_dictionary_set_int64(replyMessage, kSecXPCKeyResult,
-                                         SecOTAPKIGetCurrentAssetVersion(&error));
-                break;
-            }
             case sec_add_shared_web_credential_id:
             {
-#if TARGET_OS_IOS
+#if SHAREDWEBCREDENTIALS
                 CFDictionaryRef query = SecXPCDictionaryCopyDictionary(event, kSecXPCKeyQuery, &error);
                 if (query) {
                     CFTypeRef result = NULL;
@@ -1125,7 +728,7 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
             }
             case sec_copy_shared_web_credential_id:
             {
-#if TARGET_OS_IOS
+#if SHAREDWEBCREDENTIALS
                 CFDictionaryRef query = SecXPCDictionaryCopyDictionary(event, kSecXPCKeyQuery, &error);
                 if (query) {
                     CFTypeRef result = NULL;
@@ -1207,15 +810,15 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 break;
             }
             case kSecXPCOpTryUserCredentials:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    with_label_and_password(event, ^(CFStringRef label, CFDataRef password) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    with_label_and_password_and_dsid(event, ^(CFStringRef label, CFDataRef password, CFStringRef dsid) {
                         xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
-                                                SOSCCTryUserCredentials_Server(label, password, &error));
+                                                SOSCCTryUserCredentials_Server(label, password, dsid, &error));
                     });
                 }
                 break;
             case kSecXPCOpSetUserCredentials:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     with_label_and_password(event, ^(CFStringRef label, CFDataRef password) {
                         xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                                 SOSCCSetUserCredentials_Server(label, password, &error));
@@ -1223,233 +826,249 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             case kSecXPCOpSetUserCredentialsAndDSID:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     with_label_and_password_and_dsid(event, ^(CFStringRef label, CFDataRef password, CFStringRef dsid) {
                         xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                                 SOSCCSetUserCredentialsAndDSID_Server(label, password, dsid, &error));
                     });
                 }
                 break;
+            case kSecXPCOpSetUserCredentialsAndDSIDWithAnalytics:
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    with_label_and_password_and_dsid(event, ^(CFStringRef label, CFDataRef password, CFStringRef dsid) {
+                        CFDataRef parentEvent = NULL;
+                        if(SecXPCDictionaryCopyDataOptional(event, kSecXPCKeySignInAnalytics, &parentEvent, &error) && parentEvent != NULL){
+                            xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCSetUserCredentialsAndDSIDWithAnalytics_Server(label, password, dsid, parentEvent, &error));
+                        }else{
+                            xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCSetUserCredentialsAndDSID_Server(label, password, dsid, &error));
+                        }
+                        CFReleaseNull(parentEvent);
+                        });
+                    }
+                break;
             case kSecXPCOpView:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    with_label_and_number(event, ^(CFStringRef view, uint64_t actionCode) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    with_view_and_action(event, ^(CFStringRef view, uint64_t actionCode) {
                         xpc_dictionary_set_int64(replyMessage, kSecXPCKeyResult,
                                                  SOSCCView_Server(view, (SOSViewActionCode)actionCode, &error));
                     });
                 }
                 break;
-            case kSecXPCOpViewSet:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    CFSetRef enabledViews = SecXPCSetCreateFromXPCDictionaryElement(event, kSecXPCKeyEnabledViewsKey);
-                    CFSetRef disabledViews = SecXPCSetCreateFromXPCDictionaryElement(event, kSecXPCKeyDisabledViewsKey);
-                    xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCViewSet_Server(enabledViews, disabledViews));
-                    CFReleaseNull(enabledViews);
-                    CFReleaseNull(disabledViews);
-                }
-                break;
-            case kSecXPCOpSecurityProperty:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    with_label_and_number(event, ^(CFStringRef property, uint64_t actionCode) {
-                        xpc_dictionary_set_int64(replyMessage, kSecXPCKeyResult,
-                                                 SOSCCSecurityProperty_Server(property, (SOSSecurityPropertyActionCode)actionCode, &error));
-                    });
-                }
+            case kSecXPCOpViewSet: // FALLTHROUGH
+            case kSecXPCOpViewSetWithAnalytics:
+                    if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                        CFSetRef enabledViews = SecXPCSetCreateFromXPCDictionaryElement(event, kSecXPCKeyEnabledViewsKey);
+                        CFSetRef disabledViews = SecXPCSetCreateFromXPCDictionaryElement(event, kSecXPCKeyDisabledViewsKey);
+                        CFDataRef parentEvent = NULL;
+                        if(SecXPCDictionaryCopyDataOptional(event, kSecXPCKeySignInAnalytics, &parentEvent, &error)){
+                            xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCViewSetWithAnalytics_Server(enabledViews, disabledViews, parentEvent));
+                        }
+                        CFReleaseNull(enabledViews);
+                        CFReleaseNull(disabledViews);
+                        CFReleaseNull(parentEvent);
+                    }
                 break;
             case kSecXPCOpCanAuthenticate:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCCanAuthenticate_Server(&error));
                 }
                 break;
             case kSecXPCOpPurgeUserCredentials:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCPurgeUserCredentials_Server(&error));
                 }
                 break;
             case kSecXPCOpDeviceInCircle:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_int64(replyMessage, kSecXPCKeyResult,
                                              SOSCCThisDeviceIsInCircle_Server(&error));
                 }
                 break;
             case kSecXPCOpRequestToJoin:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCRequestToJoinCircle_Server(&error));
                 }
                 break;
+            case kSecXPCOpRequestToJoinWithAnalytics:
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    CFDataRef parentEvent = NULL;
+                    if(SecXPCDictionaryCopyDataOptional(event, kSecXPCKeySignInAnalytics, &parentEvent, &error)  && parentEvent != NULL){
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRequestToJoinCircleWithAnalytics_Server(parentEvent, &error));
+                    }else{
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRequestToJoinCircle_Server(&error));
+                    }
+                    CFReleaseNull(parentEvent);
+                }
+                break;
             case kSecXPCOpAccountHasPublicKey:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCAccountHasPublicKey_Server(&error));
                 }
                 break;
             case kSecXPCOpAccountIsNew:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCAccountIsNew_Server(&error));
                 }
                 break;
             case kSecXPCOpRequestToJoinAfterRestore:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCRequestToJoinCircleAfterRestore_Server(&error));
                 }
                 break;
+            case kSecXPCOpRequestToJoinAfterRestoreWithAnalytics:
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    CFDataRef parentEvent = NULL;
+                    if(SecXPCDictionaryCopyDataOptional(event, kSecXPCKeySignInAnalytics, &parentEvent, &error)  && parentEvent != NULL){
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRequestToJoinCircleAfterRestoreWithAnalytics_Server(parentEvent, &error));
+                    }else{
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRequestToJoinCircleAfterRestore_Server(&error));
+                    }
+                    CFReleaseNull(parentEvent);
+                }
+                break;
             case kSecXPCOpRequestEnsureFreshParameters:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCRequestEnsureFreshParameters_Server(&error));
                 }
                 break;
             case kSecXPCOpGetAllTheRings:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                   CFStringRef ringDescriptions = SOSCCGetAllTheRings_Server(&error);
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    CFStringRef ringDescriptions = SOSCCGetAllTheRings_Server(&error);
                     xpc_object_t xpc_dictionary = _CFXPCCreateXPCObjectFromCFObject(ringDescriptions);
                     xpc_dictionary_set_value(replyMessage, kSecXPCKeyResult, xpc_dictionary);
                     xpc_release(xpc_dictionary);
+                    CFReleaseNull(ringDescriptions);
                 }
                 break;
             case kSecXPCOpApplyToARing:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     CFStringRef ringName = SecXPCDictionaryCopyString(event, kSecXPCKeyString, &error);
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCApplyToARing_Server(ringName, &error));
                     CFReleaseNull(ringName);
                 }
                 break;
             case kSecXPCOpWithdrawlFromARing:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     CFStringRef ringName = SecXPCDictionaryCopyString(event, kSecXPCKeyString, &error);
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCWithdrawlFromARing_Server(ringName, &error));
                     CFReleaseNull(ringName);
                 }
                 break;
             case kSecXPCOpRingStatus:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     CFStringRef ringName = SecXPCDictionaryCopyString(event, kSecXPCKeyString, &error);
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRingStatus_Server(ringName, &error));
                     CFReleaseNull(ringName);
                 }
                 break;
             case kSecXPCOpEnableRing:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     CFStringRef ringName = SecXPCDictionaryCopyString(event, kSecXPCKeyString, &error);
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCEnableRing_Server(ringName, &error));
                     CFReleaseNull(ringName);
                 }
                 break;
             case kSecXPCOpRequestDeviceID:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    CFStringRef deviceID = SOSCCCopyDeviceID_Server(&error);
-                    if (deviceID) {
-                        SecXPCDictionarySetString(replyMessage, kSecXPCKeyResult, deviceID, &error);
-                    }
-                    CFReleaseNull(deviceID);
-                }
-                break;
             case kSecXPCOpSetDeviceID:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    CFStringRef IDS = SecXPCDictionaryCopyString(event, kSecXPCKeyDeviceID, &error);
-                    xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCSetDeviceID_Server(IDS, &error));
-                    CFReleaseNull(IDS);
-                }
-                break;
             case kSecXPCOpHandleIDSMessage:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    CFDictionaryRef IDS = SecXPCDictionaryCopyDictionary(event, kSecXPCKeyIDSMessage, &error);
-                    xpc_dictionary_set_int64(replyMessage, kSecXPCKeyResult, SOSCCHandleIDSMessage_Server(IDS, &error));
-                    CFReleaseNull(IDS);
-                }
-                break;
-            case kSecXPCOpClearKVSPeerMessage:
-                    if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                        CFStringRef peerID = SecXPCDictionaryCopyString(event, kSecXPCKeyDeviceID, &error);
-                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCClearPeerMessageKeyInKVS_Server(peerID, &error));
-                        CFReleaseNull(peerID);
-                    }
-                    break;
+            case kSecXPCOpSyncWithIDSPeer:
             case kSecXPCOpSendIDSMessage:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    CFStringRef message = SecXPCDictionaryCopyString(event, kSecXPCKeySendIDSMessage, &error);
-                    xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCIDSServiceRegistrationTest_Server(message, &error));
-                    CFReleaseNull(message);
-                }
-                break;
-            case kSecXPCOpSyncWithKVSPeer:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    CFStringRef peerID = SecXPCDictionaryCopyString(event, kSecXPCKeyDeviceID, &error);
-                    CFDataRef message = SecXPCDictionaryCopyData(event, kSecXPCKeyIDSMessage, &error);
-                    xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRequestSyncWithPeerOverKVS_Server(peerID, message, &error));
-                    CFReleaseNull(peerID);
-                }
-                break;
-            case kSecXPCOpSyncWithKVSPeerIDOnly:
-                    if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                        CFStringRef peerID = SecXPCDictionaryCopyString(event, kSecXPCKeyDeviceID, &error);
-                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRequestSyncWithPeerOverKVSUsingIDOnly_Server(peerID, &error));
-                        CFReleaseNull(peerID);
-                    }
-                    break;
             case kSecXPCOpPingTest:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    CFStringRef message = SecXPCDictionaryCopyString(event, kSecXPCKeySendIDSMessage, &error);
-                    xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCIDSPingTest_Server(message, &error));
-                    CFReleaseNull(message);
-                }
-                break;
             case kSecXPCOpIDSDeviceID:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCIDSDeviceIDIsAvailableTest_Server(&error));
+            case kSecXPCOpSyncWithKVSPeerIDOnly:{
+                    xpc_dictionary_set_int64(replyMessage, kSecXPCKeyError, errSecUnimplemented);
                 }
                 break;
-			case kSecXPCOpAccountSetToNew:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+            case kSecXPCOpAccountSetToNew:
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCAccountSetToNew_Server(&error));
                 }
-				break;
+                break;
             case kSecXPCOpResetToOffering:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCResetToOffering_Server(&error));
                 }
                 break;
             case kSecXPCOpResetToEmpty:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCResetToEmpty_Server(&error));
                 }
                 break;
+            case kSecXPCOpResetToEmptyWithAnalytics:
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    CFDataRef parentEvent = NULL;
+                    if(SecXPCDictionaryCopyDataOptional(event, kSecXPCKeySignInAnalytics, &parentEvent, &error) && parentEvent != NULL){
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCResetToEmptyWithAnalytics_Server(parentEvent, &error));
+                    }else{
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCResetToEmpty_Server(&error));
+                    }
+                }
+                break;
             case kSecXPCOpRemoveThisDeviceFromCircle:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCRemoveThisDeviceFromCircle_Server(&error));
                 }
                 break;
+            case kSecXPCOpRemoveThisDeviceFromCircleWithAnalytics:
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    CFDataRef parentEvent = NULL;
+                    if(SecXPCDictionaryCopyDataOptional(event, kSecXPCKeySignInAnalytics, &parentEvent, &error) && parentEvent != NULL){
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRemoveThisDeviceFromCircleWithAnalytics_Server(parentEvent, &error));
+                    }else{
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRemoveThisDeviceFromCircle_Server(&error));
+                    }
+                    CFReleaseNull(parentEvent);
+                }
+                break;
             case kSecXPCOpRemovePeersFromCircle:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     CFArrayRef applicants = SecXPCDictionaryCopyPeerInfoArray(event, kSecXPCKeyPeerInfoArray, &error);
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCRemovePeersFromCircle_Server(applicants, &error));
                     CFReleaseNull(applicants);
                 }
                 break;
+            case kSecXPCOpRemovePeersFromCircleWithAnalytics:
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    CFArrayRef applicants = SecXPCDictionaryCopyPeerInfoArray(event, kSecXPCKeyPeerInfoArray, &error);
+                    CFDataRef parentEvent = NULL;
+                    if(SecXPCDictionaryCopyDataOptional(event, kSecXPCKeySignInAnalytics, &parentEvent, &error) && parentEvent != NULL){
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRemovePeersFromCircleWithAnalytics_Server(applicants, parentEvent, &error));
+                    }else{
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRemovePeersFromCircle_Server(applicants, &error));
+                    }
+                    CFReleaseNull(parentEvent);
+                    CFReleaseNull(applicants);
+                }
+                break;
             case kSecXPCOpLoggedOutOfAccount:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCLoggedOutOfAccount_Server(&error));
                 }
                 break;
             case kSecXPCOpBailFromCircle:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    // 0 is valid; ok for this parameter to be unset or incorrect type. Note: kSecXPCLimitInMinutes is actually seconds, not minutes
                     uint64_t limit_in_seconds = xpc_dictionary_get_uint64(event, kSecXPCLimitInMinutes);
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCBailFromCircle_Server(limit_in_seconds, &error));
                 }
                 break;
             case kSecXPCOpAcceptApplicants:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_object_t xapplicants = xpc_dictionary_get_value(event, kSecXPCKeyPeerInfoArray);
+                    // CreateArrayOfPeerInfoWithXPCObject enforces that xapplicants is a non-NULL xpc data object
                     CFArrayRef applicants = CreateArrayOfPeerInfoWithXPCObject(xapplicants, &error); //(CFArrayRef)(_CFXPCCreateCFObjectFromXPCObject(xapplicants));
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             (applicants && SOSCCAcceptApplicants_Server(applicants, &error)));
@@ -1457,8 +1076,9 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             case kSecXPCOpRejectApplicants:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_object_t xapplicants = xpc_dictionary_get_value(event, kSecXPCKeyPeerInfoArray);
+                    // CreateArrayOfPeerInfoWithXPCObject enforces that xapplicants is a non-NULL xpc data object
                     CFArrayRef applicants = CreateArrayOfPeerInfoWithXPCObject(xapplicants, &error); //(CFArrayRef)(_CFXPCCreateCFObjectFromXPCObject(xapplicants));
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             (applicants && SOSCCRejectApplicants_Server(applicants, &error)));
@@ -1469,17 +1089,18 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 {
                     if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementRestoreKeychain, &error)) {
                         CFDataRef publicBackupKey = SecXPCDictionaryCopyData(event, kSecXPCKeyNewPublicBackupKey, &error);
-                        SOSPeerInfoRef peerInfo = SOSCCSetNewPublicBackupKey_Server(publicBackupKey, &error);
-                        CFDataRef peerInfoData = peerInfo ? SOSPeerInfoCopyEncodedData(peerInfo, kCFAllocatorDefault, &error) : NULL;
-                        CFReleaseNull(peerInfo);
-                        if (peerInfoData) {
-                            xpc_object_t xpc_object = _CFXPCCreateXPCObjectFromCFObject(peerInfoData);
-                            xpc_dictionary_set_value(replyMessage, kSecXPCKeyResult, xpc_object);
-                            xpc_release(xpc_object);
+                        if (publicBackupKey != NULL) {
+                            SOSPeerInfoRef peerInfo = SOSCCSetNewPublicBackupKey_Server(publicBackupKey, &error);
+                            CFDataRef peerInfoData = peerInfo ? SOSPeerInfoCopyEncodedData(peerInfo, kCFAllocatorDefault, &error) : NULL;
+                            CFReleaseNull(peerInfo);
+                            if (peerInfoData) {
+                                xpc_object_t xpc_object = _CFXPCCreateXPCObjectFromCFObject(peerInfoData);
+                                xpc_dictionary_set_value(replyMessage, kSecXPCKeyResult, xpc_object);
+                                xpc_release(xpc_object);
+                            }
+                            CFReleaseNull(peerInfoData);
+                            CFReleaseSafe(publicBackupKey);
                         }
-                        CFReleaseNull(peerInfoData);
-                        CFReleaseSafe(publicBackupKey);
-
                     }
                 }
                 break;
@@ -1487,8 +1108,16 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 {
                     if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementRestoreKeychain, &error)) {
                         CFDataRef recovery_key = SecXPCDictionaryCopyData(event, kSecXPCKeyRecoveryPublicKey, &error);
-                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRegisterRecoveryPublicKey_Server(recovery_key, &error));
-                        CFReleaseNull(recovery_key);
+                        if (recovery_key != NULL) {
+                            uint8_t zero = 0;
+                            CFDataRef nullData = CFDataCreate(kCFAllocatorDefault, &zero, 1); // token we send if we really wanted to send NULL
+                            if(CFEqual(recovery_key, nullData)) {
+                                CFReleaseNull(recovery_key);
+                            }
+                            CFReleaseNull(nullData);
+                            xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCRegisterRecoveryPublicKey_Server(recovery_key, &error));
+                            CFReleaseNull(recovery_key);
+                        }
                     }
                 }
                 break;
@@ -1508,55 +1137,55 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
             case kSecXPCOpSetBagForAllSlices:
                 {
                     if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementRestoreKeychain, &error)) {
-                        CFDataRef backupSlice = SecXPCDictionaryCopyData(event, kSecXPCKeyKeybag, &error);
-                        bool includeV0 = xpc_dictionary_get_bool(event, kSecXPCKeyIncludeV0);
+                        CFDataRef backupSlice = SecXPCDictionaryCopyData(event, kSecXPCKeyKeybag, &error); // NULL checked below
+                        bool includeV0 = xpc_dictionary_get_bool(event, kSecXPCKeyIncludeV0); // false is ok, so it's safe for this paramter to be unset or incorrect type
                         xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, backupSlice && SOSCCRegisterSingleRecoverySecret_Server(backupSlice, includeV0, &error));
                         CFReleaseSafe(backupSlice);
                     }
                 }
                 break;
             case kSecXPCOpCopyApplicantPeerInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_and_consume_PeerInfoArray(replyMessage, kSecXPCKeyResult,
                                                                  SOSCCCopyApplicantPeerInfo_Server(&error),
                                                                  &error);
                 }
                 break;
             case kSecXPCOpCopyValidPeerPeerInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_and_consume_PeerInfoArray(replyMessage, kSecXPCKeyResult,
                                                                  SOSCCCopyValidPeerPeerInfo_Server(&error),
                                                                  &error);
                 }
                 break;
             case kSecXPCOpValidateUserPublic:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     bool trusted = SOSCCValidateUserPublic_Server(&error);
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, trusted);
                 }
                 break;
             case kSecXPCOpCopyNotValidPeerPeerInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_and_consume_PeerInfoArray(replyMessage, kSecXPCKeyResult,
                                                                  SOSCCCopyNotValidPeerPeerInfo_Server(&error),
                                                                  &error);
                 }
                 break;
             case kSecXPCOpCopyGenerationPeerInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_and_consume_CFArray(replyMessage, kSecXPCKeyResult,
                                                            SOSCCCopyGenerationPeerInfo_Server(&error));
                 }
                 break;
             case kSecXPCOpCopyRetirementPeerInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_and_consume_PeerInfoArray(replyMessage, kSecXPCKeyResult,
                                                                  SOSCCCopyRetirementPeerInfo_Server(&error),
                                                                  &error);
                 }
                 break;
             case kSecXPCOpCopyViewUnawarePeerInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_and_consume_PeerInfoArray(replyMessage, kSecXPCKeyResult,
                                                                  SOSCCCopyViewUnawarePeerInfo_Server(&error),
                                                                  &error);
@@ -1624,21 +1253,21 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             case kSecXPCOpCopyPeerPeerInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_and_consume_PeerInfoArray(replyMessage, kSecXPCKeyResult,
                                                                  SOSCCCopyPeerPeerInfo_Server(&error),
                                                                  &error);
                 }
                 break;
             case kSecXPCOpCopyConcurringPeerPeerInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_and_consume_PeerInfoArray(replyMessage, kSecXPCKeyResult,
                                                                  SOSCCCopyConcurringPeerPeerInfo_Server(&error),
                                                                  &error);
                 }
                 break;
             case kSecXPCOpCopyMyPeerInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     SOSPeerInfoRef peerInfo = SOSCCCopyMyPeerInfo_Server(&error);
                     CFDataRef peerInfoData = peerInfo ? SOSPeerInfoCopyEncodedData(peerInfo, kCFAllocatorDefault, &error) : NULL;
                     CFReleaseNull(peerInfo);
@@ -1651,13 +1280,14 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             case kSecXPCOpGetLastDepartureReason:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_int64(replyMessage, kSecXPCKeyResult,
                                              SOSCCGetLastDepartureReason_Server(&error));
                 }
                 break;
-			case kSecXPCOpSetLastDepartureReason:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+            case kSecXPCOpSetLastDepartureReason:
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    // 0 is a legitimate reason (kSOSDepartureReasonError), so it's safe for this parameter to be unset or incorrect type
                     int32_t reason = (int32_t) xpc_dictionary_get_int64(event, kSecXPCKeyReason);
                     xpc_dictionary_set_int64(replyMessage, kSecXPCKeyResult,
                                              SOSCCSetLastDepartureReason_Server(reason, &error));
@@ -1691,72 +1321,40 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             case kSecXPCOpCopyIncompatibilityInfo:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     CFStringRef iis = SOSCCCopyIncompatibilityInfo_Server(&error);
                     SecXPCDictionarySetString(replyMessage, kSecXPCKeyResult, iis, &error);
                     CFReleaseSafe(iis);
                 }
                 break;
-			case kSecXPCOpOTAGetEscrowCertificates:
-				{
-                    uint32_t escrowRootType = (uint32_t)xpc_dictionary_get_uint64(event, "escrowType");
-					CFArrayRef array = SecOTAPKICopyCurrentEscrowCertificates(escrowRootType, &error);
-					if (array) {
-						xpc_object_t xpc_array = _CFXPCCreateXPCObjectFromCFObject(array);
-						xpc_dictionary_set_value(replyMessage, kSecXPCKeyResult, xpc_array);
-	                    xpc_release(xpc_array);
-					}
-					CFReleaseNull(array);
-				}
-				break;
-			case kSecXPCOpOTAPKIGetNewAsset:
-				 xpc_dictionary_set_int64(replyMessage, kSecXPCKeyResult,
-	                                         SecOTAPKISignalNewAsset(&error));
-				break;
             case kSecXPCOpRollKeys:
                 {
+                    // false is valid, so it's safe for this parameter to be unset or incorrect type
                     bool force = xpc_dictionary_get_bool(event, "force");
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                                  _SecServerRollKeys(force, &client, &error));
                 }
                 break;
-			case kSecXPCOpSetHSA2AutoAcceptInfo:
-				if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-					CFDataRef cfbytes = NULL;
-					const uint8_t *bytes = NULL;
-					size_t len = 0;
-
-					bytes = xpc_dictionary_get_data(event,
-							kSecXPCKeyHSA2AutoAcceptInfo, &len);
-					if (!bytes) {
-						SOSCreateError(kSOSErrorBadKey,
-								CFSTR("missing autoaccept info"), NULL, &error);
-						break;
-					}
-
-					cfbytes = CFDataCreate(NULL, bytes, len);
-					if (!cfbytes) {
-						SOSCreateError(kSOSErrorAllocationFailure,
-								CFSTR("could not allocate autoaccept info"),
-								NULL, &error);
-						break;
-					}
-
-					xpc_dictionary_set_bool(replyMessage,
-							kSecXPCKeyResult,
-							SOSCCSetHSA2AutoAcceptInfo_Server(cfbytes, &error));
-					CFReleaseNull(cfbytes);
-				}
-				break;
             case kSecXPCOpWaitForInitialSync:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult,
                                             SOSCCWaitForInitialSync_Server(&error));
                 }
                 break;
 
+            case kSecXPCOpWaitForInitialSyncWithAnalytics:
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    CFDataRef parentEvent = NULL;
+                    if(SecXPCDictionaryCopyDataOptional(event, kSecXPCKeySignInAnalytics, &parentEvent, &error) && parentEvent != NULL){
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCWaitForInitialSyncWithAnalytics_Server(parentEvent, &error));
+                    }else{
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCWaitForInitialSync_Server(&error));
+                    }
+                    CFReleaseNull(parentEvent);
+                }
+                break;
             case kSecXPCOpCopyYetToSyncViews:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     CFArrayRef array = SOSCCCopyYetToSyncViewsList_Server(&error);
                     if (array) {
                         xpc_object_t xpc_array = _CFXPCCreateXPCObjectFromCFObject(array);
@@ -1767,19 +1365,21 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             case kSecXPCOpSetEscrowRecord:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    CFStringRef escrow_label = SecXPCDictionaryCopyString(event, kSecXPCKeyEscrowLabel, &error);
-                    uint64_t tries = xpc_dictionary_get_int64(event, kSecXPCKeyTriesLabel);
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                    CFStringRef escrow_label = SecXPCDictionaryCopyString(event, kSecXPCKeyEscrowLabel, &error); // NULL checked below
+                    uint64_t tries = xpc_dictionary_get_int64(event, kSecXPCKeyTriesLabel); // 0 is acceptable; safe for this parameter to be unset or incorrect type
 
-                    bool result =  SOSCCSetEscrowRecord_Server(escrow_label, tries, &error);
-                    if (result) {
-                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, result);
+                    if (escrow_label != NULL) {
+                        bool result = SOSCCSetEscrowRecord_Server(escrow_label, tries, &error);
+                        if (result) {
+                            xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, result);
+                        }
+                        CFReleaseNull(escrow_label);
                     }
-                    CFReleaseNull(escrow_label);
                 }
                 break;
             case kSecXPCOpGetEscrowRecord:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     CFDictionaryRef record =  SOSCCCopyEscrowRecord_Server(&error);
                     if (record) {
                         xpc_object_t xpc_dictionary = _CFXPCCreateXPCObjectFromCFObject(record);
@@ -1790,7 +1390,7 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                 }
                 break;
             case kSecXPCOpCopyBackupInformation:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     CFDictionaryRef record =  SOSCCCopyBackupInformation_Server(&error);
                     if (record) {
                         xpc_object_t xpc_dictionary = _CFXPCCreateXPCObjectFromCFObject(record);
@@ -1800,16 +1400,9 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                     CFReleaseNull(record);
                 }
                 break;
-
-            case kSecXPCOpCheckPeerAvailability:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
-                    xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCCheckPeerAvailability_Server(&error));
-                }
-                break;
-                    
                     
             case kSecXPCOpIsThisDeviceLastBackup:
-                if (EntitlementPresentOrWhine(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, SOSCCkSecXPCOpIsThisDeviceLastBackup_Server(&error));
                 }
                 break;
@@ -1818,7 +1411,7 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                     CFArrayRef viewSet = SecXPCDictionaryCopyArray(event, kSecXPCKeyArray, &error);
                     if (viewSet) {
                         CFBooleanRef result = SOSCCPeersHaveViewsEnabled_Server(viewSet, &error);
-                        if (result) {
+                        if (result != NULL) {
                             xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, result != kCFBooleanFalse);
                         }
                     }
@@ -1926,25 +1519,56 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
             case kSecXPCOpCopyCircleJoiningBlob:
                     if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementCircleJoin, &error)) {
                         CFDataRef appBlob = SecXPCDictionaryCopyCFDataRef(event, kSecXPCData, &error);
-                        SOSPeerInfoRef applicant = SOSPeerInfoCreateFromData(kCFAllocatorDefault, &error, appBlob);
-                        CFDataRef pbblob = SOSCCCopyCircleJoiningBlob_Server(applicant, &error);
-                        if (pbblob) {
-                            xpc_object_t xpc_object = _CFXPCCreateXPCObjectFromCFObject(pbblob);
+                        if (appBlob != NULL) {
+                            SOSPeerInfoRef applicant = SOSPeerInfoCreateFromData(kCFAllocatorDefault, &error, appBlob);
+                            if (applicant != NULL) {
+                                CFDataRef pbblob = SOSCCCopyCircleJoiningBlob_Server(applicant, &error);
+                                if (pbblob) {
+                                    xpc_object_t xpc_object = _CFXPCCreateXPCObjectFromCFObject(pbblob);
+                                    xpc_dictionary_set_value(replyMessage, kSecXPCKeyResult, xpc_object);
+                                    xpc_release(xpc_object);
+                                }
+                                CFReleaseNull(pbblob);
+                                CFReleaseNull(applicant);
+                            }
+                            CFReleaseNull(appBlob);
+                        }
+                    }
+                break;
+            case kSecXPCOpCopyInitialSyncBlob:
+                    if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementCircleJoin, &error)) {
+                        uint64_t flags = xpc_dictionary_get_uint64(event, kSecXPCKeyFlags); // 0 is a valid flags, so no error checking
+                        CFDataRef initialblob = SOSCCCopyInitialSyncData_Server((uint32_t)flags, &error);
+                        if (initialblob) {
+                            xpc_object_t xpc_object = _CFXPCCreateXPCObjectFromCFObject(initialblob);
                             xpc_dictionary_set_value(replyMessage, kSecXPCKeyResult, xpc_object);
                             xpc_release(xpc_object);
                         }
-                        CFReleaseNull(pbblob);
-                        CFReleaseNull(applicant);
-                        CFReleaseNull(appBlob);
+                        CFReleaseNull(initialblob);
                     }
-                break;
+                    break;
             case kSecXPCOpJoinWithCircleJoiningBlob:
                     if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementCircleJoin, &error)) {
-                        CFDataRef joiningBlob = SecXPCDictionaryCopyCFDataRef(event, kSecXPCData, &error);
-
-                        bool retval = SOSCCJoinWithCircleJoiningBlob_Server(joiningBlob, &error);
+                        CFDataRef joiningBlob = SecXPCDictionaryCopyCFDataRef(event, kSecXPCData, &error); // NULL checked below
+                        uint64_t version = xpc_dictionary_get_uint64(event, kSecXPCVersion); // 0 is valid, so this parameter can be unset or incorrect type
+                        if (joiningBlob != NULL) {
+                            bool retval = SOSCCJoinWithCircleJoiningBlob_Server(joiningBlob, (PiggyBackProtocolVersion) version, &error);
+                            xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, retval);
+                            CFReleaseNull(joiningBlob);
+                        }
+                    }
+                    break;
+                    
+            case kSecXPCOpKVSKeyCleanup:
+                    if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {                        
+                        bool retval = SOSCCCleanupKVSKeys_Server(&error);
                         xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, retval);
-                        CFReleaseNull(joiningBlob);
+                    }
+                    break;
+            case kSecXPCOpPopulateKVS:
+                    if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainCloudCircle, &error)) {
+                        bool retval = SOSCCTestPopulateKVSWithBadKeys_Server(&error);
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, retval);
                     }
                     break;
             case kSecXPCOpMessageFromPeerIsPending:
@@ -1967,6 +1591,7 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                     CFReleaseNull(peer);
                     break;
                 }
+#endif /* !SECUREOBJECTSYNC */
             case sec_delete_items_with_access_groups_id:
                 {
                     bool retval = false;
@@ -1983,9 +1608,64 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
                     xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, retval);
                 }
                 break;
-#endif /* !TRUSTD_SERVER */
+            case kSecXPCOpBackupKeybagAdd: {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementBackupTableOperations, &error)) {
+                    xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, false);
+                }
+                break;
+            }
+            case kSecXPCOpBackupKeybagDelete: {
+                if (EntitlementPresentAndTrue(operation, client.task, kSecEntitlementBackupTableOperations, &error)) {
+                    xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, false);
+                }
+                break;
+            }
+            case kSecXPCOpKeychainControlEndpoint: {
+                if(EntitlementPresentAndTrue(operation, client.task, kSecEntitlementKeychainControl, &error)) {
+                    xpc_endpoint_t endpoint = SecServerCreateKeychainControlEndpoint();
+                    if (endpoint) {
+                        xpc_dictionary_set_value(replyMessage, kSecXPCKeyEndpoint, endpoint);
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, true);
+                        xpc_release(endpoint);
+                    } else {
+                        xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, false);
+                    }
+                }
+                break;
+            }
+            case sec_item_copy_parent_certificates_id:  {
+                CFArrayRef results = NULL;
+                if(EntitlementPresentAndTrue(operation, client.task, kSecEntitlementPrivateCertificateAllAccess, &error)) {
+                    CFDataRef issuer = SecXPCDictionaryCopyData(event, kSecXPCKeyNormalizedIssuer, &error);
+                    CFArrayRef accessGroups = SecXPCDictionaryCopyArray(event, kSecXPCKeyAccessGroups, &error);
+                    if (issuer && accessGroups) {
+                        results = _SecItemCopyParentCertificates(issuer, accessGroups, &error);
+                    }
+                    CFReleaseNull(issuer);
+                    CFReleaseNull(accessGroups);
+                }
+                SecXPCDictionarySetPListOptional(replyMessage, kSecXPCKeyResult, results, &error);
+                CFReleaseNull(results);
+                break;
+            }
+            case sec_item_certificate_exists_id: {
+                bool result = false;
+                if(EntitlementPresentAndTrue(operation, client.task, kSecEntitlementPrivateCertificateAllAccess, &error)) {
+                    CFDataRef issuer = SecXPCDictionaryCopyData(event, kSecXPCKeyNormalizedIssuer, &error);
+                    CFDataRef serialNum = SecXPCDictionaryCopyData(event, kSecXPCKeySerialNumber, &error);
+                    CFArrayRef accessGroups = SecXPCDictionaryCopyArray(event, kSecXPCKeyAccessGroups, &error);
+                    if (issuer && serialNum && accessGroups) {
+                        result = _SecItemCertificateExists(issuer, serialNum, accessGroups, &error);
+                    }
+                    CFReleaseNull(issuer);
+                    CFReleaseNull(serialNum);
+                    CFReleaseNull(accessGroups);
+                }
+                xpc_dictionary_set_bool(replyMessage, kSecXPCKeyResult, result);
+                break;
+            }
             default:
-				break;
+                break;
             }
 
         if (error)
@@ -2017,9 +1697,6 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
     }
     if (xpcError)
         xpc_release(xpcError);
-#if TARGET_OS_IPHONE
-    pthread_setspecific(taskThreadKey, NULL);
-#endif
     CFReleaseSafe(error);
     CFReleaseSafe(client.accessGroups);
     CFReleaseSafe(client.musr);
@@ -2030,11 +1707,6 @@ static void securityd_xpc_dictionary_handler(const xpc_connection_t connection, 
 
 static void securityd_xpc_init(const char *service_name)
 {
-#if TARGET_OS_IPHONE
-    pthread_key_create(&taskThreadKey, NULL);
-    SecTaskDiagnoseEntitlements = secTaskDiagnoseEntitlements;
-#endif
-
     secdebug("serverxpc", "start");
     xpc_connection_t listener = xpc_connection_create_mach_service(service_name, NULL, XPC_CONNECTION_MACH_SERVICE_LISTENER);
     if (!listener) {
@@ -2046,25 +1718,37 @@ static void securityd_xpc_init(const char *service_name)
         if (xpc_get_type(connection) == XPC_TYPE_CONNECTION) {
             xpc_connection_set_event_handler(connection, ^(xpc_object_t event) {
                 if (xpc_get_type(event) == XPC_TYPE_DICTIONARY) {
-                    xpc_retain(connection);
-                    xpc_retain(event);
-                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                        securityd_xpc_dictionary_handler(connection, event);
-                        xpc_release(event);
-                        xpc_release(connection);
-                    });
+                    // Synchronous. The client has a connection pool so they can be somewhat re-entrant if they need.
+                    securityd_xpc_dictionary_handler(connection, event);
                 }
             });
             xpc_connection_resume(connection);
         }
     });
     xpc_connection_resume(listener);
+
+#if OCTAGON
+    xpc_activity_register("com.apple.securityd.daily", XPC_ACTIVITY_CHECK_IN, ^(xpc_activity_t activity) {
+        xpc_activity_state_t activityState = xpc_activity_get_state(activity);
+        if (activityState == XPC_ACTIVITY_STATE_RUN) {
+            SecCKKS24hrNotification();
+            SecOctagon24hrNotification();
+        }
+    });
+#endif
+
+#if OCTAGON && !TARGET_OS_BRIDGE
+    // Kick off reporting tasks.
+    if (os_variant_has_internal_diagnostics("com.apple.security") && !os_variant_is_recovery("securityd")) {
+        InitPolicyReporter();
+    }
+#endif
 }
 
 
 // <rdar://problem/22425706> 13B104+Roots:Device never moved past spinner after using approval to ENABLE icdp
 
-#if TARGET_OS_EMBEDDED
+#if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
 static void securityd_soscc_lock_hack() {
 	dispatch_queue_t		soscc_lock_queue = dispatch_queue_create("soscc_lock_queue", DISPATCH_QUEUE_PRIORITY_DEFAULT);
 	int 					soscc_tok;
@@ -2084,16 +1768,16 @@ static void securityd_soscc_lock_hack() {
         CFErrorRef error = NULL;
 
         uint64_t one_minute = 60ull;
-        if(SecAKSLockUserKeybag(one_minute, &error)){
+        if(SecAKSUserKeybagHoldLockAssertion(one_minute, &error)){
             // <rdar://problem/22500239> Prevent securityd from quitting while holding a keychain assertion
-            xpc_transaction_begin();
+            os_transaction_t transaction = os_transaction_create("securityd-LockAssertedingHolder");
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, one_minute*NSEC_PER_SEC), soscc_lock_queue, ^{
                 CFErrorRef localError = NULL;
-                if(!SecAKSUnLockUserKeybag(&localError))
+                if(!SecAKSUserKeybagDropLockAssertion(&localError))
                     secerror("failed to unlock: %@", localError);
                 CFReleaseNull(localError);
-                xpc_transaction_end();
+                os_release(transaction);
             });
 		} else {
 			secerror("Failed to take device lock assertion: %@", error);
@@ -2104,15 +1788,31 @@ static void securityd_soscc_lock_hack() {
 }
 #endif
 
-#if TRUSTD_SERVER
-#include <trustd/SecTrustOSXEntryPoints.h>
-static void trustd_init_server(void) {
-    SecTrustLegacySourcesEventRunloopCreate();
+#if TARGET_OS_OSX
+
+static char *
+homedirPath(void)
+{
+    static char homeDir[PATH_MAX] = {};
+
+    if (homeDir[0] == '\0') {
+        struct passwd* pwd = getpwuid(getuid());
+        if (pwd == NULL)
+            return NULL;
+
+        if (realpath(pwd->pw_dir, homeDir) == NULL) {
+            strlcpy(homeDir, pwd->pw_dir, sizeof(homeDir));
+        }
+    }
+    return homeDir;
 }
 #endif
 
+
 int main(int argc, char *argv[])
 {
+    DisableLocalization();
+
     char *wait4debugger = getenv("WAIT4DEBUGGER");
     if (wait4debugger && !strcasecmp("YES", wait4debugger)) {
 		seccritical("SIGSTOPing self, awaiting debugger");
@@ -2121,23 +1821,11 @@ int main(int argc, char *argv[])
 		kill(getpid(), SIGSTOP);
 	}
 
-#if HAVE_MOBILE_KEYBAG_SUPPORT && TARGET_OS_EMBEDDED
-    {
-        CFDictionaryRef deviceMode = MKBUserTypeDeviceMode(NULL, NULL);
-        CFTypeRef value = NULL;
-
-        if (deviceMode && CFDictionaryGetValueIfPresent(deviceMode, kMKBDeviceModeKey, &value) && CFEqual(value, kMKBDeviceModeMultiUser)) {
-            inMultiUser = 1;
-        }
-        CFReleaseNull(deviceMode);
-    }
-#endif
-
 /* <rdar://problem/15792007> Users with network home folders are unable to use/save password for Mail/Cal/Contacts/websites
  Secd doesn't realize DB connections get invalidated when network home directory users logout
  and their home gets unmounted. Exit secd, start fresh when user logs back in.
 */
-#if !TARGET_OS_IPHONE && !defined(DARLING)
+#if TARGET_OS_OSX
     int sessionstatechanged_tok;
     notify_register_dispatch(kSA_SessionStateChangedNotification, &sessionstatechanged_tok, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^(int token __unused) {
         // we could be a process running as root.
@@ -2150,28 +1838,55 @@ int main(int argc, char *argv[])
     });
 #endif
 
+#if TARGET_OS_OSX
+#define SECD_PROFILE_NAME "com.apple.secd"
+    const char *homedir = homedirPath();
+    if (homedir == NULL)
+        errx(1, "failed to get home directory for secd");
+
+    char *errorbuf = NULL;
+    const char	*sandbox_params[] = {
+        "_HOME", homedir,
+        NULL
+    };
+    int32_t		rc;
+
+    rc = sandbox_init_with_parameters(SECD_PROFILE_NAME, SANDBOX_NAMED, sandbox_params, &errorbuf);
+    if (rc)
+        err(1, "Failed to process in a sandbox: %d %s", rc, errorbuf);
+#endif /* TARGET_OS_OSX */
+
     const char *serviceName = kSecuritydXPCServiceName;
-#if TRUSTD_SERVER
-    serviceName = kTrustdXPCServiceName;
-    if (argc > 1 && (!strcmp(argv[1], "--agent"))) {
-        serviceName = kTrustdAgentXPCServiceName;
-    }
+
+// Mark our interest in running some features (before we bring the DB layer up)
+#if OCTAGON
+    EscrowRequestServerSetEnabled(true);
+    OctagonSetShouldPerformInitialization(true);
+    SecCKKSEnable();
 #endif
+
     /* setup SQDLite before some other component have a chance to create a database connection */
-    _SecServerDatabaseSetup();
+    _SecDbServerSetup();
 
     securityd_init_server();
-#if TRUSTD_SERVER
-    trustd_init_server();
-#endif
     securityd_xpc_init(serviceName);
 
+    SecCreateSecuritydXPCServer();
+#if SECUREOBJECTSYNC
+    SOSControlServerInitialize();
+#endif
+#if OCTAGON
+    CKKSControlServerInitialize();
+    OctagonControlServerInitialize();
+    EscrowRequestXPCServerInitialize();
+#endif
+
 	// <rdar://problem/22425706> 13B104+Roots:Device never moved past spinner after using approval to ENABLE icdp
-#if TARGET_OS_EMBEDDED
+#if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
 	securityd_soscc_lock_hack();
 #endif
 
-    dispatch_main();
+    CFRunLoopRun();
 }
 
 /* vi:set ts=4 sw=4 et: */

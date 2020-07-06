@@ -30,17 +30,18 @@
 
 #include <TargetConditionals.h>
 #include <stdint.h>
+#include <CoreFoundation/CFBase.h> /* CF_ENUM */
 
 /*
  * Defined as enum for debugging, but in the protocol
  * it is actually exactly two bytes
  */
-#if (TARGET_OS_MAC && !(TARGET_OS_EMBEDDED || TARGET_OS_IPHONE))
-/* 32-bit value on OS X */
-typedef uint32_t SSLCipherSuite;
-#else
+#if TARGET_OS_IPHONE && !TARGET_OS_IOSMAC
 /* 16-bit value on iOS */
 typedef uint16_t SSLCipherSuite;
+#else
+/* 32-bit value elsewhere */
+typedef uint32_t SSLCipherSuite;
 #endif
 
 CF_ENUM(SSLCipherSuite)
@@ -116,6 +117,13 @@ CF_ENUM(SSLCipherSuite)
 	TLS_ECDH_anon_WITH_AES_128_CBC_SHA     =	0xC018,
 	TLS_ECDH_anon_WITH_AES_256_CBC_SHA     =	0xC019,
 
+    /* ECDHE_PSK Cipher Suites for Transport Layer Security (TLS), RFC 5489 */
+    TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA     =    0xC035,
+    TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA     =    0xC036,
+
+    /* ChaCha20-Poly1305 Cipher Suites for Transport Layer Security (TLS), RFC 7905 */
+    TLS_PSK_WITH_CHACHA20_POLY1305_SHA256  =    0xCCAB,
+
     /* TLS 1.2 addenda, RFC 5246 */
 
     /* Initial state. */
@@ -127,8 +135,6 @@ CF_ENUM(SSLCipherSuite)
     TLS_RSA_WITH_RC4_128_MD5                  = 0x0004,
     TLS_RSA_WITH_RC4_128_SHA                  = 0x0005,
     TLS_RSA_WITH_3DES_EDE_CBC_SHA             = 0x000A,
-    //TLS_RSA_WITH_AES_128_CBC_SHA              = 0x002F,
-    //TLS_RSA_WITH_AES_256_CBC_SHA              = 0x0035,
     TLS_RSA_WITH_NULL_SHA256                  = 0x003B,
     TLS_RSA_WITH_AES_128_CBC_SHA256           = 0x003C,
     TLS_RSA_WITH_AES_256_CBC_SHA256           = 0x003D,
@@ -138,14 +144,6 @@ CF_ENUM(SSLCipherSuite)
     TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA          = 0x0010,
     TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA         = 0x0013,
     TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA         = 0x0016,
-    //TLS_DH_DSS_WITH_AES_128_CBC_SHA           = 0x0030,
-    //TLS_DH_RSA_WITH_AES_128_CBC_SHA           = 0x0031,
-    //TLS_DHE_DSS_WITH_AES_128_CBC_SHA          = 0x0032,
-    //TLS_DHE_RSA_WITH_AES_128_CBC_SHA          = 0x0033,
-    //TLS_DH_DSS_WITH_AES_256_CBC_SHA           = 0x0036,
-    //TLS_DH_RSA_WITH_AES_256_CBC_SHA           = 0x0037,
-    //TLS_DHE_DSS_WITH_AES_256_CBC_SHA          = 0x0038,
-    //TLS_DHE_RSA_WITH_AES_256_CBC_SHA          = 0x0039,
     TLS_DH_DSS_WITH_AES_128_CBC_SHA256        = 0x003E,
     TLS_DH_RSA_WITH_AES_128_CBC_SHA256        = 0x003F,
     TLS_DHE_DSS_WITH_AES_128_CBC_SHA256       = 0x0040,
@@ -158,13 +156,10 @@ CF_ENUM(SSLCipherSuite)
     /* Completely anonymous Diffie-Hellman */
     TLS_DH_anon_WITH_RC4_128_MD5              = 0x0018,
     TLS_DH_anon_WITH_3DES_EDE_CBC_SHA         = 0x001B,
-    //TLS_DH_anon_WITH_AES_128_CBC_SHA          = 0x0034,
-    //TLS_DH_anon_WITH_AES_256_CBC_SHA          = 0x003A,
     TLS_DH_anon_WITH_AES_128_CBC_SHA256       = 0x006C,
     TLS_DH_anon_WITH_AES_256_CBC_SHA256       = 0x006D,
 
     /* Addendum from RFC 4279, TLS PSK */
-
     TLS_PSK_WITH_RC4_128_SHA                  = 0x008A,
     TLS_PSK_WITH_3DES_EDE_CBC_SHA             = 0x008B,
     TLS_PSK_WITH_AES_128_CBC_SHA              = 0x008C,
@@ -179,13 +174,11 @@ CF_ENUM(SSLCipherSuite)
     TLS_RSA_PSK_WITH_AES_256_CBC_SHA          = 0x0095,
 
     /* RFC 4785 - Pre-Shared Key (PSK) Ciphersuites with NULL Encryption */
-
     TLS_PSK_WITH_NULL_SHA                     = 0x002C,
     TLS_DHE_PSK_WITH_NULL_SHA                 = 0x002D,
     TLS_RSA_PSK_WITH_NULL_SHA                 = 0x002E,
 
-    /* Addenda from rfc 5288 AES Galois Counter Mode (GCM) Cipher Suites
-       for TLS. */
+    /* Addenda from rfc 5288 AES Galois Counter Mode (GCM) Cipher Suites for TLS. */
     TLS_RSA_WITH_AES_128_GCM_SHA256           = 0x009C,
     TLS_RSA_WITH_AES_256_GCM_SHA384           = 0x009D,
     TLS_DHE_RSA_WITH_AES_128_GCM_SHA256       = 0x009E,
@@ -222,6 +215,14 @@ CF_ENUM(SSLCipherSuite)
     TLS_RSA_PSK_WITH_NULL_SHA256              = 0x00B8,
     TLS_RSA_PSK_WITH_NULL_SHA384              = 0x00B9,
 
+    /* TLS 1.3 standard cipher suites for ChaCha20+Poly1305.
+       Note: TLS 1.3 ciphersuites do not specify the key exchange
+       algorithm -- they only specify the symmetric ciphers. */
+    TLS_AES_128_GCM_SHA256                    = 0x1301,
+    TLS_AES_256_GCM_SHA384                    = 0x1302,
+    TLS_CHACHA20_POLY1305_SHA256              = 0x1303,
+    TLS_AES_128_CCM_SHA256                    = 0x1304,
+    TLS_AES_128_CCM_8_SHA256                  = 0x1305,
 
     /* Addenda from rfc 5289  Elliptic Curve Cipher Suites with
        HMAC SHA-256/384. */
@@ -245,17 +246,33 @@ CF_ENUM(SSLCipherSuite)
     TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256      = 0xC031,
     TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384      = 0xC032,
 
+    /* Addenda from rfc 7905  ChaCha20-Poly1305 Cipher Suites for
+     Transport Layer Security (TLS). */
+    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256   = 0xCCA8,
+    TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 = 0xCCA9,
+
     /* RFC 5746 - Secure Renegotiation */
     TLS_EMPTY_RENEGOTIATION_INFO_SCSV         = 0x00FF,
-	/*
-	 * Tags for SSL 2 cipher kinds which are not specified
-	 * for SSL 3.
-	 */
+
+	/* Tags for SSL 2 cipher kinds which are not specified
+	 * for SSL 3. */
     SSL_RSA_WITH_RC2_CBC_MD5 =                  0xFF80,
     SSL_RSA_WITH_IDEA_CBC_MD5 =                 0xFF81,
     SSL_RSA_WITH_DES_CBC_MD5 =                  0xFF82,
     SSL_RSA_WITH_3DES_EDE_CBC_MD5 =             0xFF83,
     SSL_NO_SUCH_CIPHERSUITE =                   0xFFFF
+};
+
+/*
+ * Convenience ciphersuite groups that collate ciphersuites of comparable security
+ * properties into a single alias.
+ */
+typedef CF_ENUM(int, SSLCiphersuiteGroup) {
+    kSSLCiphersuiteGroupDefault,
+    kSSLCiphersuiteGroupCompatibility,
+    kSSLCiphersuiteGroupLegacy,
+    kSSLCiphersuiteGroupATS,
+    kSSLCiphersuiteGroupATSCompatibility,
 };
 
 #endif	/* !_SECURITY_CIPHERSUITE_H_ */

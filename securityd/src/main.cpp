@@ -33,6 +33,7 @@
 #include "pcscmonitor.h"
 #include "auditevents.h"
 #include "self.h"
+#include "util.h"
 
 #include <security_utilities/daemon.h>
 #include <security_utilities/machserver.h>
@@ -58,6 +59,7 @@
 #include "acl_keychain.h"
 #include "acl_partition.h"
 
+#include <sandbox.h>
 
 //
 // Local functions of the main program driver
@@ -65,7 +67,7 @@
 static void usage(const char *me) __attribute__((noreturn));
 static void handleSignals(int sig);
 static PCSCMonitor::ServiceLevel scOptions(const char *optionString);
-
+static bool legacyTokensEnabled(void);
 
 static Port gMainServerPort;
 PCSCMonitor *gPCSC;
@@ -76,13 +78,27 @@ PCSCMonitor *gPCSC;
 //
 int main(int argc, char *argv[])
 {
+	DisableLocalization();
+
 	// clear the umask - we know what we're doing
-	secnotice("SS", "starting umask was 0%o", ::umask(0));
+	secnotice("SecServer", "starting umask was 0%o", ::umask(0));
 	::umask(0);
 
 	// tell the keychain (client) layer to turn off the server interface
 	SecKeychainSetServerMode();
-	
+
+    const char *params[] = {"LEGACY_TOKENS_ENABLED", legacyTokensEnabled() ? "YES" : "NO", NULL};
+    char* errorbuf = NULL;
+    if (sandbox_init_with_parameters("com.apple.securityd", SANDBOX_NAMED, params, &errorbuf)) {
+        seccritical("SecServer: unable to enter sandbox: %{public}s", errorbuf);
+        if (errorbuf) {
+            sandbox_free_error(errorbuf);
+        }
+        exit(1);
+    } else {
+        secnotice("SecServer", "entered sandbox");
+    }
+
 	// program arguments (preset to defaults)
 	bool debugMode = false;
 	const char *bootstrapName = NULL;
@@ -100,7 +116,7 @@ int main(int argc, char *argv[])
 	
 	// check for the Installation-DVD environment and modify some default arguments if found
 	if (access("/etc/rc.cdrom", F_OK) == 0) {	// /etc/rc.cdrom exists
-        secnotice("SS", "starting in installmode");
+        secnotice("SecServer", "starting in installmode");
 		smartCardOptions = "off";	// needs writable directories that aren't
 	}
 
@@ -170,12 +186,16 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
+#ifndef __clang_analyzer__
 			messagingName = bootstrapName;
+#endif
 		}
 	}
 	else
 	{
+#ifndef __clang_analyzer__
 		messagingName = bootstrapName;
+#endif
 	}
 	
 	// configure logging first
@@ -220,6 +240,9 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+// The clang static analyzer isn't a big fan of our "object creation hooks object into global pointer graph" model.
+// Tell it not to worry.
+#ifndef __clang_analyzer__
 	// introduce all supported ACL subject types
 	new AnyAclSubject::Maker();
 	new PasswordAclSubject::Maker();
@@ -233,9 +256,10 @@ int main(int argc, char *argv[])
 	new PartitionAclSubject::Maker();
 	new PreAuthorizationAcls::OriginMaker();
     new PreAuthorizationAcls::SourceMaker();
-
+#endif
     // establish the code equivalents database
     CodeSignatures codeSignatures;
+
 
     // create the main server object and register it
  	Server server(codeSignatures, bootstrapName);
@@ -264,14 +288,15 @@ int main(int argc, char *argv[])
     
     // install MDS (if needed) and initialize the local CSSM
     server.loadCssm(mdsIsInstalled);
-    
-	// create the shared memory notification hub
+
 #ifndef __clang_analyzer__
+	// create the shared memory notification hub
 	new SharedMemoryListener(messagingName, kSharedMemoryPoolSize);
-#endif // __clang_analyzer__
+#endif
+	
 
 	// okay, we're ready to roll
-    secnotice("SS", "Entering service as %s", (char*)bootstrapName);
+    secnotice("SecServer", "Entering service as %s", (char*)bootstrapName);
 	Syslog::notice("Entering service");
     
 	// go
@@ -298,13 +323,30 @@ static void usage(const char *me)
 	exit(2);
 }
 
+const CFStringRef kTKSmartCardPreferencesDomain = CFSTR("com.apple.security.smartcard");
+const CFStringRef kTKLegacyTokendPreferencesKey  = CFSTR("Legacy");
+
+static bool legacyTokensEnabled() {
+    bool result = false;
+    CFPropertyListRef value = CFPreferencesCopyValue(kTKLegacyTokendPreferencesKey, kTKSmartCardPreferencesDomain, kCFPreferencesAnyUser, kCFPreferencesCurrentHost);
+    if (value) {
+        if (CFEqual(value, kCFBooleanTrue)) {
+            result = true;
+        }
+        CFRelease(value);
+    }
+    return result;
+}
 
 //
 // Translate strings (e.g. "conservative") into PCSCMonitor service levels
 //
 static PCSCMonitor::ServiceLevel scOptions(const char *optionString)
 {
-	if (optionString)
+    if (!legacyTokensEnabled())
+        return PCSCMonitor::forcedOff;
+
+    if (optionString)
 		if (!strcmp(optionString, "off"))
 			return PCSCMonitor::forcedOff;
 		else if (!strcmp(optionString, "on"))
@@ -330,7 +372,5 @@ static PCSCMonitor::ServiceLevel scOptions(const char *optionString)
 //
 static void handleSignals(int sig)
 {
-    secnotice("SS", "signal received: %d", sig);
-	if (kern_return_t rc = self_client_handleSignal(gMainServerPort, mach_task_self(), sig))
-		Syslog::error("self-send failed (mach error %d)", rc);
+	(void)self_client_handleSignal(gMainServerPort, mach_task_self(), sig);
 }

@@ -23,8 +23,8 @@
  * tsaTemplates.c -  ASN1 templates Time Stamping Authority requests and responses
  */
 
-#include <security_asn1/keyTemplates.h>     /* for kSecAsn1AlgorithmIDTemplate */
-#include <security_asn1/SecAsn1Templates.h>
+#include <Security/keyTemplates.h>     /* for kSecAsn1AlgorithmIDTemplate */
+#include <Security/SecAsn1Templates.h>
 #include <stddef.h>
 #include <assert.h>
 
@@ -42,7 +42,7 @@ typedef struct {
 } SimpleContentInfo;
 
 // SecCmsContentInfoTemplate
-/*static*/ const SecAsn1Template cmsSimpleContentInfoTemplate[] = {
+static const SecAsn1Template cmsSimpleContentInfoTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(SimpleContentInfo) },
     { SEC_ASN1_OBJECT_ID, offsetof(SimpleContentInfo, contentType) },
     { SEC_ASN1_EXPLICIT | SEC_ASN1_CONSTRUCTED | SEC_ASN1_CONTEXT_SPECIFIC | 0,
@@ -59,15 +59,6 @@ Accuracy ::= SEQUENCE {
                 millis     [0] INTEGER  (1..999) OPTIONAL,
                 micros     [1] INTEGER  (1..999) OPTIONAL  }
 */
-
-const SecAsn1Template kSecAsn1SignedIntegerTemplate[] = {
-    { SEC_ASN1_INTEGER | SEC_ASN1_SIGNED_INT, 0, NULL, sizeof(SecAsn1Item) }
-};
-
-const SecAsn1Template kSecAsn1UnsignedIntegerTemplate[] = {
-    { SEC_ASN1_INTEGER, 0, NULL, sizeof(SecAsn1Item) }
-};
-
 const SecAsn1Template kSecAsn1TSAAccuracyTemplate[] = {
     { SEC_ASN1_SEQUENCE,
 	  0, NULL, sizeof(SecAsn1TSAAccuracy) },
@@ -167,6 +158,7 @@ const SecAsn1Template kSecAsn1TSAPKIStatusInfoTemplateRFC3161[] = {
     { 0 }
 };
 
+#if 0
 const SecAsn1Template kSecAsn1TSATimeStampRespTemplate[] = {
     { SEC_ASN1_SEQUENCE,
 	  0, NULL, sizeof(SecAsn1TimeStampResp) },
@@ -176,6 +168,7 @@ const SecAsn1Template kSecAsn1TSATimeStampRespTemplate[] = {
         SecCmsContentInfoTemplate },
     { 0 }
 };
+#endif
 
 // Decode the status but not the TimeStampToken
 const SecAsn1Template kSecAsn1TSATimeStampRespTemplateDER[] = {

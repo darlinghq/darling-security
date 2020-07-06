@@ -38,16 +38,12 @@
 #include "diskrep.h"
 #include "codedirectory.h"
 #include "csutilities.h"
+#include "notarization.h"
 #include "StaticCode.h"
 
 #include <CoreServices/CoreServicesPriv.h>
 #include "SecCodePriv.h"
 #undef check // Macro! Yech.
-
-extern "C" {
-#include <OpenScriptingUtilPriv.h>
-}
-
 
 namespace Security {
 namespace CodeSigning {
@@ -63,7 +59,6 @@ enum {
 
 
 static void authorizeUpdate(SecAssessmentFlags flags, CFDictionaryRef context);
-static bool codeInvalidityExceptions(SecStaticCodeRef code, CFMutableDictionaryRef result);
 static CFTypeRef installerPolicy() CF_RETURNS_RETAINED;
 
 
@@ -73,10 +68,18 @@ static CFTypeRef installerPolicy() CF_RETURNS_RETAINED;
 PolicyEngine::PolicyEngine()
 	: PolicyDatabase(NULL, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
 {
+	try {
+		mOpaqueWhitelist = new OpaqueWhitelist();
+	} catch (...) {
+		mOpaqueWhitelist = NULL;
+		secerror("Failed opening the gkopaque database.");
+	}
 }
 
 PolicyEngine::~PolicyEngine()
-{ }
+{
+	delete mOpaqueWhitelist;
+}
 
 
 //
@@ -163,6 +166,7 @@ void PolicyEngine::evaluateCodeItem(SecStaticCodeRef code, CFURLRef path, Author
 	SQLite3::int64 latentID = 0;		// first (highest priority) disabled matching ID
 	std::string latentLabel;			// ... and associated label, if any
 
+    secdebug("gk", "evaluateCodeItem type=%d flags=0x%x nested=%d path=%s", type, int(flags), nested, cfString(path).c_str());
 	while (query.nextRow()) {
 		bool allow = int(query[0]);
 		const char *reqString = query[1];
@@ -173,7 +177,8 @@ void PolicyEngine::evaluateCodeItem(SecStaticCodeRef code, CFURLRef path, Author
 		SQLite3::int64 disabled = query[6];
 //		const char *filter = query[7];
 //		const char *remarks = query[8];
-		
+
+		secdebug("gk", "considering rule %d(%s) requirement %s", int(id), label ? label : "UNLABELED", reqString);
 		CFRef<SecRequirementRef> requirement;
 		MacOSError::check(SecRequirementCreateWithString(CFTempString(reqString), kSecCSDefaultFlags, &requirement.aref()));
 		switch (OSStatus rc = SecStaticCodeCheckValidity(code, kSecCSBasicValidateOnly | kSecCSCheckGatekeeperArchitectures, requirement)) {
@@ -187,14 +192,19 @@ void PolicyEngine::evaluateCodeItem(SecStaticCodeRef code, CFURLRef path, Author
 			MacOSError::throwMe(rc);	// general error; pass to caller
 		}
 		
-		// if this rule is disabled, skip it but record the first matching one for posterity
-		if (disabled && latentID == 0) {
-			latentID = id;
-			latentLabel = label ? label : "";
+		// If this rule is disabled, do not continue any further and just continue iterating
+		// until we find one that is enabled.
+		if (disabled) {
+			// ...but always record the first matching rule for informational purposes.
+			if (latentID == 0) {
+				latentID = id;
+				latentLabel = label ? label : "";
+			}
 			continue;
 		}
-		
+
 		// current rule is first rule (in priority order) that matched. Apply it
+        secnotice("gk", "rule %d applies - allow=%d", int(id), allow);
 		if (nested && allow)			// success, nothing to record
 			return;
 
@@ -240,6 +250,7 @@ void PolicyEngine::evaluateCodeItem(SecStaticCodeRef code, CFURLRef path, Author
 	}
 	
 	// no applicable authority (but signed, perhaps temporarily). Deny by default
+    secnotice("gk", "rejecting due to lack of matching active rule");
 	CFRef<CFDictionaryRef> info;
 	MacOSError::check(SecCodeCopySigningInformation(code, kSecCSSigningInformation, &info.aref()));
 	if (flags & kSecAssessmentFlagRequestOrigin) {
@@ -258,32 +269,52 @@ void PolicyEngine::evaluateCodeItem(SecStaticCodeRef code, CFURLRef path, Author
 	cfadd(result, "{%O=%B}", kSecAssessmentAssessmentVerdict, false);
 	addAuthority(flags, result, latentLabel.c_str(), latentID);
 }
-	
+
+CFDictionaryRef PolicyEngine::opaqueWhitelistValidationConditionsFor(SecStaticCodeRef code)
+{
+	 return (mOpaqueWhitelist != NULL) ? mOpaqueWhitelist->validationConditionsFor(code) : NULL;
+}
+
+bool PolicyEngine::opaqueWhiteListContains(SecStaticCodeRef code, SecAssessmentFeedback feedback, OSStatus reason)
+{
+	return (mOpaqueWhitelist != NULL) ? mOpaqueWhitelist->contains(code, feedback, reason) : false;
+}
+
+void PolicyEngine::opaqueWhitelistAdd(SecStaticCodeRef code)
+{
+	if (mOpaqueWhitelist) {
+		mOpaqueWhitelist->add(code);
+	}
+}
 
 void PolicyEngine::adjustValidation(SecStaticCodeRef code)
 {
-	CFRef<CFDictionaryRef> conditions = mOpaqueWhitelist.validationConditionsFor(code);
+	CFRef<CFDictionaryRef> conditions = opaqueWhitelistValidationConditionsFor(code);
 	SecStaticCodeSetValidationConditions(code, conditions);
 }
 
 
 bool PolicyEngine::temporarySigning(SecStaticCodeRef code, AuthorityType type, CFURLRef path, SecAssessmentFlags matchFlags)
 {
-	if (matchFlags == 0) {	// playback; consult authority table for matches
-		std::string screen = createWhitelistScreen(code);
-		SQLite::Statement query(*this,
-			"SELECT flags FROM authority "
-			"WHERE type = :type"
-			" AND NOT flags & :flag"
-			" AND CASE WHEN filter_unsigned IS NULL THEN remarks = :remarks ELSE filter_unsigned = :screen END");
-		query.bind(":type").integer(type);
-		query.bind(":flag").integer(kAuthorityFlagDefault);
-		query.bind(":screen") = screen;
-		query.bind(":remarks") = cfString(path);
-		if (!query.nextRow())	// guaranteed no matching rule
-			return false;
-		matchFlags = SQLite3::int64(query[0]);
-	}
+    secnotice("gk", "temporarySigning type=%d matchFlags=0x%x path=%s", type, int(matchFlags), cfString(path).c_str());
+
+    // see if we have a screened record to take matchFlags from
+    std::string screen = createWhitelistScreen(code);
+    SQLite::Statement query(*this,
+        "SELECT flags FROM authority "
+        "WHERE type = :type"
+        " AND NOT flags & :flag"
+        " AND CASE WHEN filter_unsigned IS NULL THEN remarks = :remarks ELSE filter_unsigned = :screen END");
+    query.bind(":type").integer(type);
+    query.bind(":flag").integer(kAuthorityFlagDefault);
+    query.bind(":screen") = screen;
+    query.bind(":remarks") = cfString(path);
+    secdebug("gk", "match screen=%s", screen.c_str());
+    if (query.nextRow())	// got a matching rule
+        matchFlags = SQLite3::int64(query[0]);
+    else if (matchFlags == 0)  // lazy and no match
+        return false;
+    secdebug("gk", "matchFlags found=0x%x", int(matchFlags));
 
 	try {
 		// ad-hoc sign the code and attach the signature
@@ -302,7 +333,8 @@ bool PolicyEngine::temporarySigning(SecStaticCodeRef code, AuthorityType type, C
 		SecCodeCopyDesignatedRequirement(code, kSecCSDefaultFlags, &dr);
 		CFStringRef drs = NULL;
 		SecRequirementCopyString(dr, kSecCSDefaultFlags, &drs);
-
+        secnotice("gk", "successfully created temporary signature - requirement=%s", cfString(drs).c_str());
+        
 		// if we're in GKE recording mode, save that signature and report its location
 		if (SYSPOLICY_RECORDER_MODE_ENABLED()) {
 			int status = recorder_code_unable;	// ephemeral signature (not recorded)
@@ -355,7 +387,7 @@ void PolicyEngine::evaluateCode(CFURLRef path, AuthorityType type, SecAssessment
 	}
 	
 	CFCopyRef<SecStaticCodeRef> code;
-	MacOSError::check(SecStaticCodeCreateWithPath(path, kSecCSDefaultFlags, &code.aref()));
+	MacOSError::check(SecStaticCodeCreateWithPath(path, kSecCSDefaultFlags | kSecCSForceOnlineNotarizationCheck, &code.aref()));
 	
 	SecCSFlags validationFlags = kSecCSEnforceRevocationChecks | kSecCSCheckAllArchitectures;
 	if (!(flags & kSecAssessmentFlagAllowWeak))
@@ -365,15 +397,7 @@ void PolicyEngine::evaluateCode(CFURLRef path, AuthorityType type, SecAssessment
 	// deal with a very special case (broken 10.6/10.7 Applet bundles)
 	OSStatus rc = SecStaticCodeCheckValidity(code, validationFlags | kSecCSBasicValidateOnly, NULL);
 	if (rc == errSecCSSignatureFailed) {
-		if (!codeInvalidityExceptions(code, result)) {	// invalidly signed, no exceptions -> error
-			if (SYSPOLICY_ASSESS_OUTCOME_BROKEN_ENABLED())
-				SYSPOLICY_ASSESS_OUTCOME_BROKEN(cfString(path).c_str(), type, false);
-			MacOSError::throwMe(rc);
-		}
-		// recognized exception - treat as unsigned
-		if (SYSPOLICY_ASSESS_OUTCOME_BROKEN_ENABLED())
-			SYSPOLICY_ASSESS_OUTCOME_BROKEN(cfString(path).c_str(), type, true);
-		rc = errSecCSUnsigned;
+		MacOSError::throwMe(rc);
 	}
 
 	// ad-hoc sign unsigned code
@@ -416,7 +440,7 @@ void PolicyEngine::evaluateCode(CFURLRef path, AuthorityType type, SecAssessment
 		}
 		return NULL;
 	}));
-	
+
 	// go for it!
 	SecCSFlags topFlags = validationFlags | kSecCSCheckNestedCode | kSecCSRestrictSymlinks | kSecCSReportProgress;
 	if (type == kAuthorityExecute && !appOk)
@@ -456,8 +480,9 @@ void PolicyEngine::evaluateCode(CFURLRef path, AuthorityType type, SecAssessment
 			if (CFEqual(verdict, kCFBooleanFalse))	// nested code rejected by rule book; result was filled out there
 				return;
 			if (CFEqual(verdict, kCFBooleanTrue) && !(flags & kSecAssessmentFlagIgnoreWhitelist))
-				if (mOpaqueWhitelist.contains(code, feedback, rc))
+				if (opaqueWhiteListContains(code, feedback, rc)) {
 					allow = true;
+				}
 		}
 		if (allow) {
 			label = "allowed cdhash";
@@ -471,6 +496,18 @@ void PolicyEngine::evaluateCode(CFURLRef path, AuthorityType type, SecAssessment
 	}
 	default:
 		MacOSError::throwMe(rc);
+	}
+
+	// Copy notarization date, if present, from code signing information
+	CFRef<CFDictionaryRef> info;
+	OSStatus status = SecCodeCopySigningInformation(code, kSecCSInternalInformation, &info.aref());
+	if (status == 0 && info) {
+		CFDateRef date = (CFDateRef)CFDictionaryGetValue(info, kSecCodeInfoNotarizationDate);
+		if (date) {
+			cfadd(result, "{%O=%O}", kSecAssessmentAssessmentNotarizationDate, date);
+		}
+	} else {
+		secerror("Unable to copy signing information: %d", (int)status);
 	}
 	
 	if (nestedFailure && CFEqual(CFDictionaryGetValue(result, kSecAssessmentAssessmentVerdict), kCFBooleanTrue)) {
@@ -534,6 +571,9 @@ void PolicyEngine::evaluateInstall(CFURLRef path, SecAssessmentFlags flags, CFDi
 	if (CFRef<CFArrayRef> certs = xar.copyCertChain()) {
 		CFRef<CFTypeRef> policy = installerPolicy();
 		CFRef<SecTrustRef> trust;
+		CFRef<CFDataRef> checksum;
+		CFRef<CFStringRef> teamID;
+		CFRef<CFMutableDictionaryRef> requirementContext = makeCFMutableDictionary();
 		MacOSError::check(SecTrustCreateWithCertificates(certs, policy, &trust.aref()));
 //		MacOSError::check(SecTrustSetAnchorCertificates(trust, cfEmptyArray())); // no anchors
 		MacOSError::check(SecTrustSetOptions(trust, kSecTrustOptionAllowExpired | kSecTrustOptionImplicitAnchors));
@@ -559,6 +599,42 @@ void PolicyEngine::evaluateInstall(CFURLRef path, SecAssessmentFlags flags, CFDi
 			}
 		}
 
+		xar.registerStapledNotarization();
+		checksum.take(xar.createPackageChecksum());
+		if (checksum) {
+			double notarizationDate = NAN;
+
+			// Force a single online check for the checksum, which is always SHA1.
+			bool is_revoked = checkNotarizationServiceForRevocation(checksum, kSecCodeSignatureHashSHA1, &notarizationDate);
+			if (is_revoked) {
+				MacOSError::throwMe(errSecCSRevokedNotarization);
+			}
+
+			// Extract a team identifier from the certificates.  This isn't validated and could be spoofed,
+			// but since the 'legacy' keyword is only used in addition to the Developer ID requirement,
+			// this is still stafe for now.
+			SecCertificateRef leaf = SecCertificateRef(CFArrayGetValueAtIndex(certs, 0));
+			CFRef<CFArrayRef> orgUnits = SecCertificateCopyOrganizationalUnit(leaf);
+			if (orgUnits.get() && CFArrayGetCount(orgUnits) == 1) {
+				teamID = (CFStringRef)CFArrayGetValueAtIndex(orgUnits, 0);
+			}
+
+			// Create the appropriate requirement context entry to allow notarized requirement check.
+			CFRef<CFNumberRef> algorithm = makeCFNumber((uint32_t)xar.checksumDigestAlgorithm());
+			cfadd(requirementContext, "{%O=%O}", kSecRequirementKeyPackageChecksum, checksum.get());
+			cfadd(requirementContext, "{%O=%O}", kSecRequirementKeyChecksumAlgorithm, algorithm.get());
+			if (teamID.get()) {
+				cfadd(requirementContext, "{%O=%O}", kSecRequirementKeyTeamIdentifier, teamID.get());
+			}
+
+			if (!isnan(notarizationDate)) {
+				CFRef<CFDateRef> date = CFDateCreate(NULL, notarizationDate);
+				if (date) {
+					cfadd(result, "{%O=%O}", kSecAssessmentAssessmentNotarizationDate, date.get());
+				}
+			}
+		}
+
 		SQLite::Statement query(*this,
 			"SELECT allow, requirement, id, label, flags, disabled FROM scan_authority"
 			" WHERE type = :type"
@@ -571,10 +647,10 @@ void PolicyEngine::evaluateInstall(CFURLRef path, SecAssessmentFlags flags, CFDi
 			const char *label = query[3];
 			//sqlite_uint64 ruleFlags = query[4];
 			SQLite3::int64 disabled = query[5];
-	
+
 			CFRef<SecRequirementRef> requirement;
 			MacOSError::check(SecRequirementCreateWithString(CFTempString(reqString), kSecCSDefaultFlags, &requirement.aref()));
-			switch (OSStatus rc = SecRequirementEvaluate(requirement, chain, NULL, kSecCSDefaultFlags)) {
+			switch (OSStatus rc = SecRequirementEvaluate(requirement, chain, requirementContext.get(), kSecCSDefaultFlags)) {
 			case errSecSuccess: // success
 				break;
 			case errSecCSReqFailed: // requirement missed, but otherwise okay
@@ -1110,17 +1186,6 @@ void PolicyEngine::normalizeTarget(CFRef<CFTypeRef> &target, AuthorityType type,
 			}
 			MacOSError::check(rc);
 		case errSecCSSignatureFailed:
-			// recover certain cases of broken signatures (well, try)
-			if (codeInvalidityExceptions(code, NULL)) {
-				// Ad-hoc sign the code in place (requiring a writable subject). This requires root privileges.
-				CFRef<SecCodeSignerRef> signer;
-				CFTemp<CFDictionaryRef> arguments("{%O=#N}", kSecCodeSignerIdentity);
-				MacOSError::check(SecCodeSignerCreate(arguments, kSecCSSignOpaque, &signer.aref()));
-				MacOSError::check(SecCodeSignerAddSignature(signer, code, kSecCSDefaultFlags));
-				MacOSError::check(SecCodeCopyDesignatedRequirement(code, kSecCSDefaultFlags, (SecRequirementRef *)&target.aref()));
-				break;
-			}
-			MacOSError::check(rc);
 		default:
 			MacOSError::check(rc);
 		}
@@ -1135,33 +1200,10 @@ void PolicyEngine::normalizeTarget(CFRef<CFTypeRef> &target, AuthorityType type,
 		CFStringRef edit = CFStringRef(context.get(kSecAssessmentContextKeyUpdate));
 		if (type == kAuthorityExecute && CFEqual(edit, kSecAssessmentUpdateOperationAdd)) {
 			// implicitly whitelist the code
-			mOpaqueWhitelist.add(code);
+			opaqueWhitelistAdd(code);
 		}
 	}
 }
-
-
-//
-// Process special overrides for invalidly signed code.
-// This is the (hopefully minimal) concessions we make to keep hurting our customers
-// for our own prior mistakes...
-//
-static bool codeInvalidityExceptions(SecStaticCodeRef code, CFMutableDictionaryRef result)
-{
-	CFRef<CFDictionaryRef> info;
-	MacOSError::check(SecCodeCopySigningInformation(code, kSecCSDefaultFlags, &info.aref()));
-	if (CFURLRef executable = CFURLRef(CFDictionaryGetValue(info, kSecCodeInfoMainExecutable))) {
-		SInt32 error;
-		if (OSAIsRecognizedExecutableURL(executable, &error)) {
-			if (result)
-				CFDictionaryAddValue(result,
-					kSecAssessmentAssessmentAuthorityOverride, CFSTR("ignoring known invalid applet signature"));
-			return true;
-		}
-	}
-	return false;
-}
-
 
 } // end namespace CodeSigning
 } // end namespace Security

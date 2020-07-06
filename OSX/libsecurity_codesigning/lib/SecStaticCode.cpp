@@ -52,8 +52,8 @@ OSStatus SecStaticCodeCreateWithPath(CFURLRef path, SecCSFlags flags, SecStaticC
 {
 	BEGIN_CSAPI
 
-	checkFlags(flags);
-	CodeSigning::Required(staticCodeRef) = (new SecStaticCode(DiskRep::bestGuess(cfString(path).c_str())))->handle();
+	checkFlags(flags, kSecCSForceOnlineNotarizationCheck);
+	CodeSigning::Required(staticCodeRef) = (new SecStaticCode(DiskRep::bestGuess(cfString(path).c_str()), flags))->handle();
 
 	END_CSAPI
 }
@@ -68,7 +68,7 @@ OSStatus SecStaticCodeCreateWithPathAndAttributes(CFURLRef path, SecCSFlags flag
 {
 	BEGIN_CSAPI
 
-	checkFlags(flags);
+	checkFlags(flags, kSecCSForceOnlineNotarizationCheck);
 	DiskRep::Context ctx;
 	std::string version; // holds memory placed into ctx
 	if (attributes) {
@@ -87,7 +87,7 @@ OSStatus SecStaticCodeCreateWithPathAndAttributes(CFURLRef path, SecCSFlags flag
 			ctx.version = version.c_str();
 	}
 
-	CodeSigning::Required(staticCodeRef) = (new SecStaticCode(DiskRep::bestGuess(cfString(path).c_str(), &ctx)))->handle();
+	CodeSigning::Required(staticCodeRef) = (new SecStaticCode(DiskRep::bestGuess(cfString(path).c_str(), &ctx), flags))->handle();
 
 	END_CSAPI
 }
@@ -117,10 +117,14 @@ OSStatus SecStaticCodeCheckValidityWithErrors(SecStaticCodeRef staticCodeRef, Se
 		| kSecCSNoNetworkAccess
 		| kSecCSCheckNestedCode
 		| kSecCSStrictValidate
+		| kSecCSStrictValidateStructure
 		| kSecCSRestrictSidebandData
 		| kSecCSCheckGatekeeperArchitectures
 		| kSecCSRestrictSymlinks
 		| kSecCSRestrictToAppLike
+        | kSecCSUseSoftwareSigningCert
+	    | kSecCSValidatePEH
+		| kSecCSSingleThreaded
 	);
 
 	if (errors)
@@ -131,6 +135,20 @@ OSStatus SecStaticCodeCheckValidityWithErrors(SecStaticCodeRef staticCodeRef, Se
 	const SecRequirement *req = SecRequirement::optional(requirementRef);
 	DTRACK(CODESIGN_EVAL_STATIC, code, (char*)code->mainExecutablePath().c_str());
 	code->staticValidate(flags, req);
+
+#if TARGET_OS_IPHONE
+    // Everything checked out correctly but we need to make sure that when
+    // we validated the code directory, we trusted the signer.  We defer this
+    // until now because the caller may still trust the signer via a
+    // provisioning profile so if we prematurely throw an error when validating
+    // the directory, we potentially skip resource validation even though the
+    // caller will go on to trust the signature
+    // <rdar://problem/6075501> Applications that are validated against a provisioning profile do not have their resources checked
+    if (code->trustedSigningCertChain() == false) {
+        return CSError::cfError(errors, errSecCSSignatureUntrusted);
+    }
+#endif
+
 
 	END_CSAPI_ERRORS
 }
@@ -222,10 +240,38 @@ OSStatus SecCodeMapMemory(SecStaticCodeRef codeRef, SecCSFlags flags)
 	checkFlags(flags);
 	SecPointer<SecStaticCode> code = SecStaticCode::requiredStatic(codeRef);
 	if (const CodeDirectory *cd = code->codeDirectory(false)) {
-		fsignatures args = { static_cast<off_t>(code->diskRep()->signingBase()), (void *)cd, cd->length() };
-		UnixError::check(::fcntl(code->diskRep()->fd(), F_ADDSIGS, &args));
-	} else
+		if (code->isDetached()) {
+			// Detached signatures need to attach their code directory from memory.
+			fsignatures args = { static_cast<off_t>(code->diskRep()->signingBase()), (void *)cd, cd->length() };
+			UnixError::check(::fcntl(code->diskRep()->fd(), F_ADDSIGS, &args));
+		} else {
+			// All other signatures can simply point to the signature in the main executable.
+			Universal *execImage = code->diskRep()->mainExecutableImage();
+			if (execImage == NULL) {
+				MacOSError::throwMe(errSecCSNoMainExecutable);
+			}
+
+			auto_ptr<MachO> arch(execImage->architecture());
+			if (arch.get() == NULL) {
+				MacOSError::throwMe(errSecCSNoMainExecutable);
+			}
+
+			size_t signatureOffset = arch->signingOffset();
+			size_t signatureLength = arch->signingLength();
+			if (signatureOffset == 0) {
+				MacOSError::throwMe(errSecCSUnsigned);
+			}
+
+			fsignatures args = {
+				static_cast<off_t>(code->diskRep()->signingBase()),
+				(void *)signatureOffset,
+				signatureLength,
+			};
+			UnixError::check(::fcntl(code->diskRep()->fd(), F_ADDFILESIGS, &args));
+		}
+	} else {
 		MacOSError::throwMe(errSecCSUnsigned);
+	}
 
 	END_CSAPI
 }

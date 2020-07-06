@@ -38,9 +38,12 @@
 #include <security_asn1/secerr.h>
 #include <security_asn1/secport.h>
 
+#if USE_CDSA_CRYPTO
+#include <Security/cssmapple.h>
+#else
 #include <Security/oidsalg.h>
 #include <CommonCrypto/CommonCryptor.h>
-
+#endif
 #include <pthread.h>
 
 /* MISSI Mosaic Object ID space */
@@ -478,13 +481,21 @@ __unused CONST_OID mqvSinglePassSha1kdf[]			= {ANSI_X9_63_SCHEME, 4 };
 
 /* Apple Hash Agility */
 CONST_OID appleHashAgility[]                = {APPLE_CMS_ATTRIBUTES, 1};
+CONST_OID appleHashAgilityV2[]              = {APPLE_CMS_ATTRIBUTES, 2};
+
+/* Apple Expiration Time */
+CONST_OID appleExpirationTime[]             = {APPLE_CMS_ATTRIBUTES, 3};
 
 /* a special case: always associated with a caller-specified OID */
 CONST_OID noOid[]				= { 0 };
 
 #define OI(x) { sizeof x, (uint8_t *)x }
 #ifndef SECOID_NO_STRINGS
+#if USE_CDSA_CRYPTO
+#define OD(oid,tag,desc,mech,ext) { OI(oid), tag, desc, mech, ext }
+#else
 #define OD(oid,tag,desc,mech,ext) { OI(oid), tag, desc, ext }
+#endif
 #else
 #define OD(oid,tag,desc,mech,ext) { OI(oid), tag, 0, mech, ext }
 #endif
@@ -1154,6 +1165,14 @@ static const SECOidData oids[] = {
     OD( appleHashAgility, SEC_OID_APPLE_HASH_AGILITY,
        "appleCodesigningHashAgilityAttribute", CSSM_ALGID_NONE,
        INVALID_CERT_EXTENSION),
+    OD( appleHashAgilityV2, SEC_OID_APPLE_HASH_AGILITY_V2,
+       "appleCodesigningHashAgilityAttributeV2", CSSM_ALGID_NONE,
+       INVALID_CERT_EXTENSION),
+
+    /* Apple Expiration Time */
+    OD( appleExpirationTime, SEC_OID_APPLE_EXPIRATION_TIME,
+       "appleExpirationTimeAttribute", CSSM_ALGID_NONE,
+       INVALID_CERT_EXTENSION),
 
 };
 
@@ -1334,16 +1353,28 @@ InitOIDHash(void)
     }
 
     for ( ix = 0; ix < ( sizeof(oids) / sizeof(SECOidData) ); ix++ ) {
-        oid = &oids[ix];
+	oid = &oids[ix];
 
-        PORT_Assert ( oid->offset == ix );
+	PORT_Assert ( oid->offset == ix );
 
-        entry = PL_HashTableAdd( oidhash, &oid->oid, (void *)oid );
-        if ( entry == NULL ) {
-            PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
-                PORT_Assert(0); /*This function should never fail. */
-            return(SECFailure);
-        }
+	entry = PL_HashTableAdd( oidhash, &oid->oid, (void *)oid );
+	if ( entry == NULL ) {
+	    PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
+            PORT_Assert(0); /*This function should never fail. */
+	    return(SECFailure);
+	}
+
+#if USE_CDSA_CRYPTO
+	if ( oid->cssmAlgorithm.algorithm.Length /*CSSM_ALGID_NONE*/ ) {
+	    entry = PL_HashTableAdd( oidmechhash, 
+					(void *)&(oid->cssmAlgorithm), (void *)oid );
+	    if ( entry == NULL ) {
+	        PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
+                PORT_Assert(0); /* This function should never fail. */
+		return(SECFailure);
+	    }
+	}
+#endif
     }
 
     PORT_Assert (ix == SEC_OID_TOTAL);

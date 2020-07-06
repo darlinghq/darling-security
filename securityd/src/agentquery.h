@@ -89,7 +89,7 @@ public:
 	virtual void disconnect();
 	virtual void terminate();
 	void create(const char *pluginId, const char *mechanismId);
-    OSStatus invoke();
+    void invoke();
     void setTerminateOnSleep(bool terminateOnSleep) {mTerminateOnSleep = terminateOnSleep;}
     bool getTerminateOnSleep() {return mTerminateOnSleep;}
     void setInput(const AuthItemSet& inHints, const AuthItemSet& inContext) { mInHints = inHints; mInContext = inContext; }
@@ -255,7 +255,7 @@ class QueryKeychainAuth : public SecurityAgentXPCQuery {
 public:
     QueryKeychainAuth()  { }
     // "prompt" can be NULL
-    Reason operator () (const char *database, const char *description, AclAuthorization action, const char *prompt);
+    Reason performQuery(const KeychainDatabase&, const char *description, AclAuthorization action, const char *prompt);
     Reason accept(string &username, string &passphrase);
 };
 

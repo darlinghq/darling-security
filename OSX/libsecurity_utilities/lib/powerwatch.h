@@ -28,6 +28,10 @@
 #ifndef _H_POWERWATCH
 #define _H_POWERWATCH
 
+#include <TargetConditionals.h>
+
+#if TARGET_OS_OSX
+
 #include <security_utilities/machserver.h>
 #include <IOKit/pwr_mgt/IOPMLib.h>
 #include <IOKit/pwr_mgt/IOPMLibPrivate.h>
@@ -52,11 +56,6 @@ public:
     virtual void systemIsWaking();
     virtual void systemWillPowerDown();
 	virtual void systemWillPowerOn();
-
-    bool inDarkWake() { return mInDarkWake; }
-
- protected:
-    bool mInDarkWake;
 };
 
 
@@ -72,20 +71,9 @@ protected:
     io_connect_t mKernelPort;
     IONotificationPortRef mPortRef;
     io_object_t mHandle;
-    IOPMConnection mIOPMconn;
-    dispatch_queue_t mIOPMqueue;
-    dispatch_group_t mDarkWakeGroup;
-    IOPMNotificationHandle mUserActiveHandle;
-    
+
     static void ioCallback(void *refCon, io_service_t service,
         natural_t messageType, void *argument);
-
-    static void
-    iopmcallback(void * param,  IOPMConnection connection,
-		 IOPMConnectionMessageToken token, 
-		 IOPMSystemPowerStateCapabilities capabilities);
-
-    void setupDarkWake();
 
 };
 
@@ -110,5 +98,7 @@ public:
 } // end namespace MachPlusPlus
 
 } // end namespace Security
+
+#endif //TARGET_OS_OSX
 
 #endif //_H_POWERWATCH

@@ -26,6 +26,7 @@
 // dbcrypto - cryptographic core for database and key blob cryptography
 //
 #include "dbcrypto.h"
+#include "SecRandom.h"
 #include <security_utilities/casts.h>
 #include <securityd_client/ssblob.h>
 #include "server.h"		// just for Server::csp()
@@ -140,8 +141,10 @@ void DatabaseCryptoCore::setup(const DbBlob *blob, const CssmData &passphrase, b
             mBlobVersion = blob->version();
         }
         memcpy(mSalt, blob->salt, sizeof(mSalt));
-    } else
-		Server::active().random(mSalt);
+    } else {
+        MacOSError::check(SecRandomCopyBytes(kSecRandomDefault, sizeof(mSalt), mSalt));
+    }
+
     mMasterKey = deriveDbMasterKey(passphrase);
 	mHaveMaster = true;
 }
@@ -167,8 +170,9 @@ void DatabaseCryptoCore::setup(const DbBlob *blob, CssmClient::Key master, bool 
             mBlobVersion = blob->version();
         }
         memcpy(mSalt, blob->salt, sizeof(mSalt));
-    } else
-		Server::active().random(mSalt);
+    } else {
+        MacOSError::check(SecRandomCopyBytes(kSecRandomDefault, sizeof(mSalt), mSalt));
+    }
 	mMasterKey = master;
 	mHaveMaster = true;
 }
@@ -208,7 +212,8 @@ bool DatabaseCryptoCore::validateKey(const CssmClient::Key& master) {
 	cryptor.mode(CSSM_ALGMODE_CBCPadIV8);
 	cryptor.padding(CSSM_PADDING_PKCS1);
 	uint8 iv[8];	// leave uninitialized; pseudo-random is cool
-	cryptor.initVector(CssmData::wrap(iv));
+    CssmData ivData = CssmData::wrap(iv);
+	cryptor.initVector(ivData);
 	
 	cryptor.key(master);
 	CssmAutoData cipher1(Server::csp().allocator());
@@ -232,7 +237,7 @@ DbBlob *DatabaseCryptoCore::encodeCore(const DbBlob &blobTemplate,
 
     // make a new IV
     uint8 iv[8];
-    Server::active().random(iv);
+    MacOSError::check(SecRandomCopyBytes(kSecRandomDefault, sizeof(iv), iv));
     
     // build the encrypted section blob
     CssmData &encryptionBits = *mEncryptionKey;
@@ -390,7 +395,7 @@ KeyBlob *DatabaseCryptoCore::encodeKeyCore(const CssmKey &inKey,
 		assert(isValid());		// need our database secrets
 		
 		// create new IV
-		Server::active().random(iv);
+        MacOSError::check(SecRandomCopyBytes(kSecRandomDefault, sizeof(iv), iv));
 		
 	   // use a CMS wrap to encrypt the key
 		WrapKey wrap(Server::csp(), CSSM_ALGID_3DES_3KEY_EDE);

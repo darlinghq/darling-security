@@ -53,6 +53,7 @@
 
 #include <dispatch/dispatch.h>
 
+#include "keychain/ckks/CKKS.h"
 
 int test_strict_bats = 1;
 int test_verbose = 0;
@@ -61,7 +62,7 @@ int test_check_leaks = 0;
 char **test_skip_leaks_test = NULL;
 
 #ifdef NO_SERVER
-#include <securityd/spi.h>
+#include "keychain/securityd/spi.h"
 
 static int current_dir = -1;
 static char scratch_dir[50];
@@ -70,7 +71,7 @@ static char *home_var;
 static int
 rmdir_recursive(const char *path)
 {
-#if (!TARGET_IPHONE_SIMULATOR)
+#if (!TARGET_OS_SIMULATOR)
     char command_buf[256];
 	if (strlen(path) + 10 > sizeof(command_buf) || strchr(path, '\''))
 	{
@@ -126,8 +127,10 @@ static int tests_init(void) {
                                                                  error:&error],
                   "Failed to make %@: %@", preferencesURL, error);
 
-    if (ok > 0)
+    if (ok > 0) {
         securityd_init((__bridge CFURLRef) tmpDirURL);
+        SecCKKSDisable();
+    }
 
 #endif
 

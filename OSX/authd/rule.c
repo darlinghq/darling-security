@@ -11,6 +11,9 @@
 #include <Security/AuthorizationDB.h>
 #include <Security/AuthorizationTagsPriv.h>
 #include "server.h"
+#include <libproc.h>
+
+AUTHD_DEFINE_LOG
 
 static void _sql_get_id(rule_t,authdb_connection_t);
 static RuleClass _get_cf_rule_class(CFTypeRef);
@@ -54,13 +57,13 @@ static void
 _rule_finalize(CFTypeRef value)
 {
     rule_t rule = (rule_t)value;
-    CFReleaseSafe(rule->data);
-    CFReleaseSafe(rule->mechanisms);
-    CFReleaseSafe(rule->delegations);
-    CFReleaseSafe(rule->loc_prompts);
-    CFReleaseSafe(rule->loc_buttons);
-    CFReleaseSafe(rule->requirement_data);
-    CFReleaseSafe(rule->requirement);
+    CFReleaseNull(rule->data);
+    CFReleaseNull(rule->mechanisms);
+    CFReleaseNull(rule->delegations);
+    CFReleaseNull(rule->loc_prompts);
+    CFReleaseNull(rule->loc_buttons);
+    CFReleaseNull(rule->requirement_data);
+    CFReleaseNull(rule->requirement);
 }
 
 static Boolean
@@ -179,6 +182,27 @@ rule_create_default()
     
 done:
     return rule;
+}
+
+rule_t
+rule_create_preauthorization()
+{
+	rule_t rule = _rule_create();
+	require(rule != NULL, done);
+
+	auth_items_set_int64(rule->data, RULE_TYPE, RT_RIGHT);
+	auth_items_set_string(rule->data, RULE_NAME, "(preauthorization)");
+	auth_items_set_int64(rule->data, RULE_CLASS, RC_USER);
+	auth_items_set_string(rule->data, RULE_GROUP, "admin");
+	auth_items_set_int64(rule->data, RULE_TRIES, 1);
+	auth_items_set_int64(rule->data, RULE_FLAGS, RuleFlagShared | RuleFlagAuthenticateUser | RuleFlagRequireAppleSigned);
+
+	mechanism_t mech = mechanism_create_with_string("builtin:authenticate,privileged", NULL);
+	CFArrayAppendValue(rule->mechanisms, mech);
+	CFReleaseNull(mech);
+
+done:
+	return rule;
 }
 
 rule_t
@@ -308,7 +332,7 @@ rule_create_with_plist(RuleType type, CFStringRef name, CFDictionaryRef plist, a
         case RC_ALLOW:
             break;
         default:
-            LOGD("rule: invalid rule class");
+            os_log_error(AUTHD_LOG, "rule: invalid rule class");
             break;
     }
     
@@ -490,7 +514,7 @@ _sql_bind(rule_t rule, sqlite3_stmt * stmt)
             require_noerr(rc, err);
             break;
         default:
-            LOGD("rule: sql bind, invalid rule class");
+            os_log_error(AUTHD_LOG, "rule: sql bind, invalid rule class");
             break;
     }
 
@@ -519,7 +543,7 @@ _sql_bind(rule_t rule, sqlite3_stmt * stmt)
     return true;
     
 err:
-    LOGD("rule: sql bind, error %i", rc);
+    os_log_error(AUTHD_LOG, "rule: sql bind, error %i", rc);
     return false;
 }
 
@@ -724,6 +748,7 @@ bool
 rule_sql_commit(rule_t rule, authdb_connection_t dbconn, CFAbsoluteTime modified, process_t proc)
 {
     bool result = false;
+    __block bool insert = false;
     // type and class required else rule is name only?
     RuleClass rule_class = rule_get_class(rule);
     require(rule_get_type(rule) != 0, done);
@@ -742,9 +767,9 @@ rule_sql_commit(rule_t rule, authdb_connection_t dbconn, CFAbsoluteTime modified
                 }
             }
             if (!mechanism_exists(mech)) {
-                LOGE("Warning mechanism not found on disk %s during import of %s", mechanism_get_string(mech), rule_get_name(rule));
+                os_log_error(AUTHD_LOG, "Warning mechanism not found on disk %{public}s during import of %{public}s", mechanism_get_string(mech), rule_get_name(rule));
             }
-            require_action(mechanism_get_id(mech) != 0, done, LOGE("rule: commit, invalid mechanism %s:%s for %s", mechanism_get_plugin(mech), mechanism_get_param(mech), rule_get_name(rule)));
+            require_action(mechanism_get_id(mech) != 0, done, os_log_error(AUTHD_LOG, "rule: commit, invalid mechanism %{public}s:%{public}s for %{public}s", mechanism_get_plugin(mech), mechanism_get_param(mech), rule_get_name(rule)));
         }
     }
     
@@ -757,7 +782,7 @@ rule_sql_commit(rule_t rule, authdb_connection_t dbconn, CFAbsoluteTime modified
             if (rule_get_id(delegate) == 0) {
                 rule_sql_fetch(delegate, dbconn);
             }
-            require_action(rule_get_id(delegate) != 0, done, LOGE("rule: commit, missing delegate %s for %s", rule_get_name(delegate), rule_get_name(rule)));
+            require_action(rule_get_id(delegate) != 0, done, os_log_error(AUTHD_LOG, "rule: commit, missing delegate %{public}s for %{public}s", rule_get_name(delegate), rule_get_name(rule)));
         }
     }
     
@@ -769,6 +794,7 @@ rule_sql_commit(rule_t rule, authdb_connection_t dbconn, CFAbsoluteTime modified
         if (rule_get_id(rule)) {
             update = _sql_update(rule, dbconn);
         } else {
+            insert = true;
             if (proc) {
                 const char * ident = process_get_identifier(proc);
                 if (ident) {
@@ -800,13 +826,15 @@ rule_sql_commit(rule_t rule, authdb_connection_t dbconn, CFAbsoluteTime modified
     
 done:
     if (!result) {
-        LOGV("rule: commit, failed for %s (%llu)", rule_get_name(rule), rule_get_id(rule));
+        os_log_debug(AUTHD_LOG, "rule: commit, failed for %{public}s (%llu)", rule_get_name(rule), rule_get_id(rule));
+    } else {
+        rule_log_manipulation(dbconn, rule, insert ? rule_insert : rule_update, proc);
     }
     return result;
 }
 
 bool
-rule_sql_remove(rule_t rule, authdb_connection_t dbconn)
+rule_sql_remove(rule_t rule, authdb_connection_t dbconn, process_t proc)
 {
     bool result = false;
     int64_t id = rule_get_id(rule);
@@ -821,7 +849,12 @@ rule_sql_remove(rule_t rule, authdb_connection_t dbconn)
                          ^(sqlite3_stmt *stmt) {
                              sqlite3_bind_int64(stmt, 1, id);
                          }, NULL);
-done:
+    
+    if (result) {
+        rule_log_manipulation(dbconn, rule, rule_delete, proc);
+    }
+    
+done:  
     return result;
 }
 
@@ -1222,4 +1255,26 @@ SecRequirementRef rule_get_requirement(rule_t rule)
     }
     
     return rule->requirement;
+}
+
+void
+rule_log_manipulation(authdb_connection_t dbconn, rule_t rule, RuleOperation operation, process_t source)
+{
+    authdb_step(dbconn, "INSERT INTO rules_history (rule, source, operation, version) VALUES (?,?,?,?)", ^(sqlite3_stmt *stmt) {
+        char pathbuf[PROC_PIDPATHINFO_MAXSIZE];
+        if (source) {
+            pid_t pid = process_get_pid(source);
+            if (!proc_pidpath(pid, pathbuf, sizeof(pathbuf))) {
+                os_log_error(AUTHD_LOG, "Failed to get path for pid %d", pid);
+                snprintf(pathbuf, sizeof(pathbuf), "Unknown process with PID %d", pid);
+            }
+        } else {
+            strncpy(pathbuf, "authd", sizeof(pathbuf));
+        }
+        
+        sqlite3_bind_text(stmt, 1, rule_get_name(rule), -1, NULL);
+        sqlite3_bind_text(stmt, 2, pathbuf, -1, NULL);
+        sqlite3_bind_int(stmt, 3, operation);
+        sqlite3_bind_int64(stmt, 4, rule_get_version(rule));
+    }, NULL);
 }
