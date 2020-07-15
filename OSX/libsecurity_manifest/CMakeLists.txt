@@ -1,15 +1,13 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_manifest)
 
-add_darling_static_library(security_manifest FAT
+add_macos_legacy_lib(security_manifest
 	SOURCES
-		lib/ManifestSigner.cpp
-		lib/Manifest.cpp
-		lib/SecManifest.cpp
-		lib/SecureDownloadInternal.c
-		lib/SecureDownload.cpp
-		lib/ManifestInternal.cpp
-		lib/Download.cpp
 		lib/AppleManifest.cpp
+		lib/Download.cpp
+		lib/Manifest.cpp
+		lib/ManifestInternal.cpp
+		lib/ManifestSigner.cpp
+		lib/SecManifest.cpp
+		lib/SecureDownload.cpp
+		lib/SecureDownloadInternal.c
 )

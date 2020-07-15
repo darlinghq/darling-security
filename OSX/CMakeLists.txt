@@ -1,5 +1,5 @@
 add_subdirectory(libsecurity_asn1)
-add_subdirectory(sec)
+add_subdirectory(sec/Security)
 add_subdirectory(libsecurity_apple_csp)
 add_subdirectory(libsecurity_apple_cspdl)
 add_subdirectory(libsecurity_apple_file_dl)
@@ -23,7 +23,6 @@ add_subdirectory(libsecurity_mds)
 add_subdirectory(libsecurity_ocspd)
 add_subdirectory(libsecurity_pkcs12)
 add_subdirectory(libsecurity_sd_cspdl)
-add_subdirectory(libsecurity_smime)
 add_subdirectory(libsecurity_ssl)
 add_subdirectory(libsecurity_transform)
 add_subdirectory(libsecurity_translocate)
@@ -32,7 +31,50 @@ add_subdirectory(libsecurityd)
 add_subdirectory(utilities)
 
 set(DYLIB_COMPAT_VERSION "1.0.0")
-set(DYLIB_CURRENT_VERSION "57740.51.3")
+set(DYLIB_CURRENT_VERSION "59306.61.1")
+
+add_compile_definitions(
+	CORECRYPTO_DONOT_USE_TRANSPARENT_UNION=1
+)
+
+add_darling_object_library(Security_x86_64
+	x86_64_ONLY
+
+	../Analytics/Clients/LocalKeychainAnalytics.m
+	../Analytics/Clients/SOSAnalytics.m
+	../Analytics/NSDate+SFAnalytics.m
+	../Analytics/SFAnalytics.m
+	../Analytics/SFAnalyticsActivityTracker.m
+	../Analytics/SFAnalyticsMultiSampler.m
+	../Analytics/SFAnalyticsSampler.m
+	../Analytics/SFAnalyticsSQLiteStore.m
+	../Analytics/SQLite/SFObjCType.m
+	../Analytics/SQLite/SFSQLite.m
+	../Analytics/SQLite/SFSQLiteStatement.m
+	../keychain/escrowrequest/Framework/SecEscrowRequest.m
+
+	# all this Octagon stuff is brand new and most of it only compiles on x86_64
+	../keychain/ot/OTClique.m
+	../keychain/ot/OTConstants.m
+	../keychain/ot/OTControl.m
+	../keychain/ot/OTControlProtocol.m
+	../keychain/ot/OTDefines.m
+	../keychain/ot/OTJoiningConfiguration.m
+)
+
+target_include_directories(Security_x86_64 PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+set_source_files_properties(
+	../Analytics/SFAnalytics.m
+	../Analytics/SFAnalyticsMultiSampler.m
+	../Analytics/SFAnalyticsSampler.m
+	../Analytics/SQLite/SFSQLiteStatement.m
+
+	PROPERITES
+		COMPILE_FLAGS " -fobjc-arc"
+)
 
 add_framework(Security
 	FAT
@@ -40,37 +82,38 @@ add_framework(Security
 	VERSION "A"
 
 	SOURCES
-		lib/dummy.cpp
-		lib/version.c
 		Breadcrumb/SecBreadcrumb.c
-		../../coretls/coretls_cfhelpers/tls_helpers.c
-		../../coretls/coretls_cfhelpers/tls_helpers_identity.c
-		../../coretls/lib/sslMemory.c
+		lib/dummy.cpp
+		sec/ipc/client_endpoint.m
+		sec/ipc/client.c
+		sec/Security/SecFramework.c
+		utilities/SecCoreAnalytics.m
+		utilities/SecPaddingConfigurations.c
+		$<TARGET_OBJECTS:Security_x86_64>
+		../experiment/SecExperiment.m
+		../keychain/behavior/SFBehavior.m
+		../keychain/ckks/CKKSControl.m
+		../keychain/ckks/CKKSControlProtocol.m
+		../keychain/escrowrequest/EscrowRequestXPCProtocol.m
+		../keychain/SigninMetrics/OctagonSignPosts.m
+		../keychain/SigninMetrics/SFSignInAnalytics.m
+		../protocol/SecProtocol.c
+		../protocol/SecProtocolConfiguration.m
+		../protocol/SecProtocolHelper.m
+		../protocol/SecProtocolTypes.m
 
 	DEPENDENCIES
-		#coretls_cfhelpers
-		objc
-		pam.2
-		bsm.0
-		auto
-		z
-		xar
-		sqlite3
-		CoreFoundation
-		CryptoTokenKit
-		IOKit
-		SystemConfiguration
-		LocalAuthentication
-		DiagnosticMessagesClient
-
-		# Static libraries
+		# try to stick to the order in xcodeproj as much as possible
+		#
+		# kind of difficult because there is a mix of libraries added
+		# through target "Frameworks" and some added as plain flags
+		AppleFSCompression
 		security_asn1
 		SecItemShimOSX
 		SecOtrOSX
 		SecTrustOSX
-		SecureObjectSync
+		SecureObjectSyncFramework
 		logging
-		secipc_client
 		security_apple_csp
 		security_apple_cspdl
 		security_apple_file_dl
@@ -89,21 +132,48 @@ add_framework(Security
 		security_cssm
 		security_filedb
 		security_keychain
-		security_keychain_DER
 		security_manifest
 		security_mds
 		security_ocspd
 		security_pkcs12
 		security_sd_cspdl
-		security_smime
 		security_ssl
 		security_transform
 		security_translocate
 		security_utilities
 		securityd_client
-		securityd
 		utilities
+		DiagnosticMessagesClient
+
+		#aks_acl # missing
 		aks
+
+		bsm.0
+
+		CrashReporterClient
+
+		#coreauthd_client
+		LocalAuthentication # instead of coreauthd_client
+
+		coretls
+		#coretls_cfhelpers # missing
+
+		#ctkclient_sep
+		#ACM
+		CryptoTokenKit # instead of ctkclient_sep and ACM
+
+		DER
+		pam.2
+		sqlite3
+		xar
+		z
+		CoreFoundation
+		IOKit
+
+		# implied dependencies (not listed in Xcode, but still used)
+		objc
+		cxx
+		system
 	RESOURCES
 		cssm.mdsinfo			libsecurity_cssm/mds/cssm.mdsinfo
 		sd_cspdl_common.mdsinfo		libsecurity_sd_cspdl/mds/sd_cspdl_common.mdsinfo
@@ -129,4 +199,21 @@ add_framework(Security
 
 )
 
-set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/../SEC_MANUAL.exp")
+target_include_directories(Security PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/../SEC_MANUAL.exp -Wl,-upward_library,$<TARGET_FILE:Foundation>")
+
+include(darling_bundle)
+
+add_darling_bundle(csparser ""
+	lib/plugins/csparser.cpp
+)
+make_fat(csparser)
+target_link_libraries(csparser security_cdsa_utilities utilities)
+set_target_properties(csparser PROPERTIES
+	OUTPUT_NAME "csparser"
+	PREFIX ""
+	SUFFIX ".bundle"
+)

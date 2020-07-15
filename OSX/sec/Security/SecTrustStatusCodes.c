@@ -32,6 +32,14 @@
 #include <Security/SecTrustStatusCodes.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <libDER/oids.h>
+#ifdef DARLING
+// if i had to guess, i'd say Apple changed up libDER when they stopped releasing it and now
+// their "private" OIDs are included in the regular `libDER/oids.h` header
+//
+// if this error keeps popping up, i'll stop manually including `libDER/oidsPriv.h` and instead patch
+// `libDER/oids.h` to include `libDER/oidsPriv.h`
+#include <libDER/oidsPriv.h>
+#endif
 
 struct resultmap_entry_s {
     const CFStringRef checkstr;

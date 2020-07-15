@@ -1,12 +1,12 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_authorization)
 
-add_darling_static_library(security_authorization FAT
+add_macos_legacy_lib(security_authorization
 	SOURCES
-		lib/trampolineServer.cpp
-		lib/Authorization++.cpp
-		lib/Authorization.c
 		../authd/authutilities.c
+		lib/Authorization.c
+		lib/Authorization.cpp
 		lib/trampolineClient.cpp
+		lib/trampolineServer.cpp
+	INCLUDES
+		${CMAKE_CURRENT_SOURCE_DIR}/../authd
 )

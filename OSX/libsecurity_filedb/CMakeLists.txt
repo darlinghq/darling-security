@@ -1,16 +1,14 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_filedb)
 
-add_darling_static_library(security_filedb FAT
+add_macos_legacy_lib(security_filedb
 	SOURCES
-		lib/DbQuery.cpp
-		lib/AtomicFile.cpp
 		lib/AppleDatabase.cpp
-		lib/MetaRecord.cpp
+		lib/AtomicFile.cpp
 		lib/DbIndex.cpp
+		lib/DbQuery.cpp
 		lib/DbValue.cpp
-		lib/SelectionPredicate.cpp
 		lib/MetaAttribute.cpp
+		lib/MetaRecord.cpp
 		lib/ReadWriteSection.cpp
+		lib/SelectionPredicate.cpp
 )

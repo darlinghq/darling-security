@@ -1,23 +1,21 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_cssm)
 
-add_darling_static_library(security_cssm FAT
+add_macos_legacy_lib(security_cssm
 	SOURCES
-		lib/attachment.cpp
-		lib/modloader.cpp
-		lib/cspattachment.cpp
-		lib/cssmcontext.cpp
-		lib/oidsalg.c
-		lib/modload_plugin.cpp
-		lib/oidscrl.cpp
 		lib/attachfactory.cpp
-		lib/cssmmds.cpp
-		lib/modload_static.cpp
-		lib/transition.cpp
+		lib/attachment.cpp
+		lib/cspattachment.cpp
 		lib/cssm.cpp
-		lib/oidscert.cpp
-		lib/module.cpp
+		lib/cssmcontext.cpp
+		lib/cssmmds.cpp
 		lib/guids.cpp
 		lib/manager.cpp
+		lib/modload_plugin.cpp
+		lib/modload_static.cpp
+		lib/modloader.cpp
+		lib/module.cpp
+		lib/oidsalg.c
+		lib/oidscert.cpp
+		lib/oidscrl.cpp
+		lib/transition.cpp
 )

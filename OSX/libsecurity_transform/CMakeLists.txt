@@ -1,36 +1,36 @@
-add_definitions(
-	-DCOM_APPLE_SECURITY_SANE_INCLUDES
-)
+project(libsecurity_transform)
 
-add_darling_static_library(security_transform FAT
+add_macos_legacy_lib(security_transform
 	SOURCES
 		lib/c++utils.cpp
-		lib/Source.cpp
-		lib/EncryptTransform.cpp
-		lib/SecSignVerifyTransform.c
-		lib/GroupTransform.cpp
-		lib/SecCustomTransform.cpp
-		lib/SecExternalSourceTransform.cpp
-		lib/StreamSource.cpp
-		lib/SecGroupTransform.cpp
-		lib/misc.c
-		lib/SecEncryptTransform.cpp
-		lib/Digest.cpp
-		lib/SecMaskGenerationFunctionTransform.c
-		lib/LinkedList.cpp
-		lib/CoreFoundationBasics.cpp
-		lib/SingleShotSource.cpp
 		lib/CEncryptDecrypt.c
-		lib/SecNullTransform.cpp
-		lib/NullTransform.cpp
+		lib/CoreFoundationBasics.cpp
+		lib/Digest.cpp
 		lib/EncodeDecodeTransforms.c
+		lib/EncryptTransform.cpp
+		lib/EncryptTransformUtilities.cpp
+		lib/GroupTransform.cpp
+		lib/LinkedList.cpp
+		lib/misc.c
+		lib/Monitor.cpp
+		lib/NullTransform.cpp
+		lib/SecCollectTransform.cpp
+		lib/SecCustomTransform.cpp
+		lib/SecDigestTransform.cpp
+		lib/SecEncryptTransform.cpp
+		lib/SecExternalSourceTransform.cpp
+		lib/SecGroupTransform.cpp
+		lib/SecMaskGenerationFunctionTransform.c
+		lib/SecNullTransform.cpp
+		lib/SecSignVerifyTransform.c
 		lib/SecTransform.cpp
+		lib/SecTransformReadTransform.cpp
+		lib/SingleShotSource.cpp
+		lib/Source.cpp
+		lib/StreamSource.cpp
 		lib/Transform.cpp
 		lib/TransformFactory.cpp
-		lib/EncryptTransformUtilities.cpp
-		lib/SecTransformReadTransform.cpp
-		lib/Monitor.cpp
-		lib/SecDigestTransform.cpp
-		lib/SecCollectTransform.cpp
 		lib/Utilities.cpp
+	DEFINITIONS
+		COM_APPLE_SECURITY_SANE_INCLUDES
 )

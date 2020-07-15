@@ -20,7 +20,9 @@
 
 #if !TARGET_OS_BRIDGE
 #include <dlfcn.h>
+#ifndef DARLING
 #include <AppleIDAuthSupport/AppleIDAuthSupport.h>
+#endif
 #define PATH_FOR_APPLEIDAUTHSUPPORTFRAMEWORK "/System/Library/PrivateFrameworks/AppleIDAuthSupport.framework/AppleIDAuthSupport"
 #endif
 

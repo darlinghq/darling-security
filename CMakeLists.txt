@@ -1,43 +1,61 @@
 project(Security)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+include(security_lib)
+include(security_xcconfigs)
+
 set(CMAKE_CXX_STANDARD 14)
+set(SECURITY_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_compile_options(
 	-w
-)
-
-add_definitions(
-	-DNDEBUG=1
-	-D__KEYCHAINCORE__=1
-	-DOSSPINLOCK_USE_INLINED=0
-	-DDTRACE_PROBES_DISABLED
-
 	-nostdinc
 )
 
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/securityd/securityd_service/KeyStore
-	${CMAKE_CURRENT_SOURCE_DIR}/OSX/trustd
-	${CMAKE_CURRENT_SOURCE_DIR}/OSX/authd
-	${CMAKE_CURRENT_SOURCE_DIR}/OSX/security_dotmac_tp/lib
-	${CMAKE_CURRENT_SOURCE_DIR}/cssm
-	${CMAKE_CURRENT_SOURCE_DIR}/keychain
-	${CMAKE_CURRENT_SOURCE_DIR}/base
-	${CMAKE_CURRENT_SOURCE_DIR}/OSX/libsecurity_asn1
-	${CMAKE_CURRENT_SOURCE_DIR}/OSX/utilities
-	${CMAKE_CURRENT_SOURCE_DIR}/OSX/utilities/src
-	${CMAKE_CURRENT_SOURCE_DIR}/sectask
-	${CMAKE_CURRENT_SOURCE_DIR}/trust
-	${CMAKE_CURRENT_SOURCE_DIR}/internal-include
-	${CMAKE_CURRENT_SOURCE_DIR}/gen/include
-	${CMAKE_SOURCE_DIR}/src/frameworks/CryptoTokenKit/include/
-	${CMAKE_SOURCE_DIR}/src/frameworks/LocalAuthentication/include/
+add_compile_definitions(
+	__KEYCHAINCORE__=1
+	CORECRYPTO_DONOT_USE_TRANSPARENT_UNION=1
+	#OCTAGON=1 # needs some extra stuff i don't want to implement right now
+	TRUSTEDPEERS=1
+	SECUREOBJECTSYNC=1
+	SHAREDWEBCREDENTIALS=0
+	PLATFORM=macOS
+	"SECURITY_BUILD_VERSION=\"0\""
+	NDEBUG=1
+
+	# not listed in Xcode, but apparently necessary
+	PRIVATE
 )
+
+include_directories(
+	${SECURITY_PROJECT_DIR}/header_symlinks
+	${SECURITY_PROJECT_DIR}/header_symlinks/macOS
+	${SECURITY_PROJECT_DIR}
+	${SECURITY_PROJECT_DIR}/libDER
+	${SECURITY_PROJECT_DIR}/OSX/libsecurity_asn1
+	${SECURITY_PROJECT_DIR}/OSX/sec
+	${SECURITY_PROJECT_DIR}/OSX/utilities
+	${SECURITY_PROJECT_DIR}/OSX
+	${SECURITY_PROJECT_DIR}/header_symlinks/Security
+	${SECURITY_PROJECT_DIR}/header_symlinks/macOS/Security
+)
+
+add_subdirectory(libDER)
+add_subdirectory(keychain)
+add_subdirectory(keychain/SecureObjectSync)
 
 # Security.framework
 add_subdirectory(OSX)
 # securityd
 add_subdirectory(securityd)
-add_subdirectory(SecurityTool)
+add_subdirectory(SecurityTool/macOS)
+
+# missing ProtocolBuffer.framework
+#add_subdirectory(KeychainCircle)
+
+add_subdirectory(trust/trustd)
+add_subdirectory(keychain/securityd)
+#add_subdirectory(OSX/authd)
 
 install(DIRECTORY DESTINATION libexec/darling/System/Library/Security)

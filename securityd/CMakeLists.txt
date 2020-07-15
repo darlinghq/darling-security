@@ -7,59 +7,86 @@ mig(mig/self.defs
 	MIG_FLAGS "-cpp"
 )
 
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}
-	${CMAKE_CURRENT_SOURCE_DIR}/src
-	${CMAKE_CURRENT_BINARY_DIR}/mig
-	${CMAKE_CURRENT_SOURCE_DIR}/../OSX/libsecurityd/lib
-)
-
 add_darling_executable(securityd_exe
-	${CMAKE_CURRENT_BINARY_DIR}/mig/selfServer.cpp
-	${CMAKE_CURRENT_BINARY_DIR}/mig/selfUser.cpp
-	src/main.cpp
-	src/connection.cpp
-	src/database.cpp
-	src/key.cpp
-	src/process.cpp
-	src/server.cpp
-	src/session.cpp
-	src/structure.cpp
-	src/dbcrypto.cpp
-	src/localdatabase.cpp
-	src/localkey.cpp
-	src/kcdatabase.cpp
-	src/kckey.cpp
-	src/tempdatabase.cpp
-	src/tokendatabase.cpp
-	src/tokenkey.cpp
-	src/tokenaccess.cpp
-	src/pcscmonitor.cpp
-	src/reader.cpp
-	src/token.cpp
-	src/tokend.cpp
-	src/tokencache.cpp
-	src/transition.cpp
-	src/acls.cpp
-	src/tokenacl.cpp
 	src/acl_keychain.cpp
 	src/acl_partition.cpp
-	src/authhost.cpp
-	src/credential.cpp
-	src/clientid.cpp
-	src/codesigdb.cpp
-	src/csproxy.cpp
+	src/acls.cpp
 	src/agentquery.cpp
 	src/auditevents.cpp
+	src/authhost.cpp
 	src/ccaudit_extensions.cpp
 	src/child.cpp
+	src/clientid.cpp
+	src/codesigdb.cpp
+	src/connection.cpp
+	src/credential.cpp
+	src/database.cpp
+	src/dbcrypto.cpp
+	src/kcdatabase.cpp
+	src/kckey.cpp
+	src/key.cpp
+	src/localdatabase.cpp
+	src/localkey.cpp
+	src/main.cpp
 	src/notifications.cpp
+	src/pcscmonitor.cpp
+	src/process.cpp
+	src/reader.cpp
+	src/server.cpp
+	src/session.cpp
 	src/SharedMemoryServer.cpp
+	src/structure.cpp
+	src/tempdatabase.cpp
+	src/token.cpp
+	src/tokenaccess.cpp
+	src/tokenacl.cpp
+	src/tokencache.cpp
+	src/tokend.cpp
+	src/tokendatabase.cpp
+	src/tokenkey.cpp
+	src/transition.cpp
+	src/util.m
+
+	${CMAKE_CURRENT_BINARY_DIR}/mig/selfServer.cpp
+	${CMAKE_CURRENT_BINARY_DIR}/mig/selfUser.cpp
+)
+target_include_directories(securityd_exe PRIVATE
+	${SECURITY_PROJECT_DIR}/header_symlinks/macOS
+	${SECURITY_PROJECT_DIR}/securityd
+	${SECURITY_PROJECT_DIR}/OSX/include
+
+	${CMAKE_CURRENT_BINARY_DIR}/mig
+)
+target_compile_options(securityd_exe PRIVATE
+	-fobjc-arc
 )
 make_fat(securityd_exe)
-target_link_libraries(securityd_exe sqlite3 z auto objc DiagnosticMessagesClient security_codesigning
-	security_utilities securityd_client securityd_server security_cdsa_utilities security_cdsa_client
-	bsm.0 utilities IOKit CoreFoundation Security security_tokend_client securitydservice_client PCSC)
+
+# same order from xcodeproj
+target_link_libraries(securityd_exe
+	AppleFSCompression
+	Foundation
+	objc
+	DiagnosticMessagesClient
+	securitydservice_client
+	sqlite3
+	z
+	security_codesigning
+	security_utilities
+	securityd_client
+	securityd_server
+	security_tokend_client
+	security_cdsa_utilities
+	security_cdsa_client
+	bsm.0
+	utilities
+	xar
+	PCSC
+	Security
+	system
+	CoreFoundation
+	IOKit
+)
 
 set_target_properties(securityd_exe PROPERTIES OUTPUT_NAME "securityd")
 

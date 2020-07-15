@@ -1,28 +1,26 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_apple_x509_cl)
 
-add_darling_static_library(security_apple_x509_cl FAT
+add_macos_legacy_lib(security_apple_x509_cl
 	SOURCES
 		lib/AppleX509CL.cpp
-		lib/clNssUtils.cpp
-		lib/DecodedItem.cpp
-		lib/clNameUtils.cpp
-		lib/Session_Cert.cpp
-		lib/CLFieldsCommon.cpp
-		lib/DecodedCert.cpp
 		lib/AppleX509CLBuiltin.cpp
-		lib/CertFields.cpp
-		lib/AppleX509CLSession.cpp
-		lib/CSPAttacher.cpp
-		lib/CLCrlExtensions.cpp
 		lib/AppleX509CLPlugin.cpp
+		lib/AppleX509CLSession.cpp
+		lib/CertFields.cpp
 		lib/CLCachedEntry.cpp
-		lib/DecodedCrl.cpp
-		lib/CrlFields.cpp
-		lib/Session_CSR.cpp
-		lib/Session_CRL.cpp
-		lib/DecodedExtensions.cpp
 		lib/CLCertExtensions.cpp
+		lib/CLCrlExtensions.cpp
+		lib/CLFieldsCommon.cpp
+		lib/clNameUtils.cpp
+		lib/clNssUtils.cpp
+		lib/CrlFields.cpp
+		lib/CSPAttacher.cpp
+		lib/DecodedCert.cpp
+		lib/DecodedCrl.cpp
+		lib/DecodedExtensions.cpp
+		lib/DecodedItem.cpp
+		lib/Session_Cert.cpp
+		lib/Session_CRL.cpp
 		lib/Session_Crypto.cpp
+		lib/Session_CSR.cpp
 )

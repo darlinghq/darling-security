@@ -1,68 +1,61 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_utilities)
 
-add_darling_static_library(security_utilities FAT
+mig(lib/mach_notify.defs)
+
+add_macos_legacy_lib(security_utilities
 	SOURCES
-		lib/cfmach++.cpp
-		lib/hashing.cpp
-		lib/devrandom.cpp
-		lib/headermap.cpp
-		lib/pcsc++.cpp
-		lib/ccaudit.cpp
-		lib/cfmunge.cpp
-		lib/url.cpp
-		lib/seccfobject.cpp
-		lib/superblob.cpp
-		lib/dyldcache.cpp
-		lib/buffers.cpp
-		lib/simpleprefs.cpp
-		lib/logging.cpp
-		lib/threading.cpp
-		lib/tqueue.cpp
-		lib/timeflow.cpp
-		lib/trackingallocator.cpp
-		lib/utilities.cpp
-		lib/machserver.cpp
-		lib/cfutilities.cpp
-		lib/mach_notify.c
-		lib/crc.c
-		lib/hosts.cpp
-		lib/sqlite++.cpp
-		lib/dispatch.cpp
-		lib/selector.cpp
-		lib/inetreply.cpp
-		lib/fdsel.cpp
-		lib/fdmover.cpp
-		lib/socks++4.cpp
-		lib/FileLockTransaction.cpp
-		lib/socks++5.cpp
+		lib/adornments.cpp
+		lib/alloc.cpp
 		lib/blob.cpp
-		lib/typedvalue.cpp
-		lib/ip++.cpp
-		lib/errors.cpp
+		lib/ccaudit.cpp
+		lib/cfclass.cpp
+		lib/cfmach++.cpp
+		lib/cfmunge.cpp
+		lib/cfutilities.cpp
+		lib/coderepository.cpp
+		lib/crc.c
+		lib/CSPDLTransaction.cpp
+		lib/daemon.cpp
+		lib/debugging_internal.cpp
+		lib/dispatch.cpp
+		lib/dyldcache.cpp
 		lib/endian.cpp
+		lib/errors.cpp
+		lib/FileLockTransaction.cpp
+		lib/globalizer.cpp
+		lib/hashing.cpp
+		lib/kq++.cpp
+		lib/logging.cpp
+		lib/mach++.cpp
+		lib/macho++.cpp
+		lib/machserver.cpp
+		lib/muscle++.cpp
+		lib/osxcode.cpp
+		lib/pcsc++.cpp
+		lib/powerwatch.cpp
+		lib/seccfobject.cpp
+		lib/simpleprefs.cpp
+		lib/sqlite++.cpp
+		lib/superblob.cpp
+		lib/threading.cpp
+		lib/timeflow.cpp
+		lib/tqueue.cpp
+		lib/trackingallocator.cpp
 		lib/transactions.cpp
 		lib/unix++.cpp
-		lib/coderepository.cpp
-		lib/iodevices.cpp
-		lib/alloc.cpp
-		lib/vproc++.cpp
-		lib/muscle++.cpp
-		lib/adornments.cpp
-		lib/debugging_internal.cpp
-		lib/streams.cpp
-		lib/cfclass.cpp
-		lib/mach++.cpp
 		lib/unixchild.cpp
-		lib/CSPDLTransaction.cpp
-		lib/macho++.cpp
-		lib/bufferfifo.cpp
-		lib/socks++.cpp
-		lib/osxcode.cpp
-		lib/globalizer.cpp
-		lib/powerwatch.cpp
-		lib/daemon.cpp
-		lib/machrunloopserver.cpp
-		lib/kq++.cpp
+		lib/utilities.cpp
+
+		${CMAKE_CURRENT_BINARY_DIR}/lib/mach_notifyServer.c
+	INCLUDES
+		${SECURITY_PROJECT_DIR}/OSX/libsecurity_cssm/lib
+		${SECURITY_PROJECT_DIR}/header_symlinks/iOS
+		${SECURITY_PROJECT_DIR}/header_symlinks/macOS
+		${SECURITY_PROJECT_DIR}/header_symlinks/Security
+		${SECURITY_PROJECT_DIR}/OSX/include
+		${SECURITY_PROJECT_DIR}
+		${SECURITY_PROJECT_DIR}/OSX/libsecurity_apple_csp/open_ssl
+		${SECURITY_PROJECT_DIR}/OSX/libsecurity_utilities/lib
+
+		${CMAKE_CURRENT_BINARY_DIR}/lib
 )

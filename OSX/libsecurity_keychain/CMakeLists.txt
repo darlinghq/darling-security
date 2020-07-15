@@ -1,16 +1,14 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-	${CMAKE_CURRENT_SOURCE_DIR}/libDER
-)
+project(libsecurity_keychain)
 
-add_darling_static_library(security_keychain FAT
+add_macos_legacy_lib(security_keychain
 	SOURCES
-		lib/ACL.cpp
 		lib/Access.cpp
-		lib/CCallbackMgr.cpp
+		lib/ACL.cpp
+		lib/CCallbackMgr.cp
 		lib/Certificate.cpp
-		lib/CertificateRequest.cpp
 		lib/CertificateValues.cpp
+		lib/cssmdatetime.cpp
+		lib/defaultcreds.cpp
 		lib/DLDBListCFPref.cpp
 		lib/DynamicDLDBList.cpp
 		lib/ExtendedAttribute.cpp
@@ -21,25 +19,21 @@ add_darling_static_library(security_keychain FAT
 		lib/KCCursor.cpp
 		lib/KCEventNotifier.cpp
 		lib/KCUtilities.cpp
-		lib/KeyItem.cpp
 		lib/Keychains.cpp
+		lib/KeyItem.cpp
 		lib/Password.cpp
 		lib/Policies.cpp
 		lib/PolicyCursor.cpp
 		lib/PrimaryKey.cpp
-		lib/SecACL.cpp
 		lib/SecAccess.cpp
+		lib/SecACL.cpp
 		lib/SecBase.cpp
-		lib/SecBase64P.c
-		lib/SecCFTypes.cpp
 		lib/SecCertificate.cpp
 		lib/SecCertificateBundle.cpp
-		lib/SecCertificateP.c
-		lib/SecCertificateRequest.cpp
+		lib/SecCFTypes.cpp
 		lib/SecExport.cpp
 		lib/SecExternalRep.cpp
 		lib/SecFDERecoveryAsymmetricCrypto.cpp
-		lib/SecFrameworkP.c
 		lib/SecIdentity.cpp
 		lib/SecIdentitySearch.cpp
 		lib/SecImport.cpp
@@ -66,32 +60,20 @@ add_darling_static_library(security_keychain FAT
 		lib/SecRandom.c
 		lib/SecRecoveryPassword.c
 		lib/SecTrust.cpp
+		lib/SecTrustedApplication.cpp
 		lib/SecTrustOSXEntryPoints.cpp
 		lib/SecTrustSettings.cpp
-		lib/SecTrustedApplication.cpp
 		lib/SecWrappedKeys.cpp
 		lib/StorageManager.cpp
 		lib/TokenLogin.cpp
 		lib/Trust.cpp
 		lib/TrustAdditions.cpp
+		lib/TrustedApplication.cpp
 		lib/TrustItem.cpp
 		lib/TrustRevocation.cpp
 		lib/TrustSettings.cpp
 		lib/TrustSettingsUtils.cpp
 		lib/TrustStore.cpp
-		lib/TrustedApplication.cpp
-		lib/UnlockReferralItem.cpp
-		lib/cssmdatetime.cpp
-		lib/defaultcreds.cpp
 		lib/tsaDERUtilities.c
-)
-
-add_darling_static_library(security_keychain_DER FAT
-	SOURCES
-		libDER/libDER/DER_Decode.c
-		libDER/libDER/DER_Encode.c
-		libDER/libDER/DER_Keys.c
-		libDER/libDER/DER_Digest.c
-		libDER/libDER/oids.c
-		libDER/libDER/DER_CertCrl.c
+		lib/UnlockReferralItem.cpp
 )

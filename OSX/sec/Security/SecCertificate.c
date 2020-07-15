@@ -71,6 +71,9 @@
 #include "AppleiPhoneDeviceCACertificates.h"
 #include <ipc/securityd_client.h>
 #include <Security/SecKeyInternal.h>
+#ifdef DARLING
+#include <libDER/oidsPriv.h>
+#endif
 
 #pragma clang diagnostic ignored "-Wformat=2"
 

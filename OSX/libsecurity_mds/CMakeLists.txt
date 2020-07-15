@@ -1,16 +1,14 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_mds)
 
-add_darling_static_library(security_mds FAT
+add_macos_legacy_lib(security_mds
 	SOURCES
-		lib/MDSDictionary.cpp
-		lib/MDSDatabase.cpp
-		lib/MDSAttrParser.cpp
-		lib/MDSSchema.cpp
-		lib/MDSModule.cpp
-		lib/MDSAttrUtils.cpp
-		lib/MDSAttrStrings.cpp
-		lib/MDSSession.cpp
 		lib/mdsapi.cpp
+		lib/MDSAttrParser.cpp
+		lib/MDSAttrStrings.cpp
+		lib/MDSAttrUtils.cpp
+		lib/MDSDatabase.cpp
+		lib/MDSDictionary.cpp
+		lib/MDSModule.cpp
+		lib/MDSSchema.cpp
+		lib/MDSSession.cpp
 )

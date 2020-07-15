@@ -27,6 +27,12 @@
 #include <TargetConditionals.h>
 #include <CoreFoundation/CFBase.h>
 #include <Availability.h>
+#ifdef DARLING
+    // for unprefixed API_AVAILABLE and friends
+    #include <os/availability.h>
+    // not sure if we're supposed to be including that header in CoreFoundation or in Availability.h,
+    // but this works for all of Security
+#endif
 
 // Truth table for following declarations:
 //

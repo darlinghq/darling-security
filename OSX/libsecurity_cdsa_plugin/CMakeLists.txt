@@ -1,20 +1,18 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_cdsa_plugin)
 
-add_darling_static_library(security_cdsa_plugin FAT
+add_macos_legacy_lib(security_cdsa_plugin
 	SOURCES
 		lib/ACabstractsession.cpp
+		lib/CLabstractsession.cpp
 		lib/CSPabstractsession.cpp
-		lib/DLabstractsession.cpp
-		lib/DatabaseSession.cpp
 		lib/CSPsession.cpp
 		lib/csputilities.cpp
-		lib/DbContext.cpp
-		lib/Database.cpp
-		lib/pluginsession.cpp
 		lib/cssmplugin.cpp
-		lib/TPabstractsession.cpp
+		lib/Database.cpp
+		lib/DatabaseSession.cpp
+		lib/DbContext.cpp
+		lib/DLabstractsession.cpp
 		lib/DLsession.cpp
-		lib/CLabstractsession.cpp
+		lib/pluginsession.cpp
+		lib/TPabstractsession.cpp
 )

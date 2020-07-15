@@ -1,79 +1,54 @@
-add_compile_options(
-	-fobjc-arc
+project(libutilities)
+
+add_darling_object_library(utilities_x86_64
+	x86_64_ONLY
+
+	SecTapToRadar.m
 )
 
-set(utilities_normal_sources
-	src/debugging.c
-	src/der_dictionary.c
-	src/iCloudKeychainTrace.c
-	src/SecCFWrappers.c
-	src/SecADWrapper.c
-	src/der_date.c
-	src/fileIo.c
-	src/SecFileLocations.c
-	src/SecDb.c
-	src/SecCoreCrypto.c
-	src/SecAppleAnchor.c
-	src/SecTrace.c
-	src/der_plist_internal.c
-	src/SecSCTUtils.c
-	src/der_number.c
-	src/iOSforOSX-SecRandom.c
-	src/SecCFError.c
-	src/der_plist.c
-	src/SecCertificateTrace.c
-	src/SecAKSWrappers.c
-	src/der_array.c
-	src/SecCFCCWrappers.c
-	src/NSURL+SOSPlistStore.m
-	src/der_string.c
-	src/der_boolean.c
-	src/der_data.c
-	src/der_null.c
-	src/der_set.c
-	src/simulate_crash.c
-	src/SecBuffer.c
-	src/SecXPCError.c
-	SecurityTool/not_on_this_platorm.c
-	SecurityTool/readline.c
-)
-
-add_darling_static_library(utilities FAT
+add_security_library(utilities
+	FAT
+	OBJC_ARC
 	SOURCES
-		src/debugging.c
-		src/der_dictionary.c
-		src/iCloudKeychainTrace.c
-		src/SecCFWrappers.c
-		src/SecADWrapper.c
-		src/der_date.c
-		src/fileIo.c
-		src/SecFileLocations.c
-		src/SecDb.c
-		src/SecCoreCrypto.c
-		src/SecAppleAnchor.c
-		#src/iOSforOSX-SecAttr.c
-		src/SecTrace.c
-		src/der_plist_internal.c
-		src/SecSCTUtils.c
-		src/der_number.c
-		src/iOSforOSX-SecRandom.c
-		src/SecCFError.c
-		src/der_plist.c
-		src/SecCertificateTrace.c
-		src/SecAKSWrappers.c
-		src/der_array.c
-		src/SecCFCCWrappers.c
-		src/NSURL+SOSPlistStore.m
-		src/der_string.c
-		src/der_boolean.c
-		src/der_data.c
-		src/der_null.c
-		src/der_set.c
-		src/simulate_crash.c
-		src/SecBuffer.c
-		src/SecXPCError.c
-		SecurityTool/not_on_this_platorm.c
-		SecurityTool/readline.c
-)
+		debugging.c
+		der_array.c
+		der_boolean.c
+		der_data.c
+		der_date.c
+		der_dictionary.c
+		der_null.c
+		der_number.c
+		der_plist_internal.c
+		der_plist.c
+		der_set.c
+		der_string.c
+		fileIo.c
+		iCloudKeychainTrace.c
+		iOSforOSX-SecAttr.c
+		iOSforOSX-SecRandom.c
+		NSURL+SOSPlistStore.m
+		sec_action.c
+		SecABC.m
+		SecADWrapper.c
+		SecAKSWrappers.c
+		SecAppleAnchor.c
+		SecAutorelease.m
+		SecBuffer.c
+		SecCFCCWrappers.c
+		SecCFError.c
+		SecCFWrappers.c
+		SecCoreCrypto.c
+		SecDb.c
+		SecFileLocations.c
+		SecNSAdditions.m
+		SecPLWrappers.m
+		SecSCTUtils.c
+		SecTrace.c
+		SecXPCError.c
+		SecXPCHelper.m
+		simulate_crash.m
 
-add_subdirectory(SecurityTool)
+		$<TARGET_OBJECTS:utilities_x86_64>
+	INCLUDES
+		${SECURITY_PROJECT_DIR}/securityd/securityd_service/KeyStore
+)

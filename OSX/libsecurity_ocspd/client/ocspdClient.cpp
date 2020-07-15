@@ -32,7 +32,11 @@
 #include <security_utilities/threading.h>
 #include <security_utilities/mach++.h>
 #include <security_utilities/unix++.h>
+#ifdef DARLING
+#include "ocspd.h"
+#else
 #include <security_ocspd/ocspd.h>			/* MIG interface */
+#endif
 #include <Security/SecBase.h>
 class ocspdGlobals
 {

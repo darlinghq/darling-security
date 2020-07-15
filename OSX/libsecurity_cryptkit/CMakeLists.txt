@@ -1,22 +1,17 @@
-add_definitions(
-	-DCK_SECURITY_BUILD
-)
+project(libsecurity_cryptkit)
 
-add_darling_static_library(security_cryptkit FAT
+add_macos_legacy_lib(security_cryptkit
 	SOURCES
-		lib/CryptKitAsn1.cpp
-		lib/CryptKitDER.cpp
-		lib/HmacSha1Legacy.c
 		lib/byteRep.c
 		lib/ckSHA1.c
 		lib/ckutilities.c
+		lib/CryptKitAsn1.cpp
+		lib/CryptKitDER.cpp
 		lib/curveParams.c
 		lib/elliptic.c
 		lib/ellipticProj.c
 		lib/enc64.c
-		lib/engineNSA127.c
 		lib/falloc.c
-		lib/feeDES.c
 		lib/feeDigitalSignature.c
 		lib/feeECDSA.c
 		lib/feeFEED.c
@@ -25,7 +20,8 @@ add_darling_static_library(security_cryptkit FAT
 		lib/feePublicKey.c
 		lib/feeRandom.c
 		lib/giantIntegers.c
-		lib/giantPort_PPC.c
-		lib/giantPort_PPC_Gnu.S
+		lib/HmacSha1Legacy.c
 		lib/platform.c
+	DEFINITIONS
+		CK_SECURITY_BUILD
 )

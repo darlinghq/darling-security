@@ -1,48 +1,45 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_cdsa_utilities)
 
-add_darling_static_library(security_cdsa_utilities FAT
+add_macos_legacy_lib(security_cdsa_utilities
 	SOURCES
-		../../gen/KeySchema.cpp
-		../../gen/Schema.cpp
-		lib/callback.cpp
-		lib/acl_secret.cpp
-		lib/osxverifier.cpp
-		lib/handletemplates.cpp
-		lib/cssmdates.cpp
-		lib/acl_preauth.cpp
-		lib/cssmcred.cpp
-		lib/acl_password.cpp
-		lib/cssmtrust.cpp
-		lib/cssmlist.cpp
-		lib/objectacl.cpp
-		lib/cssmalloc.cpp
-		lib/cssmdbname.cpp
-		lib/acl_protectedpw.cpp
-		lib/handleobject.cpp
-		lib/uniformrandom.cpp
-		lib/acl_prompted.cpp
-		lib/acl_codesigning.cpp
-		lib/cssmerrors.cpp
-		lib/cssmwalkers.cpp
-		lib/AuthorizationData.cpp
-		lib/db++.cpp
-		lib/walkers.cpp
-		lib/cssmpods.cpp
-		lib/cssmdata.cpp
-		lib/acl_threshold.cpp
-		lib/cssmacl.cpp
-		lib/cssmdb.cpp
-		lib/aclsubject.cpp
-		lib/cssmkey.cpp
-		lib/cssmendian.cpp
-		lib/cssmcert.cpp
-		lib/acl_process.cpp
-		lib/context.cpp
-		lib/acl_comment.cpp
+		../../derived_src/KeySchema.cpp
+		../../derived_src/Schema.cpp
 		lib/acl_any.cpp
-		lib/cssmaclpod.cpp
-		lib/u32handleobject.cpp
+		lib/acl_codesigning.cpp
+		lib/acl_comment.cpp
+		lib/acl_password.cpp
+		lib/acl_preauth.cpp
+		lib/acl_process.cpp
+		lib/acl_prompted.cpp
+		lib/acl_protectedpw.cpp
+		lib/acl_secret.cpp
+		lib/acl_threshold.cpp
+		lib/aclsubject.cpp
+		lib/AuthorizationData.cpp
+		lib/callback.cpp
 		lib/constdata.cpp
+		lib/context.cpp
+		lib/cssmacl.cpp
+		lib/cssmaclpod.cpp
+		lib/cssmalloc.cpp
+		lib/cssmcert.cpp
+		lib/cssmcred.cpp
+		lib/cssmdata.cpp
+		lib/cssmdates.cpp
+		lib/cssmdb.cpp
+		lib/cssmdbname.cpp
+		lib/cssmendian.cpp
+		lib/cssmerrors.cpp
+		lib/cssmkey.cpp
+		lib/cssmlist.cpp
+		lib/cssmpods.cpp
+		lib/cssmtrust.cpp
+		lib/cssmwalkers.cpp
+		lib/db++.cpp
+		lib/handleobject.cpp
+		lib/handletemplates.cpp
+		lib/objectacl.cpp
+		lib/osxverifier.cpp
+		lib/u32handleobject.cpp
+		lib/walkers.cpp
 )

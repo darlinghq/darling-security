@@ -1,29 +1,27 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_cdsa_client)
 
-add_darling_static_library(security_cdsa_client FAT
+add_macos_legacy_lib(security_cdsa_client
 	SOURCES
-		lib/dlclient.cpp
-		lib/mdsclient.cpp
-		lib/tpclient.cpp
-		lib/cssmclient.cpp
-		lib/cryptoclient.cpp
 		lib/aclclient.cpp
-		lib/DLDBList.cpp
 		lib/clclient.cpp
-		lib/signclient.cpp
-		lib/genkey.cpp
-		lib/macclient.cpp
-		lib/wrapkey.cpp
-		lib/keychainacl.cpp
-		lib/dliterators.cpp
-		lib/mds_standard.cpp
-		lib/dl_standard.cpp
-		lib/securestorage.cpp
-		lib/keyclient.cpp
-		lib/dlquery.cpp
+		lib/cryptoclient.cpp
 		lib/cspclient.cpp
+		lib/cssmclient.cpp
+		lib/dl_standard.cpp
+		lib/dlclient.cpp
 		lib/dlclientpriv.cpp
+		lib/DLDBList.cpp
+		lib/dliterators.cpp
+		lib/dlquery.cpp
+		lib/genkey.cpp
+		lib/keychainacl.cpp
+		lib/keyclient.cpp
+		lib/macclient.cpp
+		lib/mds_standard.cpp
+		lib/mdsclient.cpp
 		lib/multidldb.cpp
+		lib/securestorage.cpp
+		lib/signclient.cpp
+		lib/tpclient.cpp
+		lib/wrapkey.cpp
 )

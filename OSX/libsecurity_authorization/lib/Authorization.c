@@ -17,7 +17,11 @@
 #include <syslog.h>
 #include <AssertMacros.h>
 #include <CoreFoundation/CFXPCBridge.h>
+#ifndef DARLING
 #include <CoreGraphics/CGWindow.h>
+#else
+typedef uint32_t CGWindowID;
+#endif
 #include <dlfcn.h>
 #include <os/log.h>
 

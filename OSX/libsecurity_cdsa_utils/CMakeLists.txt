@@ -1,15 +1,13 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_cdsa_utils)
 
-add_darling_static_library(security_cdsa_utils FAT
+add_macos_legacy_lib(security_cdsa_utils
 	SOURCES
-		lib/cuPem.cpp
-		lib/cuEnc64.c
 		lib/cuCdsaUtils.cpp
 		lib/cuDbUtils.cpp
+		lib/cuEnc64.c
+		lib/cuFileIo.c
 		lib/cuOidParser.cpp
+		lib/cuPem.cpp
 		lib/cuPrintCert.cpp
 		lib/cuTimeStr.cpp
-		lib/cuFileIo.c
 )

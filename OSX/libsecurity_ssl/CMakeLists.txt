@@ -1,16 +1,18 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_ssl)
 
-add_darling_static_library(security_ssl FAT
+add_macos_legacy_lib(security_ssl
 	SOURCES
-		lib/sslRecord.c
+		../../protocol/SecProtocol.c
+		../../protocol/SecProtocolConfiguration.m
+		../../protocol/SecProtocolHelper.m
+		../../protocol/SecProtocolTypes.m
+		lib/sslCipherSpecs.c
 		lib/sslContext.c
-		lib/tlsCallbacks.c
-		lib/SSLRecordInternal.c
+		lib/sslCrypto.c
 		lib/sslKeychain.c
 		lib/sslMemory.c
+		lib/sslRecord.c
+		lib/SSLRecordInternal.c
 		lib/sslTransport.c
-		lib/sslCipherSpecs.c
-		lib/sslCrypto.c
+		lib/tlsCallbacks.c
 )

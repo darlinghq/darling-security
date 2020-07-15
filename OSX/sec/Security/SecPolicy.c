@@ -44,6 +44,9 @@
 #include <utilities/SecCFWrappers.h>
 #include <utilities/array_size.h>
 #include <ipc/securityd_client.h>
+#ifdef DARLING
+#include <libDER/oidsPriv.h>
+#endif
 
 #include <utilities/SecInternalReleasePriv.h>
 

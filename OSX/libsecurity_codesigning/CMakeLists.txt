@@ -1,10 +1,8 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/antlr2
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_codesigning)
 
-add_darling_static_library(security_codesigning FAT
+add_macos_legacy_lib(security_codesigning
 	SOURCES
+		../../sectask/SecTask.c
 		antlr2/src/ANTLRUtil.cpp
 		antlr2/src/ASTFactory.cpp
 		antlr2/src/ASTNULLType.cpp
@@ -13,8 +11,6 @@ add_darling_static_library(security_codesigning FAT
 		antlr2/src/BitSet.cpp
 		antlr2/src/CharBuffer.cpp
 		antlr2/src/CharScanner.cpp
-		lib/Code.cpp
-		lib/CodeSigner.cpp
 		antlr2/src/CommonAST.cpp
 		antlr2/src/CommonASTWithHiddenTokens.cpp
 		antlr2/src/CommonHiddenStreamToken.cpp
@@ -27,17 +23,6 @@ add_darling_static_library(security_codesigning FAT
 		antlr2/src/NoViableAltForCharException.cpp
 		antlr2/src/Parser.cpp
 		antlr2/src/RecognitionException.cpp
-		lib/RequirementLexer.cpp
-		lib/RequirementParser.cpp
-		lib/Requirements.cpp
-		lib/SecAssessment.cpp
-		lib/SecCode.cpp
-		lib/SecCodeHost.cpp
-		lib/SecCodeSigner.cpp
-		lib/SecRequirement.cpp
-		lib/SecStaticCode.cpp
-		lib/SecTask.c
-		lib/StaticCode.cpp
 		antlr2/src/String.cpp
 		antlr2/src/Token.cpp
 		antlr2/src/TokenBuffer.cpp
@@ -50,11 +35,12 @@ add_darling_static_library(security_codesigning FAT
 		lib/antlrplugin.cpp
 		lib/bundlediskrep.cpp
 		lib/cdbuilder.cpp
+		lib/Code.cpp
 		lib/codedirectory.cpp
+		lib/CodeSigner.cpp
 		lib/cs.cpp
 		lib/csdatabase.cpp
 		lib/cserror.cpp
-		lib/csgeneric.cpp
 		lib/cskernel.cpp
 		lib/csprocess.cpp
 		lib/csutilities.cpp
@@ -66,7 +52,9 @@ add_darling_static_library(security_codesigning FAT
 		lib/evaluationmanager.cpp
 		lib/filediskrep.cpp
 		lib/kerneldiskrep.cpp
+		lib/legacydevid.cpp
 		lib/machorep.cpp
+		lib/notarization.cpp
 		lib/opaquewhitelist.cpp
 		lib/piddiskrep.cpp
 		lib/policydb.cpp
@@ -78,12 +66,26 @@ add_darling_static_library(security_codesigning FAT
 		lib/reqparser.cpp
 		lib/reqreader.cpp
 		lib/requirement.cpp
+		lib/RequirementLexer.cpp
+		lib/RequirementParser.cpp
+		lib/Requirements.cpp
 		lib/resources.cpp
+		lib/SecAssessment.cpp
+		lib/SecCode.cpp
+		lib/SecCodeHost.cpp
+		lib/SecCodeSigner.cpp
+		lib/SecRequirement.cpp
+		lib/SecStaticCode.cpp
 		lib/sigblob.cpp
 		lib/signer.cpp
 		lib/signerutils.cpp
 		lib/singlediskrep.cpp
 		lib/slcrep.cpp
+		lib/StaticCode.cpp
 		lib/xar++.cpp
 		lib/xpcengine.cpp
+	INCLUDES
+		${SECURITY_PROJECT_DIR}/OSX/libsecurity_codesigning/antlr2
+		${SECURITY_PROJECT_DIR}/derived_src
+		${SECURITY_PROJECT_DIR}/cstemp
 )

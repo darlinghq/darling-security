@@ -1,8 +1,6 @@
-include_directories(
-	${CMAKE_CURRENT_SOURCE_DIR}/lib
-)
+project(libsecurity_apple_file_dl)
 
-add_darling_static_library(security_apple_file_dl FAT
+add_macos_legacy_lib(security_apple_file_dl
 	SOURCES
 		lib/AppleDLBuiltin.cpp
 		lib/AppleFileDL.cpp
