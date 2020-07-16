@@ -37,6 +37,39 @@ add_compile_definitions(
 	CORECRYPTO_DONOT_USE_TRANSPARENT_UNION=1
 )
 
+get_directory_property(DirDefs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} COMPILE_DEFINITIONS)
+get_directory_property(InclDirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} INCLUDE_DIRECTORIES)
+get_directory_property(DirOpts DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} COMPILE_OPTIONS)
+
+set(EXP_IN_FLAGS "")
+foreach(def ${DirDefs})
+	set(EXP_IN_FLAGS "${EXP_IN_FLAGS} -D${def}")
+endforeach()
+foreach(dir ${InclDirs})
+	set(EXP_IN_FLAGS "${EXP_IN_FLAGS} -I${dir}")
+endforeach()
+
+set(EXP_IN_FLAGS "${EXP_IN_FLAGS} ${CMAKE_C_FLAGS}")
+
+separate_arguments(EXP_IN_FLAGS)
+
+set(EXP_IN_FLAGS ${EXP_IN_FLAGS} ${DirOpts})
+
+add_custom_command(
+	OUTPUT
+		${CMAKE_CURRENT_BINARY_DIR}/Security.exp
+	DEPENDS
+		${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in
+		${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
+	COMMAND
+		${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c -target x86_64-apple-darwin11 ${EXP_IN_FLAGS} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.exp
+)
+
+add_custom_target(generate-security-exp
+	DEPENDS
+		${CMAKE_CURRENT_BINARY_DIR}/Security.exp
+)
+
 add_darling_object_library(Security_x86_64
 	x86_64_ONLY
 
@@ -89,7 +122,6 @@ add_framework(Security
 		sec/Security/SecFramework.c
 		utilities/SecCoreAnalytics.m
 		utilities/SecPaddingConfigurations.c
-		$<TARGET_OBJECTS:Security_x86_64>
 		../experiment/SecExperiment.m
 		../keychain/behavior/SFBehavior.m
 		../keychain/ckks/CKKSControl.m
@@ -101,6 +133,9 @@ add_framework(Security
 		../protocol/SecProtocolConfiguration.m
 		../protocol/SecProtocolHelper.m
 		../protocol/SecProtocolTypes.m
+
+	OBJECTS
+		$<TARGET_OBJECTS:Security_x86_64>
 
 	DEPENDENCIES
 		# try to stick to the order in xcodeproj as much as possible
@@ -145,18 +180,18 @@ add_framework(Security
 		utilities
 		DiagnosticMessagesClient
 
-		#aks_acl # missing
-		aks
+		#aks_acl
+		aks # already includes aks_acl
 
 		bsm.0
 
-		CrashReporterClient
+		#CrashReporterClient # missing (but apparently not necessary?)
 
 		#coreauthd_client
 		LocalAuthentication # instead of coreauthd_client
 
 		coretls
-		#coretls_cfhelpers # missing
+		#coretls_cfhelpers # must be added as a circular library
 
 		#ctkclient_sep
 		#ACM
@@ -174,6 +209,10 @@ add_framework(Security
 		objc
 		cxx
 		system
+
+	CIRCULAR_DEPENDENCIES
+		coretls_cfhelpers
+
 	RESOURCES
 		cssm.mdsinfo			libsecurity_cssm/mds/cssm.mdsinfo
 		sd_cspdl_common.mdsinfo		libsecurity_sd_cspdl/mds/sd_cspdl_common.mdsinfo
@@ -199,11 +238,20 @@ add_framework(Security
 
 )
 
-target_include_directories(Security PRIVATE
+add_dependencies(Security
+	generate-security-exp
+	Foundation
+)
+
+target_include_directories(Security_obj PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-set_property(TARGET Security APPEND_STRING PROPERTY LINK_FLAGS " -Wl,-dead_strip -exported_symbols_list ${CMAKE_CURRENT_SOURCE_DIR}/../SEC_MANUAL.exp -Wl,-upward_library,$<TARGET_FILE:Foundation>")
+target_link_options(Security PRIVATE
+	-Wl,-dead_strip
+	"-exported_symbols_list ${CMAKE_CURRENT_BINARY_DIR}/Security.exp"
+	-Wl,-upward_library,$<TARGET_FILE:Foundation>
+)
 
 include(darling_bundle)
 

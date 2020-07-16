@@ -26,6 +26,9 @@ add_compile_definitions(
 
 	# not listed in Xcode, but apparently necessary
 	PRIVATE
+
+	# we don't currently do anything with DTrace
+	DTRACE_PROBES_DISABLED=1
 )
 
 include_directories(

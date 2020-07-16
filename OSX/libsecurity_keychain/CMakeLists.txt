@@ -77,3 +77,10 @@ add_macos_legacy_lib(security_keychain
 		lib/tsaDERUtilities.c
 		lib/UnlockReferralItem.cpp
 )
+
+# don't know why it has a `.cp` extension, but it seems intentional
+# there are comment inside the file that use this same extension when talking about the file
+set_source_files_properties(lib/CCallbackMgr.cp PROPERTIES
+	LANGUAGE CXX
+	COMPILE_FLAGS "-x c++"
+)

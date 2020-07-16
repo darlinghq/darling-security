@@ -537,6 +537,7 @@ __unused static const DERByte
     _oidNetscapeCertType[]          = { NETSCAPE_CERT_EXTEN, 1 },
     _oidEntrustVersInfo[]           = { ENTRUST_CERT_EXTEN, 0 },
     _oidMSNTPrincipalName[]         = { MICROSOFT_ENROLLMENT_OID, 2, 3 },
+    _oidOCSPNoCheck[]               = { OID_AD_OCSP, 5 },
     /* Policy Qualifier IDs for Internet policy qualifiers. */
     _oidQtCps[]                     = { OID_QT, 1 },
     _oidQtUNotice[]                 = { OID_QT, 2 },
@@ -663,6 +664,8 @@ __unused const DERItem
                                         sizeof(_oidEntrustVersInfo) },
     oidMSNTPrincipalName              = { (DERByte *)_oidMSNTPrincipalName,
                                         sizeof(_oidMSNTPrincipalName) },
+    oidOCSPNoCheck                  = { (DERByte *)_oidOCSPNoCheck,
+                                        sizeof(_oidOCSPNoCheck) },
     /* Policy Qualifier IDs for Internet policy qualifiers. */
     oidQtCps                        = { (DERByte *)_oidQtCps,
                                         sizeof(_oidQtCps) },
