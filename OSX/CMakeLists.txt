@@ -137,12 +137,9 @@ add_framework(Security
 	OBJECTS
 		$<TARGET_OBJECTS:Security_x86_64>
 
-	DEPENDENCIES
-		# try to stick to the order in xcodeproj as much as possible
-		#
-		# kind of difficult because there is a mix of libraries added
-		# through target "Frameworks" and some added as plain flags
-		AppleFSCompression
+	# coretls_cfhelpers depends on some symbols in Security provided through static libraries
+	# it probably only depends on a subset of these, but just in case, link all of our static libraries strongly (i.e. in the firstpass)
+	STRONG_DEPENDENCIES
 		security_asn1
 		SecItemShimOSX
 		SecOtrOSX
@@ -178,6 +175,16 @@ add_framework(Security
 		security_utilities
 		securityd_client
 		utilities
+
+	DEPENDENCIES
+		# try to stick to the order in xcodeproj as much as possible
+		#
+		# kind of difficult because there is a mix of libraries added
+		# through target "Frameworks" and some added as plain flags
+		AppleFSCompression
+
+		# static Security libraries moved to STRONG_DEPENDENCIES
+
 		DiagnosticMessagesClient
 
 		#aks_acl
