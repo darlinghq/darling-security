@@ -57,23 +57,34 @@ set(EXP_IN_FLAGS ${EXP_IN_FLAGS} ${DirOpts})
 
 add_custom_command(
 	OUTPUT
-		${CMAKE_CURRENT_BINARY_DIR}/Security.exp
+		${CMAKE_CURRENT_BINARY_DIR}/Security.x86_64.exp
 	DEPENDS
 		${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in
 		${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
 	COMMAND
-		${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c -target x86_64-apple-darwin11 ${EXP_IN_FLAGS} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.exp
+		${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c -target x86_64-apple-darwin11 ${EXP_IN_FLAGS} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.x86_64.exp
+)
+
+add_custom_command(
+	OUTPUT
+		${CMAKE_CURRENT_BINARY_DIR}/Security.i386.exp
+	DEPENDS
+		${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in
+		${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
+	COMMAND
+		${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c -target i386-apple-darwin11 ${EXP_IN_FLAGS} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.i386.exp
 )
 
 add_custom_target(generate-security-exp
 	DEPENDS
-		${CMAKE_CURRENT_BINARY_DIR}/Security.exp
+		${CMAKE_CURRENT_BINARY_DIR}/Security.x86_64.exp
+		${CMAKE_CURRENT_BINARY_DIR}/Security.i386.exp
 )
 
-add_darling_object_library(Security_x86_64
+# can't be called `Security_x86_64`; add_separated_framework already uses that
+add_darling_object_library(Security_x86_64_only_stuff
 	x86_64_ONLY
 
-	../Analytics/Clients/LocalKeychainAnalytics.m
 	../Analytics/Clients/SOSAnalytics.m
 	../Analytics/NSDate+SFAnalytics.m
 	../Analytics/SFAnalytics.m
@@ -84,18 +95,9 @@ add_darling_object_library(Security_x86_64
 	../Analytics/SQLite/SFObjCType.m
 	../Analytics/SQLite/SFSQLite.m
 	../Analytics/SQLite/SFSQLiteStatement.m
-	../keychain/escrowrequest/Framework/SecEscrowRequest.m
-
-	# all this Octagon stuff is brand new and most of it only compiles on x86_64
-	../keychain/ot/OTClique.m
-	../keychain/ot/OTConstants.m
-	../keychain/ot/OTControl.m
-	../keychain/ot/OTControlProtocol.m
-	../keychain/ot/OTDefines.m
-	../keychain/ot/OTJoiningConfiguration.m
 )
 
-target_include_directories(Security_x86_64 PRIVATE
+target_include_directories(Security_x86_64_only_stuff PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
@@ -109,8 +111,7 @@ set_source_files_properties(
 		COMPILE_FLAGS " -fobjc-arc"
 )
 
-add_framework(Security
-	FAT
+add_separated_framework(Security
 	CURRENT_VERSION
 	VERSION "A"
 
@@ -122,11 +123,19 @@ add_framework(Security
 		sec/Security/SecFramework.c
 		utilities/SecCoreAnalytics.m
 		utilities/SecPaddingConfigurations.c
+		../Analytics/Clients/LocalKeychainAnalytics.m
 		../experiment/SecExperiment.m
 		../keychain/behavior/SFBehavior.m
 		../keychain/ckks/CKKSControl.m
 		../keychain/ckks/CKKSControlProtocol.m
 		../keychain/escrowrequest/EscrowRequestXPCProtocol.m
+		../keychain/escrowrequest/Framework/SecEscrowRequest.m
+		../keychain/ot/OTClique.m
+		../keychain/ot/OTConstants.m
+		../keychain/ot/OTControl.m
+		../keychain/ot/OTControlProtocol.m
+		../keychain/ot/OTDefines.m
+		../keychain/ot/OTJoiningConfiguration.m
 		../keychain/SigninMetrics/OctagonSignPosts.m
 		../keychain/SigninMetrics/SFSignInAnalytics.m
 		../protocol/SecProtocol.c
@@ -134,8 +143,10 @@ add_framework(Security
 		../protocol/SecProtocolHelper.m
 		../protocol/SecProtocolTypes.m
 
+		../darling/version.c
+
 	OBJECTS
-		$<TARGET_OBJECTS:Security_x86_64>
+		$<TARGET_OBJECTS:Security_x86_64_only_stuff>
 
 	# coretls_cfhelpers depends on some symbols in Security provided through static libraries
 	# it probably only depends on a subset of these, but just in case, link all of our static libraries strongly (i.e. in the firstpass)
@@ -245,7 +256,18 @@ add_framework(Security
 
 )
 
-add_dependencies(Security
+add_dependencies(Security_x86_64_firstpass
+	generate-security-exp
+)
+add_dependencies(Security_i386_firstpass
+	generate-security-exp
+)
+
+add_dependencies(Security_x86_64
+	generate-security-exp
+	Foundation
+)
+add_dependencies(Security_i386
 	generate-security-exp
 	Foundation
 )
@@ -254,9 +276,21 @@ target_include_directories(Security_obj PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_options(Security PRIVATE
+target_link_options(Security_x86_64_firstpass PRIVATE
+	-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.x86_64.exp
+)
+target_link_options(Security_i386_firstpass PRIVATE
+	-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.i386.exp
+)
+
+target_link_options(Security_x86_64 PRIVATE
 	-Wl,-dead_strip
-	"-exported_symbols_list ${CMAKE_CURRENT_BINARY_DIR}/Security.exp"
+	-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.x86_64.exp
+	-Wl,-upward_library,$<TARGET_FILE:Foundation>
+)
+target_link_options(Security_i386 PRIVATE
+	-Wl,-dead_strip
+	-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.i386.exp
 	-Wl,-upward_library,$<TARGET_FILE:Foundation>
 )
 

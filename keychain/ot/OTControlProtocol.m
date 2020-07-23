@@ -22,10 +22,19 @@
  */
 
 #import <Foundation/Foundation.h>
+#if !defined(DARLING) || OCTAGON
+// Apple has some weird stuff going on here
+//
+// they say this function needs to be exported even when the "modern" Objective-C runtime (a.k.a. __OBJC2__) isn't available
+// (you can see this in Security.exp-in)
+// but then they turn around and make it impossible to compile this file as-is for i386
+// (because some classes and types aren't defined when __OBJC2__ isn't available)
+// i had to manually disable these includes to make it possible to compile this file for i386
 #import "keychain/ot/OTClique.h"
 #import "keychain/ot/OTControlProtocol.h"
 #import "keychain/ot/OTJoiningConfiguration.h"
 #import <Security/SecXPCHelper.h>
+#endif
 
 #if OCTAGON
 #import <CloudKit/CloudKit.h>

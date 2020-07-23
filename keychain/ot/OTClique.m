@@ -62,6 +62,13 @@ SOFT_LINK_CONSTANT(CloudServices, kSecureBackupErrorDomain, NSErrorDomain);
 #pragma clang diagnostic pop
 #endif
 
+#endif // this #endif was added for Darling
+// see OTControlProtocol.m for an explanation of why we need to do this
+#if defined(DARLING) || defined(__OBJC2__)
+
+#import <Foundation/Foundation.h>
+#import "keychain/ot/OTClique.h"
+
 OTCliqueCDPContextType OTCliqueCDPContextTypeNone = @"cdpContextTypeNone";
 OTCliqueCDPContextType OTCliqueCDPContextTypeSignIn = @"cdpContextTypeSignIn";
 OTCliqueCDPContextType OTCliqueCDPContextTypeRepair = @"cdpContextTypeRepair";
@@ -105,6 +112,8 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
     return CliqueStatusError;
 }
+#endif // defined(DARLING) || defined(__OBJC2__)
+#if __OBJC2__ // this #if was added for Darling
 
 
 @implementation OTConfigurationContext

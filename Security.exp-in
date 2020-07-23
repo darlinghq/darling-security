@@ -2165,3 +2165,10 @@ _SecCreateCFErrorWithXPCObject
 _SecCreateXPCObjectWithCFError
 
 _SecItemVerifyBackupIntegrity
+
+#ifdef DARLING
+// Apple stopped exporting these (I guess they replaced them in their updated CFNetwork source),
+// but we still need them for our CFNetwork
+_cuDec64
+_cuEnc64
+#endif

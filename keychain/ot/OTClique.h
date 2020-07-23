@@ -86,6 +86,22 @@ extern NSString* kSecEntitlementPrivateOctagonEscrow;
 @property (nonatomic, assign) BOOL useCachedAccountStatus;
 @end
 
+#endif // this #endif was added for Darling
+// see OTControlProtocol.m for an explanation of why we need to do this
+#if defined(DARLING) || defined(__OBJC2__)
+
+#if defined(DARLING)
+#if __OBJC2__
+NS_ASSUME_NONNULL_END
+#endif
+
+#import <Foundation/Foundation.h>
+
+#if __OBJC2__
+NS_ASSUME_NONNULL_BEGIN
+#endif
+#endif
+
 typedef NSString* OTCliqueCDPContextType NS_STRING_ENUM;
 extern OTCliqueCDPContextType OTCliqueCDPContextTypeNone;
 extern OTCliqueCDPContextType OTCliqueCDPContextTypeSignIn;
@@ -94,6 +110,9 @@ extern OTCliqueCDPContextType OTCliqueCDPContextTypeFinishPasscodeChange;
 extern OTCliqueCDPContextType OTCliqueCDPContextTypeRecoveryKeyGenerate;
 extern OTCliqueCDPContextType OTCliqueCDPContextTypeRecoveryKeyNew;
 extern OTCliqueCDPContextType OTCliqueCDPContextTypeUpdatePasscode;
+
+#endif // defined(DARLING) || defined(__OBJC2__)
+#if __OBJC2__ // this #if was added for Darling
 
 
 // OTClique
