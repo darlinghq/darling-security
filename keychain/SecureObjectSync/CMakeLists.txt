@@ -1,5 +1,10 @@
 project(SecureObjectSync)
 
+include_directories(
+	../categories
+	../../OSX/sec/ipc
+)
+
 add_lib_ios_shim(SecureObjectSyncFramework
 	SOURCES
 		SOSBackupSliceKeyBag.m
@@ -30,65 +35,68 @@ add_lib_ios_shim(SecureObjectSyncFramework
 		${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-add_lib_ios_shim(SecureObjectSyncServer
-	SOURCES
-		../../OSX/sec/Security/SecRecoveryKey.m
-		../securityd/SOSCloudCircleServer.m
-		generated_source/SOSAccountConfiguration.m
-		SOSAccount.m
-		SOSAccountBackup.m
-		SOSAccountCircles.m
-		SOSAccountCloudParameters.m
-		SOSAccountCredentials.m
-		SOSAccountDer.m
-		SOSAccountFullPeerInfo.m
-		SOSAccountGetSet.m
-		SOSAccountGhost.m
-		SOSAccountLog.m
-		SOSAccountPeers.m
-		SOSAccountPersistence.m
-		SOSAccountRecovery.m
-		SOSAccountRings.m
-		SOSAccountRingUpdate.m
-		SOSAccountSync.m
-		SOSAccountTransaction.m
-		SOSAccountTrust.m
-		SOSAccountTrustClassic.m
-		SOSAccountTrustClassic+Circle.m
-		SOSAccountTrustClassic+Expansion.m
-		SOSAccountTrustClassic+Identity.m
-		SOSAccountTrustClassic+Retirement.m
-		SOSAccountUpdate.m
-		SOSAccountViewSync.m
-		SOSAuthKitHelpers.m
-		SOSBackupEvent.c
-		SOSBackupInformation.m
-		SOSCoder.c
-		SOSControlServer.m
-		SOSDigestVector.c
-		SOSIntervalEvent.m
-		SOSManifest.c
-		SOSMessage.c
-		SOSPeer.m
-		SOSPeerCoder.m
-		SOSPeerOTRTimer.m
-		SOSPeerRateLimiter.m
-		SOSRecoveryKeyBag.m
-		SOSRingBackup.m
-		SOSRingBasic.m
-		SOSRingConcordanceTrust.c
-		SOSRingDER.c
-		SOSRingRecovery.m
-		SOSRingTypes.m
-		SOSRingUtils.c
-		SOSTransport.m
-		SOSTransportBackupPeer.m
-		SOSTransportCircle.m
-		SOSTransportCircleCK.m
-		SOSTransportCircleKVS.m
-		SOSTransportKeyParameter.m
-		SOSTransportMessage.m
-		SOSTransportMessageKVS.m
-		SOSTrustedDeviceAttributes.m
-		SOSUserKeygen.m
-)
+# can't build this with Octagon disabled
+#add_lib_ios_shim(SecureObjectSyncServer
+#	OBJC_ARC
+#	MODERN_OBJC
+#	SOURCES
+#		../../OSX/sec/Security/SecRecoveryKey.m
+#		../securityd/SOSCloudCircleServer.m
+#		generated_source/SOSAccountConfiguration.m
+#		SOSAccount.m
+#		SOSAccountBackup.m
+#		SOSAccountCircles.m
+#		SOSAccountCloudParameters.m
+#		SOSAccountCredentials.m
+#		SOSAccountDer.m
+#		SOSAccountFullPeerInfo.m
+#		SOSAccountGetSet.m
+#		SOSAccountGhost.m
+#		SOSAccountLog.m
+#		SOSAccountPeers.m
+#		SOSAccountPersistence.m
+#		SOSAccountRecovery.m
+#		SOSAccountRings.m
+#		SOSAccountRingUpdate.m
+#		SOSAccountSync.m
+#		SOSAccountTransaction.m
+#		SOSAccountTrust.m
+#		SOSAccountTrustClassic.m
+#		SOSAccountTrustClassic+Circle.m
+#		SOSAccountTrustClassic+Expansion.m
+#		SOSAccountTrustClassic+Identity.m
+#		SOSAccountTrustClassic+Retirement.m
+#		SOSAccountUpdate.m
+#		SOSAccountViewSync.m
+#		SOSAuthKitHelpers.m
+#		SOSBackupEvent.c
+#		SOSBackupInformation.m
+#		SOSCoder.c
+#		SOSControlServer.m
+#		SOSDigestVector.c
+#		SOSIntervalEvent.m
+#		SOSManifest.c
+#		SOSMessage.c
+#		SOSPeer.m
+#		SOSPeerCoder.m
+#		SOSPeerOTRTimer.m
+#		SOSPeerRateLimiter.m
+#		SOSRecoveryKeyBag.m
+#		SOSRingBackup.m
+#		SOSRingBasic.m
+#		SOSRingConcordanceTrust.c
+#		SOSRingDER.c
+#		SOSRingRecovery.m
+#		SOSRingTypes.m
+#		SOSRingUtils.c
+#		SOSTransport.m
+#		SOSTransportBackupPeer.m
+#		SOSTransportCircle.m
+#		SOSTransportCircleCK.m
+#		SOSTransportCircleKVS.m
+#		SOSTransportKeyParameter.m
+#		SOSTransportMessage.m
+#		SOSTransportMessageKVS.m
+#		SOSTrustedDeviceAttributes.m
+#		SOSUserKeygen.m
+#)

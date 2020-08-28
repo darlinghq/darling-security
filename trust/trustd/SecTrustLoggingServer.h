@@ -27,7 +27,53 @@
 #ifndef _SECURITY_SECTRUSTLOGGINGSERVER_H_
 #define _SECURITY_SECTRUSTLOGGINGSERVER_H_
 
+#include <xpc/xpc.h>
+#include <CoreFoundation/CoreFoundation.h>
 
 void DisableLocalization(void);
+
+// i have a sneaking suspicion that Apple neutered this file and that this is where
+// `TrustdHealthAnalyticsLogErrorCodeForDatabase` *should* be defined,
+// so that's what i'll do:
+void TrustdHealthAnalyticsLogErrorCodeForDatabase(int location, int operation, int error_type, int error_code);
+// note that i'm not entirely sure about that last parameter type
+// and those other parameters are dependent on the types of the following definitions
+
+// this is also probably where these were supposed to be defined:
+
+enum /* location */ {
+	TACAIssuerCache,
+	TAOCSPCache,
+	TARevocationDb,
+	TATrustStore,
+};
+
+enum /* operation */ {
+	TAOperationRead,
+	TAOperationWrite,
+	TAOperationCreate,
+	TAOperationOpen,
+};
+
+enum /* error type (?) */ {
+	TAFatalError,
+	TARecoverableError,
+};
+
+// i'm guessing this is also where this belongs:
+bool SecNetworkingAnalyticsReport(CFStringRef event_name, xpc_object_t tls_analytics_attributes, CFErrorRef *error);
+
+// same with this:
+void TrustdHealthAnalyticsLogErrorCode(int event, int error_type, int error_code);
+
+enum /* event */ {
+	TAEventValidUpdate,
+};
+
+// same here:
+void TrustdHealthAnalyticsLogEvaluationCompleted();
+
+// and you guessed it, same here:
+void TrustdHealthAnalyticsLogSuccess(int event);
 
 #endif /* _SECURITY_SECTRUSTLOGGINGSERVER_H_ */

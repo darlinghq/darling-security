@@ -6,9 +6,25 @@ set(MIG_USER_SOURCE_SUFFIX "Client.cpp")
 set(MIG_SERVER_SOURCE_SUFFIX "Server.cpp")
 mig(mig/ucsp.defs)
 
+target_include_directories(ucsp_xtrace_mig PRIVATE
+	${SECURITY_PROJECT_DIR}/OSX/libsecurity_cssm/lib
+	${SECURITY_PROJECT_DIR}/OSX/include
+	${SECURITY_PROJECT_DIR}/OSX/utilities/src
+	${SECURITY_PROJECT_DIR}/OSX/libsecurity_apple_csp/open_ssl
+	${SECURITY_PROJECT_DIR}/OSX/libsecurityd/lib
+)
+
 set(MIG_USER_SOURCE_SUFFIX "Sender.cpp")
 set(MIG_SERVER_SOURCE_SUFFIX "Receiver.cpp")
 mig(mig/ucspNotify.defs)
+
+target_include_directories(ucspNotify_xtrace_mig PRIVATE
+	${SECURITY_PROJECT_DIR}/OSX/libsecurity_cssm/lib
+	${SECURITY_PROJECT_DIR}/OSX/include
+	${SECURITY_PROJECT_DIR}/OSX/utilities/src
+	${SECURITY_PROJECT_DIR}/OSX/libsecurity_apple_csp/open_ssl
+	${SECURITY_PROJECT_DIR}/OSX/libsecurityd/lib
+)
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mig")
 file(CREATE_LINK "ucspClient.cpp" "${CMAKE_CURRENT_BINARY_DIR}/mig/ucspClientC.c" SYMBOLIC)

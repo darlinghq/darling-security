@@ -1,5 +1,12 @@
 add_subdirectory(securityd_service)
 
+include_directories(
+	../OSX/libsecurityd/lib
+	../OSX/include
+	${CMAKE_CURRENT_BINARY_DIR}/../OSX/libsecurityd/mig
+	${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
 set(MIG_USER_SOURCE_SUFFIX "User.cpp")
 set(MIG_SERVER_SOURCE_SUFFIX "Server.cpp")
 

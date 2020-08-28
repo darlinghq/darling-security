@@ -21,12 +21,12 @@ target_compile_options(secd PRIVATE
 	-fobjc-arc
 )
 target_link_libraries(secd
-	#TrustedPeers # missing
+	#TrustedPeers
 	#CloudServices # missing
 	z
 	AuthKit
 	#AppleAccount # missing
-	#Accounts # missing
+	Accounts
 	#prequelite # missing
 	CrashReporterSupport
 	DiagnosticMessagesClient
@@ -35,12 +35,17 @@ target_link_libraries(secd
 	Foundation
 	login
 	DER
-	#ACM # missing
-	aks
-	#aks_acl # missing
+	#ACM
+	aks # already includes aks_acl
+	#aks_acl
 	security_asn1
-	#coreauthd_client # missing
-	#ctkclient_sep # missing
+
+	#coreauthd_client
+	LocalAuthentication # instead of coreauthd_client
+
+	#ctkclient_sep
+	CryptoTokenKit # instead of ctkclient_sep and ACM
+
 	sqlite3
 	SecureObjectSyncServer
 	utilities
@@ -53,7 +58,7 @@ target_link_libraries(secd
 	#CloudKit # missing
 	SystemConfiguration
 	Security
-	#ProtocolBuffer
+	ProtocolBuffer
 	AppleSystemInfo
 
 	# implied dependencies

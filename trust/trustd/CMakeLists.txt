@@ -1,7 +1,12 @@
 project(trustd)
 
+include_directories(
+	../../OSX/sec/Security
+)
+
 add_lib_ios_shim(libtrustd
 	OUTPUT_NAME "trustd"
+	MODERN_OBJC
 	SOURCES
 		nameconstraints.c
 		OTATrustUtilities.m
@@ -35,6 +40,9 @@ add_lib_ios_shim(libtrustd
 add_darling_executable(trustd
 	../../OSX/sec/ipc/server_entitlement_helpers.c
 	trustd.c
+
+	# not listed in Xcode project, but necessary
+	../../OSX/sec/ipc/util.m
 )
 target_compile_options(trustd PRIVATE
 	-fobjc-arc
@@ -54,11 +62,11 @@ target_link_libraries(trustd
 	security_asn1
 	login
 	CFNetwork
-	#Network # missing
+	Network
 	Security
 	CoreFoundation
 	Foundation
-	#MobileAsset # missing
+	MobileAsset
 
 	# implied dependencies
 	objc

@@ -17,7 +17,7 @@ add_compile_definitions(
 	__KEYCHAINCORE__=1
 	CORECRYPTO_DONOT_USE_TRANSPARENT_UNION=1
 	#OCTAGON=1 # needs some extra stuff i don't want to implement right now
-	TRUSTEDPEERS=1
+	#TRUSTEDPEERS=1 # needs Octagon
 	SECUREOBJECTSYNC=1
 	SHAREDWEBCREDENTIALS=0
 	PLATFORM=macOS
@@ -58,7 +58,7 @@ add_subdirectory(SecurityTool/macOS)
 #add_subdirectory(KeychainCircle)
 
 add_subdirectory(trust/trustd)
-add_subdirectory(keychain/securityd)
+#add_subdirectory(keychain/securityd) # can't build this with Octagon disabled
 #add_subdirectory(OSX/authd)
 
 install(DIRECTORY DESTINATION libexec/darling/System/Library/Security)

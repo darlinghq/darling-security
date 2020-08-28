@@ -2,6 +2,14 @@ project(libsecurity_utilities)
 
 mig(lib/mach_notify.defs)
 
+target_include_directories(mach_notify_xtrace_mig PRIVATE
+	${SECURITY_PROJECT_DIR}/OSX/libsecurity_cssm/lib
+	${SECURITY_PROJECT_DIR}/OSX/include
+	${SECURITY_PROJECT_DIR}/OSX/utilities/src
+	${SECURITY_PROJECT_DIR}/OSX/libsecurity_apple_csp/open_ssl
+	${SECURITY_PROJECT_DIR}/OSX/libsecurity_utilities/lib
+)
+
 add_macos_legacy_lib(security_utilities
 	SOURCES
 		lib/adornments.cpp

@@ -1,5 +1,13 @@
 project(SecurityTool-macOS)
 
+include_directories(
+	../../OSX/include
+)
+
+add_compile_options(
+	-Wno-c++11-narrowing
+)
+
 add_darling_executable(securitytool_macos
 	srCdsaUtils.cpp
 	createFVMaster.c
@@ -59,7 +67,7 @@ target_link_libraries(securitytool_macos
 	security_cdsa_utilities
 	security_cdsa_utils
 	Foundation
-	#Network # missing
+	Network
 
 	# implied dependencies
 	objc

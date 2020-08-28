@@ -9,6 +9,8 @@ include(CMakeParseArguments)
 # 		Build the library for both x86_64 and i386.
 # 	OBJC_ARC
 # 		Enable Objective-C ARC for the library.
+# 	MODERN_OBJC
+# 		Only build the library for targets where the "modern" Objective-C runtime is available
 #
 # Single-value arguments:
 # 	OUTPUT_NAME
@@ -40,9 +42,21 @@ include(CMakeParseArguments)
 # 		A list of flags to pass to the compiler when compiling the library.
 # 		Supports the same syntax as `add_compile_options`.
 function(add_security_library name)
-	cmake_parse_arguments(SECLIB "FAT;OBJC_ARC" "OUTPUT_NAME;PREFIX;SUFFIX;C_STANDARD;CXX_STANDARD" "SOURCES;LIBRARIES;INCLUDES;DEFINITIONS;FLAGS" ${ARGN})
+	cmake_parse_arguments(SECLIB "FAT;OBJC_ARC;MODERN_OBJC" "OUTPUT_NAME;PREFIX;SUFFIX;C_STANDARD;CXX_STANDARD" "SOURCES;LIBRARIES;INCLUDES;DEFINITIONS;FLAGS" ${ARGN})
 
-	add_darling_static_library(${name} ${SECLIB_FAT} SOURCES ${SECLIB_SOURCES})
+	set(STATICLIB_ARG_RUNTIME "")
+	set(STATICLIB_ARG_FAT "")
+
+	if(SECLIB_FAT)
+		set(STATICLIB_ARG_FAT "FAT")
+	endif()
+
+	if(SECLIB_MODERN_OBJC)
+		set(STATICLIB_ARG_RUNTIME "x86_64_ONLY")
+		set(STATICLIB_ARG_FAT "")
+	endif()
+
+	add_darling_static_library(${name} ${STATICLIB_ARG_FAT} ${STATICLIB_ARG_RUNTIME} SOURCES ${SECLIB_SOURCES})
 
 	if(SECLIB_OBJC_ARC)
 		target_compile_options(${name} PRIVATE -fobjc-arc)
