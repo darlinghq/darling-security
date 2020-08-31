@@ -35,6 +35,12 @@
 
 __BEGIN_DECLS
 
+// Security's new `oids.h` checks for the main `libder.h` header being already included,
+// but doesn't check for LibDER's `oids.h` (which is the one that actually defines
+// the conflicting types)
+// Both this file and that one define the same exact types, so if the other file has already been included,
+// been included, it's okay, just don't redefine anything
+#if !defined(_SECURITY_OIDS_H_)
 /*
  * Basic data types
  */
@@ -48,6 +54,7 @@ typedef struct {
     DERByte		*data;
     DERSize		length;
 } DERItem;
+#endif
 
 /* Algorithm oids. */
 extern const DERItem
