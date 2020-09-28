@@ -83,7 +83,7 @@ add_custom_target(generate-security-exp
 
 # can't be called `Security_x86_64`; add_separated_framework already uses that
 add_darling_object_library(Security_x86_64_only_stuff
-	x86_64_ONLY
+	64BIT_ONLY
 
 	../Analytics/Clients/SOSAnalytics.m
 	../Analytics/NSDate+SFAnalytics.m

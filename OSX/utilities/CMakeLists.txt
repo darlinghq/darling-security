@@ -1,7 +1,7 @@
 project(libutilities)
 
 add_darling_object_library(utilities_x86_64
-	x86_64_ONLY
+	64BIT_ONLY
 
 	SecTapToRadar.m
 )
