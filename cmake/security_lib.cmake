@@ -52,7 +52,7 @@ function(add_security_library name)
 	endif()
 
 	if(SECLIB_MODERN_OBJC)
-		set(STATICLIB_ARG_RUNTIME "x86_64_ONLY")
+		set(STATICLIB_ARG_RUNTIME "64BIT_ONLY")
 		set(STATICLIB_ARG_FAT "")
 	endif()
 
