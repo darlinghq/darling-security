@@ -65,14 +65,18 @@ void PowerWatcher::systemWillPowerOn()
 IOPowerWatcher::IOPowerWatcher() :
     mKernelPort(0)
 {
+#ifndef DARLING
 	if (!(mKernelPort = ::IORegisterForSystemPower(this, &mPortRef, ioCallback, &mHandle)))
 		UnixError::throwMe(EINVAL);	// no clue
+#endif
 }
 
 IOPowerWatcher::~IOPowerWatcher()
 {
+#ifndef DARLING
 	if (mKernelPort)
 		::IODeregisterForSystemPower(&mHandle);
+#endif
 }
 
 //
@@ -149,13 +153,17 @@ void IOPowerWatcher::ioCallback(void *refCon, io_service_t service,
 //
 PortPowerWatcher::PortPowerWatcher()
 {
+#ifndef DARLING
     port(IONotificationPortGetMachPort(mPortRef));
+#endif
 }
 
 boolean_t PortPowerWatcher::handle(mach_msg_header_t *in)
 {
+#ifndef DARLING
     IODispatchCalloutFromMessage(NULL, in, mPortRef);
     return TRUE;
+#endif
 }
 
 
