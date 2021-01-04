@@ -333,7 +333,12 @@ static bool doesFileExist(
 	
 	/* it's there...how does it look? */
 	mode_t fileType = sb.st_mode & S_IFMT;
+#ifdef DARLING
+	// we don't care about UIDs in Darling
+	if((fileType == S_IFREG)) {
+#else
 	if((fileType == S_IFREG) && (sb.st_uid == forUid)) {
+#endif
 		return true;
 	}
 	if(!purge) {
@@ -451,10 +456,12 @@ static bool doesDirectExist(
 		directStatus = MDS_NotDirectory;
 		return false;
 	}
+#ifndef DARLING
 	if(sb.st_uid != forUid) {
 		directStatus = MDS_BadOwnerMode;
 		return false;
 	}
+#endif
 	if((sb.st_mode & 07777) != mode) {
 		directStatus = MDS_BadOwnerMode;
 		return false;
@@ -1438,7 +1445,7 @@ MDSSession::DbFilesInfo::~DbFilesInfo()
 	}
 }
 
-/* lazy evaluation of both DB handlesÊ*/
+/* lazy evaluation of both DB handlesï¿½*/
 CSSM_DB_HANDLE MDSSession::DbFilesInfo::objDbHand()
 {
 	if(mObjDbHand != 0) {
