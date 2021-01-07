@@ -1675,9 +1675,13 @@ static SecOTAPKIRef SecOTACreate() {
 
 #if !TARGET_OS_BRIDGE
     /* Initialize our update handling */
+#ifndef DARLING
     InitializeOTATrustAsset(kOTABackgroundQueue);
+#endif
     otapkiref->_ctKillSwitch = InitializeKillSwitch((__bridge NSString*)kOTAPKIKillSwitchCT);
+#ifndef DARLING
     InitializeOTASecExperimentAsset(kOTABackgroundQueue);
+#endif
 #else // TARGET_OS_BRIDGE
     otapkiref->_ctKillSwitch = true; // bridgeOS never enforces CT
 #endif // TARGET_OS_BRIDGE

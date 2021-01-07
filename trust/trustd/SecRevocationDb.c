@@ -988,7 +988,7 @@ void SecRevocationDbInitialize() {
     CFIndex version = 0;
     secnotice("validupdate", "initializing database");
     if (!SecValidUpdateSatisfiedLocally(server, version, true)) {
-#if !TARGET_OS_BRIDGE
+#if !TARGET_OS_BRIDGE && !defined(DARLING)
         /* Schedule full update as a maintenance task */
         (void)SecValidUpdateRequest(SecRevocationDbGetUpdateQueue(), server, version);
 #endif
@@ -1209,7 +1209,7 @@ static bool _SecRevocationDbCheckNextUpdate(void) {
     }
 
     // determine whether update fetching is enabled
-#if !TARGET_OS_WATCH && !TARGET_OS_BRIDGE
+#if !TARGET_OS_WATCH && !TARGET_OS_BRIDGE && !defined(DARLING)
     // Valid update fetching was initially enabled on macOS 10.13 and iOS 11.0.
     // This conditional has been changed to include every platform and version
     // except for those where the db should not be updated over the air.
