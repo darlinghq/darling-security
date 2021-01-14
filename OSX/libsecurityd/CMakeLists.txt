@@ -27,13 +27,13 @@ target_include_directories(ucspNotify_xtrace_mig PRIVATE
 )
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mig")
-file(CREATE_LINK "ucspClient.cpp" "${CMAKE_CURRENT_BINARY_DIR}/mig/ucspClientC.c" SYMBOLIC)
+create_symlink("ucspClient.cpp" "${CMAKE_CURRENT_BINARY_DIR}/mig/ucspClientC.c")
 
 # we don't need to make these depend on their targets because they will alreday be generated
 # for the targets that need them
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mig/securityd_client")
-file(CREATE_LINK "../ucsp.h" "${CMAKE_CURRENT_BINARY_DIR}/mig/securityd_client/ucsp.h" SYMBOLIC)
-file(CREATE_LINK "../ucspNotify.h" "${CMAKE_CURRENT_BINARY_DIR}/mig/securityd_client/ucspNotify.h" SYMBOLIC)
+create_symlink("../ucsp.h" "${CMAKE_CURRENT_BINARY_DIR}/mig/securityd_client/ucsp.h")
+create_symlink("../ucspNotify.h" "${CMAKE_CURRENT_BINARY_DIR}/mig/securityd_client/ucspNotify.h")
 
 add_custom_command(
 	OUTPUT
