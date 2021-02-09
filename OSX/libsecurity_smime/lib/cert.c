@@ -42,7 +42,7 @@
 #include <syslog.h>
 
 /* for errKCDuplicateItem */
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <CoreServices/MacErrors.h>
 
 #define CERT_DEBUG	0
 #if	CERT_DEBUG

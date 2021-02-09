@@ -55,7 +55,7 @@
 #include <utilities/SecCFWrappers.h>
 #include <utilities/debugging.h>
 #include <AssertMacros.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <CoreServices/MacErrors.h>
 #include <Security/SecPolicyPriv.h>
 #include <Security/SecItem.h>
 #include <libDER/asn1Types.h>

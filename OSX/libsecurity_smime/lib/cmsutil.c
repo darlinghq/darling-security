@@ -47,7 +47,7 @@
 #include <security_asn1/secerr.h>
 #include <Security/cssmapi.h>
 #include <Security/cssmapple.h>
-#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#include <CoreServices/MacErrors.h>
 
 
 /*
