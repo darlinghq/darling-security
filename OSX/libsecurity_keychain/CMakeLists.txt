@@ -1,5 +1,9 @@
 project(libsecurity_keychain)
 
+add_compile_definitions(
+	OS_LOG_FORMAT_WARNINGS=1
+)
+
 add_macos_legacy_lib(security_keychain
 	SOURCES
 		lib/Access.cpp
