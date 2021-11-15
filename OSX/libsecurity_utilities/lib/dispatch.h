@@ -106,7 +106,11 @@ private:
 
 
 class SemaphoreWait {
+// this has to be disabled because Clang 13 incorrectly detects a block variable non-const copy as a const copy in `libsecurity_codesigning/lib/csutilities.cpp`.
+// it still compiles correctly, it just generates an incorrect error if this is left in.
+#ifndef DARLING
 	NOCOPY(SemaphoreWait)
+#endif
 public:
 	SemaphoreWait(SemaphoreWait& originalWait);
 	SemaphoreWait(Semaphore& semaphore, dispatch_time_t timeout = DISPATCH_TIME_FOREVER);
