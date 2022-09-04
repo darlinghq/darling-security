@@ -30,8 +30,12 @@ add_subdirectory(libsecurity_utilities)
 add_subdirectory(libsecurityd)
 add_subdirectory(utilities)
 
+remove_sdk_framework(Security)
+
 set(DYLIB_COMPAT_VERSION "1.0.0")
 set(DYLIB_CURRENT_VERSION "59306.61.1")
+
+set(FRAMEWORK_VERSION "A")
 
 add_compile_definitions(
 	CORECRYPTO_DONOT_USE_TRANSPARENT_UNION=1
@@ -130,9 +134,14 @@ set_source_files_properties(
 		COMPILE_FLAGS " -fobjc-arc"
 )
 
+generate_sdk_framework(Security
+    VERSION ${FRAMEWORK_VERSION}
+    HEADER "../include-framework/Security"
+)
+
 add_separated_framework(Security
 	CURRENT_VERSION
-	VERSION "A"
+	VERSION ${FRAMEWORK_VERSION}
 
 	SOURCES
 		Breadcrumb/SecBreadcrumb.c
