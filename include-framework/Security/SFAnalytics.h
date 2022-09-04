@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SFAnalytics.h
+../../header_symlinks/Security/SFAnalytics.h

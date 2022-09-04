@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/cssmtype.h
+../../header_symlinks/macOS/Security/cssmtype.h

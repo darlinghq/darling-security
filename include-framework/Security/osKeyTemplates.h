@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/osKeyTemplates.h
+../../header_symlinks/macOS/Security/osKeyTemplates.h

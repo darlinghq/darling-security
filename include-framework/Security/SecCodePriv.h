@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SecCodePriv.h
+../../header_symlinks/Security/SecCodePriv.h

@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecPolicySearch.h
+../../header_symlinks/macOS/Security/SecPolicySearch.h

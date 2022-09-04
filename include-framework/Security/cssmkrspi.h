@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/cssmkrspi.h
+../../header_symlinks/macOS/Security/cssmkrspi.h

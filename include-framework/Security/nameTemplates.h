@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/nameTemplates.h
+../../header_symlinks/Security/nameTemplates.h

@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/x509defs.h
+../../header_symlinks/macOS/Security/x509defs.h

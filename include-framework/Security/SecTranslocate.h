@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecTranslocate.h
+../../header_symlinks/macOS/Security/SecTranslocate.h

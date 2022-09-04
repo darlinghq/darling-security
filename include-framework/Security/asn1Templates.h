@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/asn1Templates.h
+../../header_symlinks/macOS/Security/asn1Templates.h

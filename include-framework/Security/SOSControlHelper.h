@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SOSControlHelper.h
+../../header_symlinks/Security/SOSControlHelper.h

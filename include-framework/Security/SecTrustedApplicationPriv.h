@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecTrustedApplicationPriv.h
+../../header_symlinks/macOS/Security/SecTrustedApplicationPriv.h

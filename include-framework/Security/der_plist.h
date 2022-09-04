@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/der_plist.h
+../../header_symlinks/Security/der_plist.h

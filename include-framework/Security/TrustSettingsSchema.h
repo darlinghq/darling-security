@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/TrustSettingsSchema.h
+../../header_symlinks/macOS/Security/TrustSettingsSchema.h

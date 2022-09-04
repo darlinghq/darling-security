@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecRandomP.h
+../../header_symlinks/macOS/Security/SecRandomP.h

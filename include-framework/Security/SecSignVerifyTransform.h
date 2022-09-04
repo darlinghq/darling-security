@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecSignVerifyTransform.h
+../../header_symlinks/macOS/Security/SecSignVerifyTransform.h

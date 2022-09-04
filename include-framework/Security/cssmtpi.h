@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/cssmtpi.h
+../../header_symlinks/macOS/Security/cssmtpi.h

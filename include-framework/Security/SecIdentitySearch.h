@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecIdentitySearch.h
+../../header_symlinks/macOS/Security/SecIdentitySearch.h

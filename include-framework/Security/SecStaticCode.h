@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SecStaticCode.h
+../../header_symlinks/Security/SecStaticCode.h

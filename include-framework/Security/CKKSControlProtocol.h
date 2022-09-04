@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/CKKSControlProtocol.h
+../../header_symlinks/Security/CKKSControlProtocol.h

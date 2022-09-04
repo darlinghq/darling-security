@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/mdspriv.h
+../../header_symlinks/macOS/Security/mdspriv.h

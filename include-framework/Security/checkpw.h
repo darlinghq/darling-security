@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/checkpw.h
+../../header_symlinks/macOS/Security/checkpw.h

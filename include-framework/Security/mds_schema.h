@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/mds_schema.h
+../../header_symlinks/macOS/Security/mds_schema.h

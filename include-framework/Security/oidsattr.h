@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/oidsattr.h
+../../header_symlinks/macOS/Security/oidsattr.h

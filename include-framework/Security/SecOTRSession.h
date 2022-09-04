@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SecOTRSession.h
+../../header_symlinks/Security/SecOTRSession.h

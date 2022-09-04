@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/CSCommonPriv.h
+../../header_symlinks/macOS/Security/CSCommonPriv.h

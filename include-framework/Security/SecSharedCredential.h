@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SecSharedCredential.h
+../../header_symlinks/Security/SecSharedCredential.h

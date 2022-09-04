@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SecDH.h
+../../header_symlinks/Security/SecDH.h

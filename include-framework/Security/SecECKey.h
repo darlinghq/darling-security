@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SecECKey.h
+../../header_symlinks/Security/SecECKey.h

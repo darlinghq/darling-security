@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecPassword.h
+../../header_symlinks/macOS/Security/SecPassword.h

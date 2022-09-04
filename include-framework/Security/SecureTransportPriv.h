@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SecureTransportPriv.h
+../../header_symlinks/Security/SecureTransportPriv.h

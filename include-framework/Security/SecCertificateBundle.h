@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecCertificateBundle.h
+../../header_symlinks/macOS/Security/SecCertificateBundle.h

@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/ocspTemplates.h
+../../header_symlinks/Security/ocspTemplates.h

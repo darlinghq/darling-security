@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecCertificateOIDs.h
+../../header_symlinks/macOS/Security/SecCertificateOIDs.h

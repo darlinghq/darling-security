@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SFAnalyticsActivityTracker.h
+../../header_symlinks/Security/SFAnalyticsActivityTracker.h

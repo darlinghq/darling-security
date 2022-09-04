@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecStaticCodePriv.h
+../../header_symlinks/macOS/Security/SecStaticCodePriv.h

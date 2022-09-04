@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecAccess.h
+../../header_symlinks/macOS/Security/SecAccess.h

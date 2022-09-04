@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecDecodeTransform.h
+../../header_symlinks/macOS/Security/SecDecodeTransform.h

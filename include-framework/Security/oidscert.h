@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/oidscert.h
+../../header_symlinks/macOS/Security/oidscert.h

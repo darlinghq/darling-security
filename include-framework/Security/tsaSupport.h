@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/tsaSupport.h
+../../header_symlinks/macOS/Security/tsaSupport.h

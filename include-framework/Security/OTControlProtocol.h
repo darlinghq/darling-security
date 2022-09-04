@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/OTControlProtocol.h
+../../header_symlinks/Security/OTControlProtocol.h

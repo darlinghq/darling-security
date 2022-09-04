@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SecProtocolMetadata.h
+../../header_symlinks/Security/SecProtocolMetadata.h

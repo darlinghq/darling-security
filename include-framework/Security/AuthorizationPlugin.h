@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/AuthorizationPlugin.h
+../../header_symlinks/macOS/Security/AuthorizationPlugin.h

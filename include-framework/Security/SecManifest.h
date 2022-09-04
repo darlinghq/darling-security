@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecManifest.h
+../../header_symlinks/macOS/Security/SecManifest.h

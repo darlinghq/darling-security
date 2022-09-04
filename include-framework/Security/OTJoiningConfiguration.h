@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/OTJoiningConfiguration.h
+../../header_symlinks/Security/OTJoiningConfiguration.h

@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecExternalSourceTransform.h
+../../header_symlinks/macOS/Security/SecExternalSourceTransform.h

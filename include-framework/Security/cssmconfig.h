@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/cssmconfig.h
+../../header_symlinks/macOS/Security/cssmconfig.h

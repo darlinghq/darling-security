@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecFDERecoveryAsymmetricCrypto.h
+../../header_symlinks/macOS/Security/SecFDERecoveryAsymmetricCrypto.h

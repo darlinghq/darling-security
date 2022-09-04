@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SecSMIME.h
+../../header_symlinks/Security/SecSMIME.h

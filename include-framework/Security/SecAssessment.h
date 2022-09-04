@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecAssessment.h
+../../header_symlinks/macOS/Security/SecAssessment.h

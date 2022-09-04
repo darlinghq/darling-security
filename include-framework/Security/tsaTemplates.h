@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/tsaTemplates.h
+../../header_symlinks/macOS/Security/tsaTemplates.h

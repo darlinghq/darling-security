@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecCodeSigner.h
+../../header_symlinks/macOS/Security/SecCodeSigner.h

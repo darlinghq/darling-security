@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/SecRequirementPriv.h
+../../header_symlinks/macOS/Security/SecRequirementPriv.h

@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/SFSQLite.h
+../../header_symlinks/Security/SFSQLite.h

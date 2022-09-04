@@ -1,1 +1,1 @@
-/../../header_symlinks/Security/secasn1t.h
+../../header_symlinks/Security/secasn1t.h

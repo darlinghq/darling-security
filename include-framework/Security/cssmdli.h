@@ -1,1 +1,1 @@
-/../../header_symlinks/macOS/Security/cssmdli.h
+../../header_symlinks/macOS/Security/cssmdli.h
