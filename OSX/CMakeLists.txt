@@ -136,7 +136,7 @@ set_source_files_properties(
 
 generate_sdk_framework(Security
     VERSION ${FRAMEWORK_VERSION}
-    HEADER "../include-framework/Security"
+    HEADER "../darling-framework/include/Security"
 )
 
 add_separated_framework(Security
