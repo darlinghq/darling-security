@@ -240,8 +240,8 @@ add_separated_framework(Security
 		#coretls_cfhelpers # must be added as a circular library
 
 		#ctkclient_sep
-		#ACM
-		CryptoTokenKit # instead of ctkclient_sep and ACM
+		acm
+		CryptoTokenKit # instead of ctkclient_sep
 
 		DER
 		pam.2

@@ -35,7 +35,7 @@ target_link_libraries(secd
 	Foundation
 	login
 	DER
-	#ACM
+	acm
 	aks # already includes aks_acl
 	#aks_acl
 	security_asn1
@@ -44,7 +44,7 @@ target_link_libraries(secd
 	LocalAuthentication # instead of coreauthd_client
 
 	#ctkclient_sep
-	CryptoTokenKit # instead of ctkclient_sep and ACM
+	CryptoTokenKit # instead of ctkclient_sep
 
 	sqlite3
 	SecureObjectSyncServer
