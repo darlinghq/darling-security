@@ -47,7 +47,7 @@ AUTH_NONNULL_ALL
 OSStatus authorization_free(connection_t,xpc_object_t,xpc_object_t);
     
 AUTH_NONNULL_ALL
-OSStatus authorization_preauthorize_credentials(connection_t, xpc_object_t, xpc_object_t);
+OSStatus authorization_copy_right_properties(connection_t, xpc_object_t, xpc_object_t);
 
 AUTH_NONNULL_ALL
 OSStatus authorization_copy_rights(connection_t,xpc_object_t,xpc_object_t);
@@ -76,6 +76,17 @@ OSStatus authorization_right_remove(connection_t,xpc_object_t,xpc_object_t);
 AUTH_NONNULL_ALL
 OSStatus session_set_user_preferences(connection_t,xpc_object_t,xpc_object_t);
     
+AUTH_NONNULL_ALL
+OSStatus authorization_copy_prelogin_userdb(connection_t,xpc_object_t,xpc_object_t);
+
+AUTH_NONNULL_ALL
+OSStatus
+authorization_copy_prelogin_pref_value(connection_t conn, xpc_object_t message, xpc_object_t reply);
+
+AUTH_NONNULL_ALL
+OSStatus
+authorization_prelogin_smartcardonly_override(connection_t conn, xpc_object_t message, xpc_object_t reply);
+
 #if defined(__cplusplus)
 }
 #endif

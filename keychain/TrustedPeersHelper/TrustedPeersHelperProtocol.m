@@ -6,6 +6,7 @@
 #import "utilities/debugging.h"
 #import <CloudKit/CloudKit.h>
 #import <CloudKit/CloudKit_Private.h>
+#import <Security/SecXPCHelper.h>
 #endif
 
 NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
@@ -16,29 +17,7 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         errClasses = [NSMutableSet setWithSet:CKAcceptableValueClasses()];
-
-        char *classes[] = {
-            "CKPrettyError",
-            "CKRecordID",
-            "NSArray",
-            "NSData",
-            "NSDate",
-            "NSDictionary",
-            "NSError",
-            "NSNull",
-            "NSNumber",
-            "NSOrderedSet",
-            "NSSet",
-            "NSString",
-            "NSURL",
-        };
-
-        for (unsigned n = 0; n < sizeof(classes)/sizeof(classes[0]); n++) {
-            Class cls = objc_getClass(classes[n]);
-            if (cls) {
-                [errClasses addObject:cls];
-            }
-        }
+        [errClasses unionSet:[SecXPCHelper safeErrorClasses]];
     });
 
     @try {
@@ -49,6 +28,45 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
         NSSet* trustedPeersHelperPeerState = [NSSet setWithObject:[TrustedPeersHelperPeerState class]];
 
         NSSet* arrayOfTrustedPeersHelperPeer = [NSSet setWithArray:@[[NSArray class], [TrustedPeersHelperPeer class]]];
+
+        [interface setClasses:errClasses forSelector:@selector(dumpWithContainer:context:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(departByDistrustingSelfWithContainer:context:reply:) argumentIndex:0 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(distrustPeerIDsWithContainer:context:peerIDs:reply:) argumentIndex:0 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(trustStatusWithContainer:context:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(resetWithContainer:context:resetReason:reply:) argumentIndex:0 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(localResetWithContainer:context:reply:) argumentIndex:0 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(setAllowedMachineIDsWithContainer:context:allowedMachineIDs:honorIDMSListChanges:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(addAllowedMachineIDsWithContainer:context:machineIDs:reply:) argumentIndex:0 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(removeAllowedMachineIDsWithContainer:context:machineIDs:reply:) argumentIndex:0 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(fetchAllowedMachineIDsWithContainer:context:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(fetchEgoEpochWithContainer:context:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(prepareWithContainer:context:epoch:machineID:bottleSalt:bottleID:modelID:deviceName:serialNumber:osVersion:policyVersion:policySecrets:syncUserControllableViews:signingPrivKeyPersistentRef:encPrivKeyPersistentRef:reply:) argumentIndex:6 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(establishWithContainer:context:ckksKeys:tlkShares:preapprovedKeys:reply:) argumentIndex:3 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(vouchWithContainer:context:peerID:permanentInfo:permanentInfoSig:stableInfo:stableInfoSig:ckksKeys:reply:) argumentIndex:2 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(preflightVouchWithBottleWithContainer:context:bottleID:reply:) argumentIndex:3 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(vouchWithBottleWithContainer:context:bottleID:entropy:bottleSalt:tlkShares:reply:) argumentIndex:4 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(preflightVouchWithRecoveryKeyWithContainer:context:recoveryKey:salt:reply:) argumentIndex:2 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(vouchWithRecoveryKeyWithContainer:context:recoveryKey:salt:tlkShares:reply:) argumentIndex:2 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(joinWithContainer:context:voucherData:voucherSig:ckksKeys:tlkShares:preapprovedKeys:reply:) argumentIndex:3 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(preflightPreapprovedJoinWithContainer:context:preapprovedKeys:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(attemptPreapprovedJoinWithContainer:context:ckksKeys:tlkShares:preapprovedKeys:reply:) argumentIndex:3 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(updateWithContainer:context:deviceName:serialNumber:osVersion:policyVersion:policySecrets:syncUserControllableViews:reply:) argumentIndex:2 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(setPreapprovedKeysWithContainer:context:preapprovedKeys:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(updateTLKsWithContainer:context:ckksKeys:tlkShares:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(fetchViableBottlesWithContainer:context:reply:) argumentIndex:2 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(fetchViableEscrowRecordsWithContainer:context:forceFetch:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(fetchEscrowContentsWithContainer:context:reply:) argumentIndex:3 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(fetchPolicyDocumentsWithContainer:context:versions:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(fetchCurrentPolicyWithContainer:context:modelIDOverride:reply:) argumentIndex:2 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(validatePeersWithContainer:context:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(fetchTrustStateWithContainer:context:reply:) argumentIndex:2 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(setRecoveryKeyWithContainer:context:recoveryKey:salt:ckksKeys:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(reportHealthWithContainer:context:stateMachineState:trustState:reply:) argumentIndex:0 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(pushHealthInquiryWithContainer:context:reply:) argumentIndex:0 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(requestHealthCheckWithContainer:context:requiresEscrowCheck:reply:) argumentIndex:4 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(getSupportAppInfoWithContainer:context:reply:) argumentIndex:1 ofReply:YES];
+        [interface setClasses:errClasses forSelector:@selector(removeEscrowCacheWithContainer:context:reply:) argumentIndex:0 ofReply:YES];
+
 
         [interface setClasses:arrayOfStrings   forSelector:@selector(addAllowedMachineIDsWithContainer:context:machineIDs:reply:) argumentIndex:2 ofReply:NO];
         [interface setClasses:arrayOfStrings   forSelector:@selector(removeAllowedMachineIDsWithContainer:context:machineIDs:reply:) argumentIndex:2 ofReply:NO];
@@ -88,16 +106,18 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
                                                                    salt:
                                                                    ckksKeys:
                                                                    reply:) argumentIndex:4 ofReply:NO];
+        [interface setClasses:arrayOfCKRecords forSelector:@selector(setRecoveryKeyWithContainer:
+                                                                     context:
+                                                                     recoveryKey:
+                                                                     salt:
+                                                                     ckksKeys:
+                                                                     reply:) argumentIndex:0 ofReply:YES];
         [interface setClasses:arrayOfTLKShares forSelector:@selector(vouchWithRecoveryKeyWithContainer:
                                                                      context:
                                                                      recoveryKey:
                                                                      salt:
                                                                      tlkShares:
                                                                      reply:) argumentIndex:4 ofReply:NO];
-
-        [interface setClasses:[NSSet setWithObject:[TPPolicy class]] forSelector:@selector(fetchPolicyWithContainer:
-                                                                                           context:
-                                                                                           reply:) argumentIndex:0 ofReply:YES];
 
         [interface setClasses:trustedPeersHelperPeerState forSelector:@selector(updateWithContainer:
                                                                                 context:
@@ -106,6 +126,7 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
                                                                                 osVersion:
                                                                                 policyVersion:
                                                                                 policySecrets:
+                                                                                syncUserControllableViews:
                                                                                 reply:) argumentIndex:0 ofReply:YES];
 
         [interface setClasses:trustedPeersHelperPeerState   forSelector:@selector(fetchTrustStateWithContainer:
@@ -133,9 +154,7 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
     }
     @catch(NSException* e) {
         secerror("TrustedPeersHelperSetupProtocol failed, continuing, but you might crash later: %@", e);
-#if DEBUG
         @throw e;
-#endif
     }
 #endif
 
@@ -164,10 +183,10 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
 
 - (NSString*)description
 {
-    return [NSString stringWithFormat:@"<TPHPeerState: %@ preapproved:%d status:%lld memberChanges: %@ unk. mIDs: %@ osVersion: %@>",
+    return [NSString stringWithFormat:@"<TPHPeerState: %@ preapproved:%d status:%@ memberChanges: %@ unk. mIDs: %@ osVersion: %@>",
             self.peerID,
             self.identityIsPreapproved,
-            (int64_t)self.peerStatus,
+            TPPeerStatusToString(self.peerStatus),
             self.memberChanges ? @"YES" : @"NO",
             self.unknownMachineIDsPresent ? @"YES" : @"NO",
             self.osVersion?:@"unknown"];
@@ -203,6 +222,7 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
 @implementation TrustedPeersHelperEgoPeerStatus
 
 - (instancetype)initWithEgoPeerID:(NSString* _Nullable)egoPeerID
+                 egoPeerMachineID:(NSString* _Nullable)egoPeerMachineID
                            status:(TPPeerStatus)egoStatus
         viablePeerCountsByModelID:(NSDictionary<NSString*, NSNumber*>*)viablePeerCountsByModelID
             peerCountsByMachineID:(NSDictionary<NSString *,NSNumber *> * _Nonnull)peerCountsByMachineID
@@ -211,6 +231,7 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
 {
     if((self = [super init])) {
         _egoPeerID = egoPeerID;
+        _egoPeerMachineID = egoPeerMachineID;
         _egoStatus = egoStatus;
         _viablePeerCountsByModelID = viablePeerCountsByModelID;
         _peerCountsByMachineID = peerCountsByMachineID;
@@ -226,7 +247,7 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
 
 - (NSString*)description
 {
-    return [NSString stringWithFormat:@"<TPHEgoPeerState: %@>", self.egoPeerID];
+    return [NSString stringWithFormat:@"<TPHEgoPeerState: %@ (mid:%@)>", self.egoPeerID, self.egoPeerMachineID];
 }
 
 + (BOOL)supportsSecureCoding {
@@ -236,6 +257,7 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
 - (instancetype)initWithCoder:(NSCoder *)coder {
     if ((self = [super init])) {
         _egoPeerID = [coder decodeObjectOfClass:[NSString class] forKey:@"peerID"];
+        _egoPeerMachineID = [coder decodeObjectOfClass:[NSString class] forKey:@"mID"];
         _egoStatus = (TPPeerStatus)[coder decodeInt64ForKey:@"egoStatus"];
         _viablePeerCountsByModelID = [coder decodeObjectOfClasses:[NSSet setWithArray:@[[NSDictionary class], [NSString class], [NSNumber class]]] forKey:@"viablePeerCountsByModelID"];
         _numberOfPeersInOctagon = 0;
@@ -253,6 +275,7 @@ NSXPCInterface* TrustedPeersHelperSetupProtocol(NSXPCInterface* interface)
 
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.egoPeerID forKey:@"peerID"];
+    [coder encodeObject:self.egoPeerMachineID forKey:@"mID"];
     [coder encodeInt64:self.egoStatus forKey:@"egoStatus"];
     [coder encodeObject:self.viablePeerCountsByModelID forKey:@"viablePeerCountsByModelID"];
     [coder encodeObject:self.peerCountsByMachineID forKey:@"peerCountsByMachineID"];

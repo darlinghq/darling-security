@@ -52,63 +52,50 @@
     }
 
     self.finishedOp = [NSBlockOperation blockOperationWithBlock:^{
-        // If we errored in some unknown way, ask to try again!
         STRONGIFY(self);
 
         if(self.error) {
-            // Is this a very scary error?
-            bool fatal = false;
-
-            NSTimeInterval ckDelay = CKRetryAfterSecondsForError(self.error);
-            NSTimeInterval cuttlefishDelay = [self.error cuttlefishRetryAfter];
-            NSTimeInterval delay = MAX(ckDelay, cuttlefishDelay);
-            if (delay == 0) {
-                delay = 30;
-            }
-
-            if([self.error isCuttlefishError:CuttlefishErrorResultGraphNotFullyReachable]) {
-                secnotice("octagon-sos", "SOS update preapproval error is 'result graph not reachable'; retrying is useless: %@", self.error);
-                fatal = true;
-            }
-
-            if([self.error.domain isEqualToString:TrustedPeersHelperErrorDomain] && self.error.code == TrustedPeersHelperErrorNoPreparedIdentity) {
-                secnotice("octagon-sos", "SOS update preapproval error is 'no prepared identity'; retrying immediately is useless: %@", self.error);
-                fatal = true;
-            }
-
-            if(!fatal) {
+            if ([self.error retryableCuttlefishError]) {
+                NSTimeInterval delay = [self.error overallCuttlefishRetry];
                 secnotice("octagon-sos", "SOS update preapproval error is not fatal: requesting retry in %0.2fs: %@", delay, self.error);
                 [self.deps.flagHandler handlePendingFlag:[[OctagonPendingFlag alloc] initWithFlag:OctagonFlagAttemptSOSUpdatePreapprovals
                                                                                    delayInSeconds:delay]];
+            } else {
+                secnotice("octagon-sos", "SOS update preapproval error is: %@, not retrying", self.error);
             }
         }
     }];
     [self dependOnBeforeGroupFinished:self.finishedOp];
 
-    NSError* error = nil;
-    NSSet<id<CKKSRemotePeerProtocol>>* peerSet = [self.deps.sosAdapter fetchTrustedPeers:&error];
+    NSError* sosPreapprovalError = nil;
+    NSArray<NSData*>* publicSigningSPKIs = [OTSOSAdapterHelpers peerPublicSigningKeySPKIsForCircle:self.deps.sosAdapter error:&sosPreapprovalError];
 
-    if(!peerSet || error) {
-        secerror("octagon-sos: Can't fetch trusted peers; stopping preapproved key update: %@", error);
-        self.error = error;
+    if(!publicSigningSPKIs || sosPreapprovalError) {
+        secerror("octagon-sos: Can't fetch trusted peers; stopping preapproved key update: %@", sosPreapprovalError);
+        self.error = sosPreapprovalError;
         self.nextState = self.sosNotPresentState;
         [self runBeforeGroupFinished:self.finishedOp];
         return;
     }
 
-    NSArray<NSData*>* publicSigningSPKIs = [OTSOSActualAdapter peerPublicSigningKeySPKIs:peerSet];
     secnotice("octagon-sos", "Updating SOS preapproved keys to %@", publicSigningSPKIs);
 
     [self.deps.cuttlefishXPCWrapper setPreapprovedKeysWithContainer:self.deps.containerName
                                                             context:self.deps.contextID
                                                     preapprovedKeys:publicSigningSPKIs
-                                                              reply:^(NSError* error) {
+                                                              reply:^(TrustedPeersHelperPeerState* _Nullable peerState, NSError* error) {
             STRONGIFY(self);
             if(error) {
                 secerror("octagon-sos: unable to update preapproved keys: %@", error);
                 self.error = error;
             } else {
                 secnotice("octagon-sos", "Updated SOS preapproved keys");
+
+                if (peerState.memberChanges) {
+                    secnotice("octagon", "Member list changed");
+                    [self.deps.octagonAdapter sendTrustedPeerSetChangedUpdate];
+                }
+
                 self.nextState = self.intendedState;
             }
             [self runBeforeGroupFinished:self.finishedOp];

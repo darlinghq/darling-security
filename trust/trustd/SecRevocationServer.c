@@ -87,6 +87,7 @@ static bool SecOCSPSingleResponseProcess(SecOCSPSingleResponseRef this,
              in the info dictionary. */
             //cert.revokeCheckGood(true);
             rvc->nextUpdate = this->nextUpdate == NULL_TIME ? this->thisUpdate + kSecDefaultOCSPResponseTTL : this->nextUpdate;
+            rvc->thisUpdate = this->thisUpdate;
             processed = true;
             break;
         case CS_Revoked:
@@ -127,6 +128,7 @@ void SecORVCUpdatePVC(SecORVCRef rvc) {
     }
     if (rvc->ocspResponse) {
         rvc->nextUpdate = SecOCSPResponseGetExpirationTime(rvc->ocspResponse);
+        rvc->thisUpdate = SecOCSPResponseProducedAt(rvc->ocspResponse);
     }
 }
 
@@ -285,10 +287,18 @@ void SecORVCConsumeOCSPResponse(SecORVCRef rvc, SecOCSPResponseRef ocspResponse 
                                         sr->certStatus == CS_Revoked ? SecOCSPResponseProducedAt(ocspResponse) : verifyTime), errOut);
 #endif
 
+    TrustAnalyticsBuilder *analytics = SecPathBuilderGetAnalyticsData(rvc->builder);
+    if (analytics && SecOCSPResponseIsWeakHash(ocspResponse)) {
+        analytics->ocsp_weak_hash = true;
+    }
+
     // If we get here, we have a properly signed ocsp response
     // but we haven't checked dates yet.
 
     bool sr_valid = SecOCSPSingleResponseCalculateValidity(sr, kSecDefaultOCSPResponseTTL, verifyTime);
+    if (sr_valid) {
+        rvc->rvc->revocation_checked = true;
+    }
     if (sr->certStatus == CS_Good) {
         // Side effect of SecOCSPResponseCalculateValidity sets ocspResponse->expireTime
         require_quiet(sr_valid && SecOCSPResponseCalculateValidity(ocspResponse, maxAge, kSecDefaultOCSPResponseTTL, verifyTime), errOut);
@@ -479,12 +489,11 @@ static void SecRVCProcessValidPolicyConstraints(SecRVCRef rvc) {
             SecPolicyRef policy = (SecPolicyRef)CFArrayGetValueAtIndex(policies, policyIX);
             if (!SecRVCPolicyConstraintsPermitPolicy(constraints, count, policy)) {
                 policyDeniedByConstraints = true;
-                SecPVCSetResultForced(pvc, kSecPolicyCheckIssuerPolicyConstraints, rvc->certIX,
-                                      kCFBooleanFalse, true);
-                pvc->result = kSecTrustResultRecoverableTrustFailure;
-                if (!rvc->valid_info->overridable) {
-                    /* error for this check should be non-recoverable */
-                    pvc->result = kSecTrustResultFatalTrustFailure;
+                if (rvc->valid_info->overridable) {
+                    SecPVCSetResultForcedWithTrustResult(pvc, kSecPolicyCheckIssuerPolicyConstraints, rvc->certIX,
+                                                         kCFBooleanFalse, true, kSecTrustResultRecoverableTrustFailure);
+                } else {
+                    SecPVCSetResultForced(pvc, kSecPolicyCheckIssuerPolicyConstraints, rvc->certIX, kCFBooleanFalse, true);
                 }
             }
         }
@@ -614,6 +623,10 @@ void SecRVCSetValidDeterminedErrorResult(SecRVCRef rvc) {
     CFReleaseNull(cfreason);
 }
 
+bool SecRVCRevocationChecked(SecRVCRef rvc) {
+    return rvc->revocation_checked;
+}
+
 static void SecRVCProcessValidInfoResults(SecRVCRef rvc) {
     if (!rvc || !rvc->valid_info || !rvc->builder) {
         return;
@@ -645,6 +658,7 @@ static void SecRVCProcessValidInfoResults(SecRVCRef rvc) {
         } else if (allowed) {
             /* definitely not revoked (allowlisted) */
             SecCertificatePathVCSetIsAllowlisted(path, true);
+            rvc->revocation_checked = true;
         }
         /* no-ca is definitive; no need to check further. */
         secdebug("validupdate", "rvc: definitely %s cert %" PRIdCFIndex,
@@ -1010,12 +1024,16 @@ bool SecPathBuilderCheckRevocation(SecPathBuilderRef builder) {
          * This check resolves unrevocation events after the nextUpdate time. */
         bool old_cached_response = (!rvc->done && rvc->orvc->ocspResponse);
 
+        /* Check whether CA revocation additions match an issuer above us in this path.
+         * If so, we will attempt revocation checking below. */
+        bool has_ca_revocation = (certIX < SecCertificatePathVCIndexOfCAWithRevocationAdditions(path));
+
         /* If the cert is EV or if revocation checking was explicitly enabled, attempt to fire off an
          async http request for this cert's revocation status, unless we already successfully checked
          the revocation status of this cert based on the cache or stapled responses.  */
         bool allow_fetch = SecRevocationCanAccessNetwork(builder, first_check_done) &&
             (SecCertificatePathVCIsEV(path) || SecCertificatePathVCIsOptionallyEV(path) ||
-             SecPathBuilderGetRevocationMethod(builder) || old_cached_response);
+             SecPathBuilderGetRevocationMethod(builder) || old_cached_response || has_ca_revocation);
         if (rvc->done || !allow_fetch) {
             /* We got a cache hit or we aren't allowed to access the network */
             SecRVCUpdatePVC(rvc);
@@ -1039,4 +1057,9 @@ CFAbsoluteTime SecRVCGetEarliestNextUpdate(SecRVCRef rvc) {
     if (!rvc || !rvc->orvc) { return enu; }
     enu = rvc->orvc->nextUpdate;
     return enu;
+}
+
+CFAbsoluteTime SecRVCGetLatestThisUpdate(SecRVCRef rvc) {
+    if (!rvc || !rvc->orvc) { return -DBL_MAX; }
+    return rvc->orvc->thisUpdate;
 }

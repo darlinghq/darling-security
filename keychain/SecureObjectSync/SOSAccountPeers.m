@@ -125,16 +125,7 @@ CFArrayRef SOSAccountCopyViewUnaware(SOSAccount* account, CFErrorRef *error) {
         SOSCircleForEachPeer(circle, ^(SOSPeerInfoRef peer) {
             if (!SOSPeerInfoVersionHasV2Data(peer) ) {
                 sosArrayAppendPeerCopy(appendPeersTo, peer);
-            } else {
-                CFSetRef peerEnabledViews = SOSPeerInfoCopyEnabledViews(peer);
-                CFSetRef enabledV0Views = CFSetCreateIntersection(kCFAllocatorDefault, peerEnabledViews, SOSViewsGetV0ViewSet());
-                if(CFSetGetCount(enabledV0Views) != 0) {
-                    sosArrayAppendPeerCopy(appendPeersTo, peer);
-                }
-                CFReleaseNull(peerEnabledViews);
-                CFReleaseNull(enabledV0Views);
-            }
-        });
+            }        });
     });
 }
 
@@ -153,77 +144,6 @@ CFArrayRef SOSAccountCopyPeers(SOSAccount* account, CFErrorRef *error) {
         });
     });
 }
-
-CFDataRef SOSAccountCopyAccountStateFromKeychain(CFErrorRef *error){
-    CFMutableDictionaryRef query = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-    CFTypeRef result = NULL;
-    CFDictionaryAddValue(query, kSecClass, kSecClassGenericPassword);
-    CFDictionaryAddValue(query, kSecAttrAccessGroup, CFSTR("com.apple.security.sos"));
-    CFDictionaryAddValue(query, kSecAttrAccessible, CFSTR("dku"));
-    CFDictionaryAddValue(query, kSecAttrTombstone, kCFBooleanFalse);
-    CFDictionaryAddValue(query, kSecAttrSynchronizable, kCFBooleanFalse);
-    CFDictionaryAddValue(query, kSecReturnData, kCFBooleanTrue);
-    
-    SecItemCopyMatching(query, &result);
-
-    if(!isData(result)){
-        SOSErrorCreate(kSOSErrorUnexpectedType, error, NULL, CFSTR("Expected CFData, got: %@"), result);
-        CFReleaseNull(result);
-        return NULL;
-    }
-    return result;
-}
-
-bool SOSAccountDeleteAccountStateFromKeychain(CFErrorRef *error){
-    CFMutableDictionaryRef query = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-    bool result = false;
-    CFDictionaryAddValue(query, kSecClass, kSecClassGenericPassword);
-    CFDictionaryAddValue(query, kSecAttrAccessGroup, CFSTR("com.apple.security.sos"));
-    CFDictionaryAddValue(query, kSecAttrAccessible, CFSTR("dku"));
-    CFDictionaryAddValue(query, kSecAttrTombstone, kCFBooleanFalse);
-    CFDictionaryAddValue(query, kSecAttrSynchronizable, kCFBooleanFalse);
-    
-    result = SecItemDelete(query);
-    return result;
-}
-
-CFDataRef SOSAccountCopyEngineStateFromKeychain(CFErrorRef *error){
-    CFMutableDictionaryRef query = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-    CFTypeRef result = NULL;
-    CFDictionaryAddValue(query, kSecClass, kSecClassGenericPassword);
-    CFDictionaryAddValue(query, kSecAttrAccount, CFSTR("engine-state"));
-    CFDictionaryAddValue(query, kSecAttrAccessGroup, CFSTR("com.apple.security.sos"));
-    CFDictionaryAddValue(query, kSecAttrAccessible, CFSTR("dk"));
-    CFDictionaryAddValue(query, kSecAttrService, CFSTR("SOSDataSource-ak"));
-    CFDictionaryAddValue(query, kSecAttrTombstone, kCFBooleanFalse);
-    CFDictionaryAddValue(query, kSecAttrSynchronizable, kCFBooleanFalse);
-    CFDictionaryAddValue(query, kSecReturnData, kCFBooleanTrue);
-    
-    SecItemCopyMatching(query, &result);
-    
-    if(!isData(result)){
-        SOSErrorCreate(kSOSErrorUnexpectedType, error, NULL, CFSTR("Expected CFData, got: %@"), result);
-        CFReleaseNull(result);
-        return NULL;
-    }
-    return result;
-}
-
-bool SOSAccountDeleteEngineStateFromKeychain(CFErrorRef *error){
-    CFMutableDictionaryRef query = CFDictionaryCreateMutableForCFTypes(kCFAllocatorDefault);
-    bool result = false;
-    CFDictionaryAddValue(query, kSecClass, kSecClassGenericPassword);
-    CFDictionaryAddValue(query, kSecAttrAccount, CFSTR("engine-state"));
-    CFDictionaryAddValue(query, kSecAttrAccessGroup, CFSTR("com.apple.security.sos"));
-    CFDictionaryAddValue(query, kSecAttrAccessible, CFSTR("dk"));
-    CFDictionaryAddValue(query, kSecAttrService, CFSTR("SOSDataSource-ak"));
-    CFDictionaryAddValue(query, kSecAttrTombstone, kCFBooleanFalse);
-    CFDictionaryAddValue(query, kSecAttrSynchronizable, kCFBooleanFalse);
-    
-    result = SecItemDelete(query);
-    return result;
-}
-
 
 CFArrayRef SOSAccountCopyActivePeers(SOSAccount* account, CFErrorRef *error) {
     return SOSAccountCopySortedPeerArray(account, error, ^(SOSCircleRef circle, CFMutableArrayRef appendPeersTo) {
@@ -288,3 +208,27 @@ CFBooleanRef SOSAccountPeersHaveViewsEnabled(SOSAccount* account, CFArrayRef vie
     return result;
 }
 
+bool SOSAccountRemoveV0Clients(SOSAccount *account, CFErrorRef *error) {
+    CFErrorRef localError = NULL;
+    
+    CFArrayRef v0Peers = SOSAccountCopyViewUnaware(account, &localError);
+    if (error && localError) {
+        CFTransferRetained(*error, localError);
+    }
+    
+    if (v0Peers == NULL || CFArrayGetCount(v0Peers) == 0) {
+        CFReleaseNull(localError);
+        CFReleaseNull(v0Peers);
+        return true;
+    }
+    
+    bool result = SOSAccountRemovePeersFromCircle(account, v0Peers, &localError);
+    if (error && localError) {
+        CFTransferRetained(*error, localError);
+    }
+    
+    CFReleaseNull(localError);
+    CFReleaseNull(v0Peers);
+
+    return result;
+}

@@ -46,13 +46,17 @@ public:
     TranslocatorClient(dispatch_queue_t q);
     ~TranslocatorClient();
 
-    string translocatePathForUser(const TranslocationPath &originalPath, const string &destPath) override;
+    string translocatePathForUser(const TranslocationPath &originalPath, ExtendedAutoFileDesc &destFd) override;
+    string translocatePathForUser(const GenericTranslocationPath &originalPath, ExtendedAutoFileDesc &destFd) override;
     bool destroyTranslocatedPathForUser(const string &translocatedPath) override;
     void appLaunchCheckin(pid_t pid) override;
 
 private:
     TranslocatorClient() = delete;
     TranslocatorClient(const TranslocatorClient &that) = delete;
+    
+    string requestTranslocation(const int fdToTranslocate, const int destFd, const TranslocationOptions flags);
+    
     dispatch_queue_t syncQ;
     xpc_connection_t service;
 };

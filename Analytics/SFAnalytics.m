@@ -40,6 +40,13 @@
 
 #import <utilities/SecCoreAnalytics.h>
 
+#if TARGET_OS_OSX
+#include <sys/sysctl.h>
+#include <membership.h>
+#else
+#import <sys/utsname.h>
+#endif
+
 // SFAnalyticsDefines constants
 NSString* const SFAnalyticsTableSuccessCount = @"success_count";
 NSString* const SFAnalyticsTableHardFailures = @"hard_failures";
@@ -53,6 +60,7 @@ NSString* const SFAnalyticsColumnSoftFailureCount = @"soft_failure_count";
 NSString* const SFAnalyticsColumnSampleValue = @"value";
 NSString* const SFAnalyticsColumnSampleName = @"name";
 
+NSString* const SFAnalyticsPostTime = @"postTime";
 NSString* const SFAnalyticsEventTime = @"eventTime";
 NSString* const SFAnalyticsEventType = @"eventType";
 NSString* const SFAnalyticsEventTypeErrorEvent = @"errorEvent";
@@ -73,6 +81,7 @@ NSString* const SFAnalyticsTopicCloudServices = @"CloudServicesTopic";
 NSString* const SFAnalyticsTopicKeySync = @"KeySyncTopic";
 NSString* const SFAnalyticsTopicTrust = @"TrustTopic";
 NSString* const SFAnalyticsTopicTransparency = @"TransparencyTopic";
+NSString* const SFAnalyticsTopicNetworking = @"NetworkingTopic";
 
 NSString* const SFAnalyticsTableSchema =    @"CREATE TABLE IF NOT EXISTS hard_failures (\n"
                                                 @"id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
@@ -130,6 +139,7 @@ NSString* const SFAnalyticsErrorDomain = @"com.apple.security.sfanalytics";
 // Local constants
 NSString* const SFAnalyticsEventBuild = @"build";
 NSString* const SFAnalyticsEventProduct = @"product";
+NSString* const SFAnalyticsEventModelID = @"modelid";
 NSString* const SFAnalyticsEventInternal = @"internal";
 const NSTimeInterval SFAnalyticsSamplerIntervalOncePerReport = -1.0;
 
@@ -175,7 +185,8 @@ const NSTimeInterval SFAnalyticsSamplerIntervalOncePerReport = -1.0;
 {
     WithPathInKeychainDirectory(CFSTR("Analytics"), ^(const char *path) {
 #if TARGET_OS_IPHONE
-        mode_t permissions = 0775;
+        /* We need _securityd, _trustd, and root all to be able to write. They share no groups. */
+        mode_t permissions = 0777;
 #else
         mode_t permissions = 0700;
 #endif // TARGET_OS_IPHONE
@@ -187,6 +198,62 @@ const NSTimeInterval SFAnalyticsSamplerIntervalOncePerReport = -1.0;
     });
     NSString *path = [NSString stringWithFormat:@"Analytics/%@.db", basename];
     return [(__bridge_transfer NSURL*)SecCopyURLForFileInKeychainDirectory((__bridge CFStringRef)path) path];
+}
+
++ (NSString *)defaultProtectedAnalyticsDatabasePath:(NSString *)basename uuid:(NSUUID * __nullable)userUuid
+{
+    // Create the top-level directory with full access
+    NSMutableString *directory = [NSMutableString stringWithString:@"sfanalytics"];
+    WithPathInProtectedDirectory((__bridge  CFStringRef)directory, ^(const char *path) {
+        mode_t permissions = 0777;
+        int ret = mkpath_np(path, permissions);
+        if (!(ret == 0 || ret ==  EEXIST)) {
+            secerror("could not create path: %s (%s)", path, strerror(ret));
+        }
+        chmod(path, permissions);
+    });
+
+    // create per-user directory
+    if (userUuid) {
+        [directory appendString:@"/"];
+        [directory appendString:[userUuid UUIDString]];
+        WithPathInProtectedDirectory((__bridge  CFStringRef)directory, ^(const char *path) {
+#if TARGET_OS_IPHONE
+            /* We need _securityd, _trustd, and root all to be able to write. They share no groups. */
+            mode_t permissions = 0777;
+#else
+            mode_t permissions = 0700;
+            if (geteuid() == 0 || geteuid() == 282) {
+                // Root/_trustd user directory needs to be read/write for group so that user supd can upload system data
+                permissions = 0775;
+            }
+#endif // TARGET_OS_IPHONE
+            int ret = mkpath_np(path, permissions);
+            if (!(ret == 0 || ret ==  EEXIST)) {
+                secerror("could not create path: %s (%s)", path, strerror(ret));
+            }
+            chmod(path, permissions);
+        });
+    }
+    NSString *path = [NSString stringWithFormat:@"%@/%@.db", directory, basename];
+    return [(__bridge_transfer NSURL*)SecCopyURLForFileInProtectedDirectory((__bridge CFStringRef)path) path];
+}
+
++ (NSString *)defaultProtectedAnalyticsDatabasePath:(NSString *)basename
+{
+#if TARGET_OS_OSX
+    uid_t euid = geteuid();
+    uuid_t currentUserUuid;
+    int ret = mbr_uid_to_uuid(euid, currentUserUuid);
+    if (ret != 0) {
+        secerror("failed to get UUID for user(%d) - %d", euid, ret);
+        return [SFAnalytics defaultProtectedAnalyticsDatabasePath:basename uuid:nil];
+    }
+    NSUUID *userUuid = [[NSUUID alloc] initWithUUIDBytes:currentUserUuid];
+    return [SFAnalytics defaultProtectedAnalyticsDatabasePath:basename uuid:userUuid];
+#else
+    return [SFAnalytics defaultProtectedAnalyticsDatabasePath:basename uuid:nil];
+#endif // TARGET_OS_IPHONE
 }
 
 + (NSInteger)fuzzyDaysSinceDate:(NSDate*)date
@@ -220,6 +287,38 @@ const NSTimeInterval SFAnalyticsSamplerIntervalOncePerReport = -1.0;
     else {
         return 365;
     }
+}
+
++ (NSInteger)fuzzyInteger:(NSInteger)num
+{
+    NSInteger sign = 1;
+    if(num < 0) {
+        sign = -1;
+        num = -num;
+    }
+
+    // Differentiate zero and non-zero....
+    if(num == 0) {
+        return 0;
+    }
+
+    if(num <= 5) {
+        return sign*5;
+    }
+
+    // Otherwise, round to the nearest five
+    NSInteger mod = num % 5;
+
+    if(mod <= 2) {
+        return sign*(num - mod);
+    } else {
+        return sign*(num + (5-mod));
+    }
+}
+
++ (NSNumber*)fuzzyNumber:(NSNumber*)num
+{
+    return [NSNumber numberWithInteger:[self fuzzyInteger:[num integerValue]]];
 }
 
 // Instantiate lazily so unit tests can have clean databases each
@@ -314,11 +413,37 @@ const NSTimeInterval SFAnalyticsSamplerIntervalOncePerReport = -1.0;
     return result;
 }
 
++ (NSString*)hwModelID
+{
+    static NSString *hwModel = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+#if TARGET_OS_SIMULATOR
+        // Asking for a real value in the simulator gives the results for the underlying mac. Not particularly useful.
+        hwModel = [NSString stringWithFormat:@"%s", getenv("SIMULATOR_MODEL_IDENTIFIER")];
+#elif TARGET_OS_OSX
+        size_t size;
+        sysctlbyname("hw.model", NULL, &size, NULL, 0);
+        char *sysctlString = malloc(size);
+        sysctlbyname("hw.model", sysctlString, &size, NULL, 0);
+        hwModel = [[NSString alloc] initWithUTF8String:sysctlString];
+        free(sysctlString);
+#else
+        struct utsname systemInfo;
+        uname(&systemInfo);
+
+        hwModel = [NSString stringWithCString:systemInfo.machine
+                                     encoding:NSUTF8StringEncoding];
+#endif
+    });
+    return hwModel;
+}
 
 + (void)addOSVersionToEvent:(NSMutableDictionary*)eventDict {
     static dispatch_once_t onceToken;
     static NSString *build = NULL;
     static NSString *product = NULL;
+    static NSString *modelID = nil;
     static BOOL internal = NO;
     dispatch_once(&onceToken, ^{
         NSDictionary *version = CFBridgingRelease(_CFCopySystemVersionDictionary());
@@ -327,12 +452,17 @@ const NSTimeInterval SFAnalyticsSamplerIntervalOncePerReport = -1.0;
         build = version[(__bridge NSString *)_kCFSystemVersionBuildVersionKey];
         product = version[(__bridge NSString *)_kCFSystemVersionProductNameKey];
         internal = os_variant_has_internal_diagnostics("com.apple.security");
+
+        modelID = [self hwModelID];
     });
     if (build) {
         eventDict[SFAnalyticsEventBuild] = build;
     }
     if (product) {
         eventDict[SFAnalyticsEventProduct] = product;
+    }
+    if (modelID) {
+        eventDict[SFAnalyticsEventModelID] = modelID;
     }
     if (internal) {
         eventDict[SFAnalyticsEventInternal] = @YES;

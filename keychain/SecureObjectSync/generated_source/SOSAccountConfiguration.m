@@ -50,7 +50,7 @@
 }
 - (BOOL)hasRingUpdateFlag
 {
-    return _has.ringUpdateFlag;
+    return _has.ringUpdateFlag != 0;
 }
 
 - (NSString *)description

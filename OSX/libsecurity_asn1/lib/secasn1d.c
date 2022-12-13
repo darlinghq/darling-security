@@ -41,7 +41,7 @@
 
 #include "secasn1.h"
 #include "secerr.h"
-#include "assert.h"
+#include <security_utilities/simulatecrash_assert.h>
 
 #ifdef	NDEBUG
 #define DEBUG_DECASN1	0
@@ -433,9 +433,6 @@ loser:
     if (state != NULL) {
         PORT_ArenaRelease(cx->our_pool, state->our_mark);
         state->our_mark = NULL;
-    }
-    if (new_state != NULL) {
-        PORT_Free(new_state);
     }
     return NULL;
 }
@@ -1794,19 +1791,13 @@ sec_asn1d_parse_bit_string (sec_asn1d_state *state,
     /*PORT_Assert (state->pending > 0); */
     PORT_Assert (state->place == beforeBitString);
 
-    if ((state->pending == 0) || (state->contents_length == 1)) {
+    if (state->pending == 0) {
 		if (state->dest != NULL) {
 			SecAsn1Item *item = (SecAsn1Item *)(state->dest);
 			item->Data = NULL;
 			item->Length = 0;
 			state->place = beforeEndOfContents;
-		}
-		if(state->contents_length == 1) {
-			/* skip over (unused) remainder byte */
-			return 1;
-		}
-		else {
-			return 0;
+            return 0;
 		}
     }
 
@@ -1879,8 +1870,9 @@ sec_asn1d_add_to_subitems (sec_asn1d_state *state,
 	if (copy == NULL) {
 		dprintf("decodeError: alloc\n");	
 	    state->top->status = decodeError;
-        if (!state->top->our_pool)
+        if (!state->top->our_pool) {
             PORT_Free(thing);
+        }
 	    return NULL;
 	}
 	PORT_Memcpy (copy, data, len);
@@ -1912,9 +1904,9 @@ sec_asn1d_record_any_header (sec_asn1d_state *state,
 
     item = (SecAsn1Item *)(state->dest);
     if (item != NULL && item->Data != NULL) {
-	PORT_Assert (state->substring);
-	PORT_Memcpy (item->Data + item->Length, buf, len);
-	item->Length += len;
+        dprintf("decodeError: sec_asn1d_record_any_header unknown allocation size\n");
+        PORT_SetError (SEC_ERROR_LIBRARY_FAILURE);
+        state->top->status = decodeError;
     } else {
 	sec_asn1d_add_to_subitems (state, buf, len, PR_TRUE);
     }

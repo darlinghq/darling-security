@@ -38,8 +38,16 @@ typedef struct octagon_signpost_s {
 } OctagonSignpost;
 
 #define OctagonSignpostNamePerformEscrowRecovery                        "OctagonSignpostNamePerformEscrowRecovery"
+#define OctagonSignpostNamePerformSilentEscrowRecovery                  "OctagonSignpostNamePerformSilentEscrowRecovery"
 #define OctagonSignpostNamePerformRecoveryFromSBD                       "OctagonSignpostNamePerformRecoveryFromSBD"
-#define OctagonSignpostNamePerformBottleRecovery                        "OctagonSignpostNamePerformBottleRecovery"
+
+#define OctagonSignpostNameRecoverWithCDPContext                        "OctagonSignpostNameRecoverWithCDPContext"
+#define OctagonSignpostNameRecoverSilentWithCDPContext                  "OctagonSignpostNameRecoverSilentWithCDPContext"
+#define OctagonSignpostNamePerformOctagonJoinForSilent                  "OctagonSignpostNamePerformOctagonJoinForSilent"
+#define OctagonSignpostNamePerformOctagonJoinForNonSilent               "OctagonSignpostNamePerformOctagonJoinForNonSilent"
+
+
+#define OctagonSignpostNamePerformOctagonJoin                           "OctagonSignpostNamePerformOctagonJoin"
 #define OctagonSignpostNamePerformResetAndEstablishAfterFailedBottle    "OctagonSignpostNamePerformResetAndEstablishAfterFailedBottle"
 #define OctagonSignpostNameFetchEgoPeer                                 "OctagonSignpostNameFetchEgoPeer"
 #define OctagonSignpostNameEstablish                                    "OctagonSignpostNameEstablish"
@@ -61,11 +69,13 @@ typedef struct octagon_signpost_s {
 #define OctagonSignpostNameRequestToJoinCircle                          "OctagonSignpostNameRequestToJoinCircle"
 #define OctagonSignpostNameAccountUserKeyAvailable                      "OctagonSignpostNameAccountUserKeyAvailable"
 #define OctagonSignpostNameFindOptimalBottleIDsWithContextData          "OctagonSignpostNameFindOptimalBottleIDsWithContextData"
+#define OctagonSignpostNameFetchEscrowRecords                           "OctagonSignpostNameFetchEscrowRecords"
 #define OctagonSignpostNameFetchEscrowContents                          "OctagonSignpostNameFetchEscrowContents"
 #define OctagonSignpostNameSetNewRecoveryKeyWithData                    "OctagonSignpostNameSetNewRecoveryKeyWithData"
 #define OctagonSignpostNameRecoverOctagonUsingData                      "OctagonSignpostNameRecoverOctagonUsingData"
 #define OctagonSignpostNamePerformedCDPStateMachineRun                  "OctagonSignpostNamePerformedCDPStateMachineRun"
 #define OctagonSignpostNameWaitForOctagonUpgrade                        "OctagonSignpostNameWaitForOctagonUpgrade"
+#define OctagonSignpostNameGetAccountInfo                               "OctagonSignpostNameGetAccountInfo"
 
 #define SOSSignpostNameAssertUserCredentialsAndOptionalDSID     "SOSSignpostNameAssertUserCredentialsAndOptionalDSID"
 #define SOSSignpostNameSOSCCTryUserCredentials                  "SOSSignpostNameSOSCCTryUserCredentials"
@@ -128,28 +138,6 @@ extern os_log_t _OctagonSignpostLogSystem(void);
 extern OctagonSignpost _OctagonSignpostCreate(os_log_t subsystem);
 extern uint64_t _OctagonSignpostGetNanoseconds(OctagonSignpost signpost);
 
-#ifdef DARLING
-// the compiler was being weird with the preprocessor trickery that was happening in Apple's code
-// so i had to manually expand parts of it
-#define _OctagonSignpostBegin(subsystem, name, something, ...) __extension__({ \
-    OctagonSignpost internalSignpost = _OctagonSignpostCreate(subsystem); \
-    os_signpost_interval_begin(subsystem, internalSignpost.identifier, name, __VA_ARGS__); \
-    os_log(subsystem, "BEGIN [%lld]: " name " " something, internalSignpost.identifier, ##__VA_ARGS__); \
-    internalSignpost; \
-})
-
-#define _OctagonSignpostEvent(subsystem, signpost, name, something, ...) __extension__({ \
-    double interval = ((double)_OctagonSignpostGetNanoseconds(_signpost) / NSEC_PER_SEC); \
-    os_signpost_event_emit(subsystem, signpost.identifier, name, __VA_ARGS__); \
-    os_log(subsystem, "EVENT [%lld] %fs: " name " " something, signpost.identifier, interval, ##__VA_ARGS__); \
-})
-
-#define _OctagonSignpostEnd(subsystem, signpost, name, something, ...) __extension__({ \
-    double interval = ((double)_OctagonSignpostGetNanoseconds(signpost) / NSEC_PER_SEC); \
-    os_signpost_interval_end(subsystem, signpost.identifier, name, __VA_ARGS__); \
-    os_log(subsystem, "END [%lld] %fs: " name " " something, signpost.identifier, interval, ##__VA_ARGS__); \
-})
-#else
 #define _OctagonSignpostBegin(subsystem, name, ...) __extension__({ \
     OctagonSignpost internalSignpost = _OctagonSignpostCreate(subsystem); \
     os_signpost_interval_begin(subsystem, internalSignpost.identifier, name, __VA_ARGS__); \
@@ -171,7 +159,6 @@ extern uint64_t _OctagonSignpostGetNanoseconds(OctagonSignpost signpost);
 
 #define _OctagonSwizzle1(x, a, ...) a, x, ##__VA_ARGS__
 #define _OctagonSwizzle2(x, y, a, ...) a, x, y, ##__VA_ARGS__
-#endif
 
 NS_ASSUME_NONNULL_END
 

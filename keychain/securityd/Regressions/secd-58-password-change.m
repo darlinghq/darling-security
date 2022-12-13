@@ -50,6 +50,7 @@
 #include "SOSAccountTesting.h"
 #include "SecdTestKeychainUtilities.h"
 
+#if SOS_ENABLED
 
 static bool AssertCreds(SOSAccount* account,CFStringRef acct_name, CFDataRef password) {
     CFErrorRef error = NULL;
@@ -213,21 +214,40 @@ static void tests(void)
     is(countPeers(alice_account), 3, "There are three peers - Alice, Carol, Bob");
     is(countActivePeers(alice_account), 4, "There are four active peers - bob, alice, carol and iCloud");
     is(countActiveValidPeers(alice_account), 3, "There are three active valid peers - alice, bob, and icloud");
+
+    /* Change Password 4 - new peer changes the password and joins ----------------------------------------------------*/
+    CFReleaseNull(cfnewpassword);
+    cfnewpassword = CFDataCreate(NULL, (uint8_t *) "dodododod", 10);
+
+    SOSAccount* david_account = CreateAccountForLocalChanges(CFSTR("David"), CFSTR("TestSource"));
+    ok(AssertCreds(david_account , cfaccount, cfnewpassword), "Credential resetting for David");
+    is(ProcessChangesUntilNoChange(changes, david_account, NULL), 2, "updates");
+    is(countPeers(david_account), 3, "Still 3 peers");
     
+    
+    ok(JoinCircle(david_account), "David Applies");
+    is(ProcessChangesUntilNoChange(changes, david_account, NULL), 2, "updates");
+    is(countPeers(david_account), 1, "Only David is in circle");
+    
+
     CFReleaseNull(cfnewpassword);
     alice_account = nil;
     bob_account = nil;
     carol_account = nil;
+    david_account = nil;
     SOSTestCleanup();
 }
+#endif
 
 int secd_58_password_change(int argc, char *const *argv)
 {
+#if SOS_ENABLED
     plan_tests(211);
-    
     secd_test_setup_temp_keychain(__FUNCTION__, NULL);
-
     tests();
-    
+    secd_test_teardown_delete_temp_keychain(__FUNCTION__);
+#else
+    plan_tests(0);
+#endif
     return 0;
 }

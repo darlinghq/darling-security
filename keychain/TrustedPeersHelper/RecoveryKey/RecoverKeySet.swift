@@ -27,29 +27,31 @@ import SecurityFoundation
 let OT_RECOVERY_SIGNING_HKDF_SIZE = 56
 let OT_RECOVERY_ENCRYPTION_HKDF_SIZE = 56
 
-enum recoveryKeyType: Int {
+enum RecoveryKeyType: Int {
     case kOTRecoveryKeySigning = 1
     case kOTRecoveryKeyEncryption = 2
 }
 
 class RecoveryKeySet: NSObject {
-    public var encryptionKey: _SFECKeyPair
-    public var signingKey: _SFECKeyPair
+    var encryptionKey: _SFECKeyPair
+    var signingKey: _SFECKeyPair
 
-    public var secret: Data
-    public var recoverySalt: String
+    var secret: Data
+    var recoverySalt: String
 
-    public init (secret: Data, recoverySalt: String) throws {
+    init (secret: Data, recoverySalt: String) throws {
         self.secret = secret
         self.recoverySalt = recoverySalt
 
-        let encryptionKeyData = try RecoveryKeySet.generateRecoveryKey(keyType: recoveryKeyType.kOTRecoveryKeyEncryption, masterSecret: secret, recoverySalt: recoverySalt)
+        let encryptionKeyData = try RecoveryKeySet.generateRecoveryKey(keyType: RecoveryKeyType.kOTRecoveryKeyEncryption, masterSecret: secret, recoverySalt: recoverySalt)
         self.encryptionKey = _SFECKeyPair.init(secKey: try RecoveryKeySet.createSecKey(keyData: encryptionKeyData))
 
-        let signingKeyData = try RecoveryKeySet.generateRecoveryKey(keyType: recoveryKeyType.kOTRecoveryKeySigning, masterSecret: secret, recoverySalt: recoverySalt)
+        let signingKeyData = try RecoveryKeySet.generateRecoveryKey(keyType: RecoveryKeyType.kOTRecoveryKeySigning, masterSecret: secret, recoverySalt: recoverySalt)
         self.signingKey = _SFECKeyPair.init(secKey: try RecoveryKeySet.createSecKey(keyData: signingKeyData))
 
-        let RecoverySigningPubKeyHash = try RecoveryKeySet.hashRecoveryedSigningPublicKey(keyData: self.signingKey.publicKey().spki())
+        // Note: this uses the SPKI hash, and not the key data hash
+        // So, this will not match the RK's peer ID
+        let RecoverySigningPubKeyHash = RecoveryKeySet.hashRecoveryedSigningPublicKey(keyData: self.signingKey.publicKey().spki())
         _ = try RecoveryKeySet.storeRecoveryedSigningKeyPair(keyData: self.signingKey.keyData, label: RecoverySigningPubKeyHash)
         _ = try RecoveryKeySet.storeRecoveryedEncryptionKeyPair(keyData: self.encryptionKey.keyData, label: RecoverySigningPubKeyHash)
     }
@@ -58,27 +60,24 @@ class RecoveryKeySet: NSObject {
         return  SecRKCreateRecoveryKeyString(nil) as String
     }
 
-    class func generateRecoveryKey(keyType: recoveryKeyType, masterSecret: Data, recoverySalt: String) throws -> (Data) {
+    class func generateRecoveryKey(keyType: RecoveryKeyType, masterSecret: Data, recoverySalt: String) throws -> (Data) {
         var keyLength: Int
         var info: Data
         var derivedKey: Data
         var finalKey = Data()
 
         switch keyType {
-        case recoveryKeyType.kOTRecoveryKeyEncryption:
+        case RecoveryKeyType.kOTRecoveryKeyEncryption:
             keyLength = OT_RECOVERY_ENCRYPTION_HKDF_SIZE
 
             let infoString = Array("Recovery Encryption Private Key".utf8)
             info = Data(bytes: infoString, count: infoString.count)
 
-            break
-        case recoveryKeyType.kOTRecoveryKeySigning:
+        case RecoveryKeyType.kOTRecoveryKeySigning:
             keyLength = OT_RECOVERY_SIGNING_HKDF_SIZE
 
             let infoString = Array("Recovery Signing Private Key".utf8)
             info = Data(bytes: infoString, count: infoString.count)
-
-            break
         }
 
         guard let cp = ccec_cp_384() else {
@@ -108,10 +107,10 @@ class RecoveryKeySet: NSObject {
                             throw RecoveryKeySetError.corecryptoKeyGeneration(corecryptoError: status)
                         }
 
-                        if(keyType == recoveryKeyType.kOTRecoveryKeyEncryption || keyType == recoveryKeyType.kOTRecoveryKeySigning) {
+                        if keyType == RecoveryKeyType.kOTRecoveryKeyEncryption || keyType == RecoveryKeyType.kOTRecoveryKeySigning {
                             status = ccec_generate_key_deterministic(cp,
                                                                      derivedKeyBytes.count, derivedKeyBytes.bindMemory(to: UInt8.self).baseAddress!,
-                                                                     ccDRBGGetRngState(),
+                                                                     ccrng(nil),
                                                                      UInt32(CCEC_GENKEY_DETERMINISTIC_FIPS),
                                                                      fullKey)
 
@@ -143,7 +142,7 @@ class RecoveryKeySet: NSObject {
         return key
     }
 
-    class func setKeyMaterialInKeychain(query: Dictionary<CFString, Any>) throws -> (Bool) {
+    class func setKeyMaterialInKeychain(query: [CFString: Any]) throws -> (Bool) {
         var result = false
 
         var results: CFTypeRef?
@@ -152,7 +151,7 @@ class RecoveryKeySet: NSObject {
         if status == errSecSuccess {
             result = true
         } else if status == errSecDuplicateItem {
-            var updateQuery: Dictionary<CFString, Any> = query
+            var updateQuery: [CFString: Any] = query
             updateQuery[kSecClass] = nil
 
             status = SecItemUpdate(query as CFDictionary, updateQuery as CFDictionary)
@@ -169,7 +168,7 @@ class RecoveryKeySet: NSObject {
         return result
     }
 
-    class func hashRecoveryedSigningPublicKey(keyData: Data) throws -> (String) {
+    class func hashRecoveryedSigningPublicKey(keyData: Data) -> (String) {
         let di = ccsha384_di()
         var result = Data(count: TPHObjectiveC.ccsha384_diSize())
 
@@ -185,7 +184,6 @@ class RecoveryKeySet: NSObject {
     }
 
     class func storeRecoveryedEncryptionKeyPair(keyData: Data, label: String) throws -> (Bool) {
-
         let query: [CFString: Any] = [
             kSecClass: kSecClassKey,
             kSecAttrAccessible: kSecAttrAccessibleWhenUnlocked,
@@ -213,8 +211,8 @@ class RecoveryKeySet: NSObject {
         return try RecoveryKeySet.setKeyMaterialInKeychain(query: query)
     }
 
-    class func retrieveRecoveryKeysFromKeychain(label: String) throws -> [Dictionary <CFString, Any>]? {
-        var keySet: [Dictionary<CFString, Any>]?
+    class func retrieveRecoveryKeysFromKeychain(label: String) throws -> [ [CFString: Any]]? {
+        var keySet: [[CFString: Any]]?
 
         let query: [CFString: Any] = [
             kSecClass: kSecClassKey,
@@ -234,10 +232,10 @@ class RecoveryKeySet: NSObject {
         }
 
         if result != nil {
-            if let dictionaryArray = result as? [Dictionary<CFString, Any>] {
+            if let dictionaryArray = result as? [[CFString: Any]] {
                 keySet = dictionaryArray
             } else {
-                if let dictionary = result as? Dictionary<CFString, Any> {
+                if let dictionary = result as? [CFString: Any] {
                     keySet = [dictionary]
                 } else {
                     keySet = nil
@@ -259,11 +257,11 @@ class RecoveryKeySet: NSObject {
             let keyTypeData = item[kSecAttrApplicationLabel as CFString] as! Data
             let keyType = String(data: keyTypeData, encoding: .utf8)!
 
-            if keyType.range(of: "Encryption") != nil {
+            if keyType.contains("Encryption") {
                 let keyData = item[kSecValueData as CFString] as! Data
                 let encryptionSecKey = try RecoveryKeySet.createSecKey(keyData: keyData)
                 encryptionKey = _SFECKeyPair.init(secKey: encryptionSecKey)
-            } else if keyType.range(of: "Signing") != nil {
+            } else if keyType.contains("Signing") {
                 let keyData = item[kSecValueData as CFString] as! Data
                 let signingSecKey = try RecoveryKeySet.createSecKey(keyData: keyData)
                 signingKey = _SFECKeyPair.init(secKey: signingSecKey)
@@ -302,7 +300,6 @@ extension RecoveryKeySetError: LocalizedError {
 }
 
 extension RecoveryKeySetError: CustomNSError {
-
     public static var errorDomain: String {
         return "com.apple.security.trustedpeers.RecoveryKeySetError"
     }

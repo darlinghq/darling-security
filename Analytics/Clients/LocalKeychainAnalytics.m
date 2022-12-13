@@ -8,10 +8,6 @@
 #include <utilities/SecFileLocations.h>
 #include <utilities/SecAKSWrappers.h>
 
-#ifdef DARLING
-#import <Foundation/Foundation.h>
-#endif
-
 @interface LKAUpgradeOutcomeReport : NSObject
 @property LKAKeychainUpgradeOutcome outcome;
 @property NSDictionary* attributes;
@@ -28,7 +24,6 @@
 }
 @end
 
-#if !defined(DARLING) || defined(__OBJC2__)
 // Approved event types
 // rdar://problem/41745059 SFAnalytics: collect keychain upgrade outcome information
 LKAnalyticsFailableEvent const LKAEventUpgrade = (LKAnalyticsFailableEvent)@"LKAEventUpgrade";
@@ -36,6 +31,10 @@ LKAnalyticsFailableEvent const LKAEventUpgrade = (LKAnalyticsFailableEvent)@"LKA
 // <rdar://problem/52038208> SFAnalytics: collect keychain backup success rates and duration
 LKAnalyticsFailableEvent const LKAEventBackup = (LKAnalyticsFailableEvent)@"LKAEventBackup";
 LKAnalyticsMetric const LKAMetricBackupDuration = (LKAnalyticsMetric)@"LKAMetricBackupDuration";
+
+// <rdar://problem/60767235> SFAnalytics: Collect keychain masterkey stash success/failure rates and failure codes on macOS SUs
+LKAnalyticsFailableEvent const LKAEventStash = (LKAnalyticsFailableEvent)@"LKAEventStash";
+LKAnalyticsFailableEvent const LKAEventStashLoad = (LKAnalyticsFailableEvent)@"LKAEventStashLoad";
 
 // Internal consts
 NSString* const LKAOldSchemaKey = @"oldschema";
@@ -156,40 +155,41 @@ NSString* const LKABackupLastSuccessDate = @"backupLastSuccess";
         [self logSuccessForEventNamed:LKAEventBackup timestampBucket:SFAnalyticsTimestampBucketHour];
     } else {
         NSInteger daysSinceSuccess = [SFAnalytics fuzzyDaysSinceDate:[self datePropertyForKey:LKABackupLastSuccessDate]];
-        [self logResultForEvent:LKAEventBackup
-                    hardFailure:YES
-                         result:error
-                 withAttributes:@{@"daysSinceSuccess" : @(daysSinceSuccess),
-                                  @"duration" : @(backupDuration),
-                                  @"type" : @(_backupType),
-                                  }
-                timestampBucket:SFAnalyticsTimestampBucketHour];
+
+        // Backups fail all the time due to devices being locked. If a backup has happened recently,
+        // let's not even report it, to avoid crowding out more useful data
+        bool boringError = error.code == errSecInteractionNotAllowed && daysSinceSuccess == 0;
+
+        if(!boringError) {
+            [self logResultForEvent:LKAEventBackup
+                        hardFailure:YES
+                             result:error
+                     withAttributes:@{@"daysSinceSuccess" : @(daysSinceSuccess),
+                                      @"duration" : @(backupDuration),
+                                      @"type" : @(_backupType),
+                     }
+                    timestampBucket:SFAnalyticsTimestampBucketHour];
+        }
     }
 }
 
 @end
-#endif
 
 // MARK: C Bridging
 
 void LKAReportKeychainUpgradeOutcome(int fromversion, int toversion, LKAKeychainUpgradeOutcome outcome) {
-    #if !defined(DARLING) || defined(__OBJC2__)
     @autoreleasepool {
         [[LocalKeychainAnalytics logger] reportKeychainUpgradeFrom:fromversion to:toversion outcome:outcome error:NULL];
     }
-    #endif
 }
 
 void LKAReportKeychainUpgradeOutcomeWithError(int fromversion, int toversion, LKAKeychainUpgradeOutcome outcome, CFErrorRef error) {
-    #if !defined(DARLING) || defined(__OBJC2__)
     @autoreleasepool {
         [[LocalKeychainAnalytics logger] reportKeychainUpgradeFrom:fromversion to:toversion outcome:outcome error:(__bridge NSError*)error];
     }
-    #endif
 }
 
 void LKABackupReportStart(bool hasKeybag, bool hasPasscode, bool isEMCS) {
-    #if !defined(DARLING) || defined(__OBJC2__)
     LKAKeychainBackupType type;
     if (isEMCS) {
         type = LKAKeychainBackupTypeEMCS;
@@ -207,13 +207,17 @@ void LKABackupReportStart(bool hasKeybag, bool hasPasscode, bool isEMCS) {
     @autoreleasepool {
         [[LocalKeychainAnalytics logger] reportKeychainBackupStartWithType:type];
     }
-    #endif
 }
 
 void LKABackupReportEnd(bool hasBackup, CFErrorRef error) {
-    #if !defined(DARLING) || defined(__OBJC2__)
     @autoreleasepool {
         [[LocalKeychainAnalytics logger] reportKeychainBackupEnd:hasBackup error:(__bridge NSError*)error];
     }
-    #endif
+}
+
+void LKAForceClose(void)
+{
+    @autoreleasepool {
+        [[LocalKeychainAnalytics logger] removeState];
+    }
 }

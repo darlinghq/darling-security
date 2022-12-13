@@ -130,17 +130,16 @@ SecStaticCode *KernelCode::identifyGuest(SecCode *iguest, CFDataRef *cdhash)
                        
                         SecPointer<SecStaticCode> code = new ProcessDynamicCode(guest);
 						guest->pidBased()->setCredentials(code->codeDirectory());
-#ifndef DARLING
+
                         SHA1::Digest kernelHash;
                         MacOSError::check(guest->csops(CS_OPS_CDHASH, kernelHash, sizeof(kernelHash)));
                         *cdhash = makeCFData(kernelHash, sizeof(kernelHash));
-#endif
+
                         return code.yield();
                 }
                 
 		char path[2 * MAXPATHLEN];	// reasonable upper limit
 		if (::proc_pidpath(guest->pid(), path, sizeof(path))) {
-#ifndef DARLING
 			off_t offset;
 			csops(guest, CS_OPS_PIDOFFSET, &offset, sizeof(offset));
 			SecPointer<SecStaticCode> code = new ProcessStaticCode(DiskRep::bestGuess(path, (size_t)offset));
@@ -161,9 +160,6 @@ SecStaticCode *KernelCode::identifyGuest(SecCode *iguest, CFDataRef *cdhash)
 					*cdhash = makeCFData(kernelHash, sizeof(kernelHash));
 				CODESIGN_GUEST_CDHASH_PROCESS(guest, kernelHash, sizeof(kernelHash));
 			}
-#else
-			SecPointer<SecStaticCode> code = new ProcessStaticCode(DiskRep::bestGuess(path));
-#endif
 			return code.yield();
 		} else
 			UnixError::throwMe();
@@ -179,7 +175,7 @@ SecCodeStatus KernelCode::getGuestStatus(SecCode *iguest)
 {
 	if (ProcessCode *guest = dynamic_cast<ProcessCode *>(iguest)) {
 		uint32_t pFlags;
-		csops(guest, CS_OPS_STATUS, &pFlags);
+		csops(guest, CS_OPS_STATUS, &pFlags, sizeof(pFlags));
 		secinfo("kcode", "guest %p(%d) kernel status 0x%x", guest, guest->pid(), pFlags);
 		return pFlags;
 	} else
@@ -229,7 +225,6 @@ void KernelCode::identify()
 //
 void KernelCode::csops(ProcessCode *proc, unsigned int op, void *addr, size_t length)
 {
-#ifndef DARLING
 	if (proc->csops(op, addr, length) == -1) {
 		switch (errno) {
 		case ESRCH:
@@ -238,7 +233,6 @@ void KernelCode::csops(ProcessCode *proc, unsigned int op, void *addr, size_t le
 			UnixError::throwMe();
 		}
 	}
-#endif
 }
 
 

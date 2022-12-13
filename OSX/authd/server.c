@@ -15,6 +15,7 @@
 #include "engine.h"
 #include "connection.h"
 #include "AuthorizationTags.h"
+#include "PreloginUserDb.h"
 
 #include <bsm/libbsm.h>
 #include <Security/Authorization.h>
@@ -28,6 +29,8 @@
 #include <IOKit/IOMessage.h>
 #include <IOKit/pwr_mgt/IOPMLib.h>
 #include <IOKit/pwr_mgt/IOPMLibPrivate.h>
+
+#include <security_utilities/simulatecrash_assert.h>
 
 AUTHD_DEFINE_LOG
 
@@ -384,27 +387,26 @@ done:
     return status;
 }
 
-static OSStatus _server_preauthorize(connection_t conn, auth_token_t auth, auth_items_t context, engine_t * engine_out)
+static OSStatus _server_get_right_properties(connection_t conn, const char *rightName, CFDictionaryRef *properties)
 {
-	__block OSStatus status = errAuthorizationDenied;
-	engine_t engine = NULL;
+    OSStatus status = errAuthorizationDenied;
+    auth_token_t auth = NULL;
+    engine_t engine = NULL;
 
-	require_action(conn, done, status = errAuthorizationInternal);
+    require_action(conn, done, status = errAuthorizationInternal);
+    
+    auth = auth_token_create(connection_get_process(conn), false);
+    require_action(auth, done, status = errAuthorizationInternal);
 
-	engine = engine_create(conn, auth);
-	require_action(engine, done, status = errAuthorizationInternal);
+    engine = engine_create(conn, auth);
+    require_action(engine, done, status = errAuthorizationInternal);
 
-	status = engine_preauthorize(engine, context);
+    status = engine_get_right_properties(engine, rightName, properties);
 
 done:
-	if (engine) {
-		if (engine_out) {
-			*engine_out = engine;
-		} else {
-			CFRelease(engine);
-		}
-	}
-	return status;
+    CFReleaseSafe(engine);
+    CFReleaseSafe(auth);
+    return status;
 }
 
 static OSStatus _server_authorize(connection_t conn, auth_token_t auth, AuthorizationFlags flags, auth_rights_t rights, auth_items_t environment, engine_t * engine_out)
@@ -546,28 +548,31 @@ done:
 // IN:  AUTH_XPC_BLOB, AUTH_XPC_DATA
 // OUT:
 OSStatus
-authorization_preauthorize_credentials(connection_t conn, xpc_object_t message, xpc_object_t reply)
+authorization_copy_right_properties(connection_t conn, xpc_object_t message, xpc_object_t reply)
 {
-	OSStatus status = errAuthorizationDenied;
-	engine_t engine = NULL;
+    OSStatus status = errAuthorizationDenied;
+    CFDataRef serializedProperties = NULL;
+    CFDictionaryRef properties = NULL;
+    
+    // Passed in args
+    const char *right = xpc_dictionary_get_string(message, AUTH_XPC_RIGHT_NAME);
+    os_log_debug(AUTHD_LOG, "server: right %s", right);
 
-	process_t proc = connection_get_process(conn);
+    require_action(right != NULL, done, status = errAuthorizationInvalidPointer);
 
-	// Passed in args
-	auth_items_t context = auth_items_create_with_xpc(xpc_dictionary_get_value(message, AUTH_XPC_DATA));
-
-	auth_token_t auth = NULL;
-	status = _process_find_copy_auth_token_from_xpc(proc, message, &auth);
-	require_noerr_action_quiet(status, done, os_log_error(AUTHD_LOG, "preauthorize_credentials: no auth token"));
-
-	status = _server_preauthorize(conn, auth, context, &engine);
-	require_noerr_action_quiet(status, done, os_log_error(AUTHD_LOG, "preauthorize_credentials: authorization failed"));
-
+    status = _server_get_right_properties(conn, right, &properties);
+    require_noerr(status, done);
+  
+    if (properties) {
+        serializedProperties = CFPropertyListCreateData(kCFAllocatorDefault, properties, kCFPropertyListBinaryFormat_v1_0, 0, NULL);
+        if (serializedProperties) {
+            xpc_dictionary_set_data(reply, AUTH_XPC_OUT_ITEMS, CFDataGetBytePtr(serializedProperties), CFDataGetLength(serializedProperties));
+        }
+    }
+    
 done:
-	CFReleaseSafe(context);
-	CFReleaseSafe(auth);
-	CFReleaseSafe(engine);
-
+    CFReleaseSafe(serializedProperties);
+	CFReleaseSafe(properties);
 	return status;
 }
 
@@ -1175,3 +1180,93 @@ server_dev() {
 //    CFReleaseSafe(items);
 }
 
+// IN:  AUTH_XPC_TAG, AUTH_XPC_FLAGS
+// OUT: AUTH_XPC_DATA
+OSStatus
+authorization_copy_prelogin_userdb(connection_t conn, xpc_object_t message, xpc_object_t reply)
+{
+    OSStatus status = errAuthorizationDenied;
+    xpc_object_t xpcarr = NULL;
+    CFArrayRef cfarray = NULL;
+
+    const char *uuid = xpc_dictionary_get_string(message, AUTH_XPC_TAG);
+    UInt32 flags = (AuthorizationFlags)xpc_dictionary_get_uint64(message, AUTH_XPC_FLAGS);
+
+    status = preloginudb_copy_userdb(uuid, flags, &cfarray);
+    xpc_dictionary_set_int64(reply, AUTH_XPC_STATUS, status);
+    require_noerr_action_quiet(status, done, os_log_error(AUTHD_LOG, "authorization_copy_prelogin_userdb: database failed %d", (int)status));
+  
+    xpcarr = _CFXPCCreateXPCObjectFromCFObject(cfarray);
+    require(xpcarr != NULL, done);
+    xpc_dictionary_set_value(reply, AUTH_XPC_DATA, xpcarr);
+
+done:
+    CFReleaseSafe(cfarray);
+    xpc_release_safe(xpcarr);
+
+    return status;
+}
+
+// IN:  AUTH_XPC_RIGHT_NAME, AUTH_XPC_HINTS_NAME, AUTH_XPC_FLAGS
+// OUT: AUTH_XPC_DATA
+OSStatus
+authorization_copy_prelogin_pref_value(connection_t conn, xpc_object_t message, xpc_object_t reply)
+{
+    OSStatus status = errAuthorizationDenied;
+    xpc_object_t xpcoutput = NULL;
+    const char *uuid = xpc_dictionary_get_string(message, AUTH_XPC_TAG);
+    const char *user = xpc_dictionary_get_string(message, AUTH_XPC_RIGHT_NAME);
+    const char *domain = xpc_dictionary_get_string(message, AUTH_XPC_HINTS_NAME);
+    const char *item = xpc_dictionary_get_string(message, AUTH_XPC_ITEM_NAME);
+
+    CFTypeRef output = NULL;
+    status = prelogin_copy_pref_value(uuid, user, domain, item, &output);
+    xpc_dictionary_set_int64(reply, AUTH_XPC_STATUS, status);
+  
+    xpcoutput = _CFXPCCreateXPCObjectFromCFObject(output);
+    require(xpcoutput != NULL, done);
+    xpc_dictionary_set_value(reply, AUTH_XPC_DATA, xpcoutput);
+
+done:
+    CFReleaseSafe(output);
+    xpc_release_safe(xpcoutput);
+
+    return status;
+}
+
+// IN:  AUTH_XPC_RIGHT_NAME, AUTH_XPC_ITEM_NAME
+// OUT: AUTH_XPC_ITEM_VALUE
+OSStatus
+authorization_prelogin_smartcardonly_override(connection_t conn, xpc_object_t message, xpc_object_t reply)
+{
+    OSStatus status = errAuthorizationDenied;
+
+    process_t proc = connection_get_process(conn);
+    
+    uint64 operation = xpc_dictionary_get_uint64(message, AUTH_XPC_ITEM_NAME);
+    
+    if (operation != kAuthorizationOverrideOperationQuery) {
+        // check if caller is entitled to handle the override
+        Boolean entitlementCheckPassed = false;
+        CFTypeRef overrideEntitlement = process_copy_entitlement_value(proc, "com.apple.authorization.smartcard.override");
+        if (overrideEntitlement && (CFGetTypeID(overrideEntitlement) == CFBooleanGetTypeID()) && overrideEntitlement == kCFBooleanTrue) {
+            os_log_debug(AUTHD_LOG, "server: caller allowed to handle override");
+            entitlementCheckPassed = true;
+        } else {
+            os_log_error(AUTHD_LOG, "server: caller NOT allowed to handle override");
+        }
+        CFReleaseSafe(overrideEntitlement);
+        require(entitlementCheckPassed, done);
+    }
+
+    const char *uuid = xpc_dictionary_get_string(message, AUTH_XPC_TAG);
+    Boolean result = false;
+    status = prelogin_smartcardonly_override(uuid, operation, &result);
+    xpc_dictionary_set_int64(reply, AUTH_XPC_STATUS, status);
+    if (operation == kAuthorizationOverrideOperationQuery) {
+        xpc_dictionary_set_bool(reply, AUTH_XPC_ITEM_VALUE, result);
+    }
+
+done:
+    return status;
+}

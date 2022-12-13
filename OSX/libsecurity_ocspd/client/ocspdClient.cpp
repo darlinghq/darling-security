@@ -32,11 +32,7 @@
 #include <security_utilities/threading.h>
 #include <security_utilities/mach++.h>
 #include <security_utilities/unix++.h>
-#ifdef DARLING
-#include "ocspd.h"
-#else
 #include <security_ocspd/ocspd.h>			/* MIG interface */
-#endif
 #include <Security/SecBase.h>
 class ocspdGlobals
 {
@@ -317,10 +313,11 @@ CSSM_RETURN ocspdCRLStatus(
 		issuers.Data, (mach_msg_type_number_t)issuers.Length,
 		crlIssuer ? crlIssuer->Data : NULL, crlIssuer ? (mach_msg_type_number_t)crlIssuer->Length : 0,
 		crlURL ? crlURL->Data : NULL, crlURL ? (mach_msg_type_number_t)crlURL->Length : 0);
-    if (krtn == MACH_SEND_INVALID_DEST)
+    if (krtn == MACH_SEND_INVALID_DEST) {
         OcspdGlobals().resetServerPort();
+    }
 
-	return krtn;
+    return krtn;
 }
 
 /*

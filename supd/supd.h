@@ -23,6 +23,7 @@
 
 #import <Foundation/Foundation.h>
 #import "supdProtocol.h"
+#import "trust/trustd/trustdFileLocations.h"
 
 @interface SFAnalyticsClient: NSObject
 @property (nonatomic) NSString* storePath;
@@ -35,6 +36,7 @@
 @property NSString* splunkTopicName;
 @property NSURL* splunkBagURL;
 @property NSString *internalTopicName;
+@property NSUInteger uploadSizeLimit;
 
 @property NSArray<SFAnalyticsClient*>* topicClients;
 
@@ -42,15 +44,22 @@
 // Things below are for unit testing
 - (instancetype)initWithDictionary:(NSDictionary *)dictionary name:(NSString *)topicName samplingRates:(NSDictionary *)rates;
 - (BOOL)haveEligibleClients;
+- (NSArray<NSDictionary *> *)createChunkedLoggingJSON:(NSArray<NSDictionary *> *)healthSummaries failures:(NSArray<NSDictionary *> *)failures error:(NSError **)error;
+- (NSArray<NSArray *> *)chunkFailureSet:(size_t)sizeCapacity events:(NSArray<NSDictionary *> *)events error:(NSError **)error;
+- (size_t)serializedEventSize:(NSObject *)event error:(NSError**)error;
 + (NSString*)databasePathForCKKS;
 + (NSString*)databasePathForSOS;
 + (NSString*)databasePathForPCS;
 + (NSString*)databasePathForLocal;
 + (NSString*)databasePathForTrust;
-+ (NSString*)databasePathForTrustdHealth;
-+ (NSString*)databasePathForTLS;
++ (NSString*)databasePathForNetworking;
 + (NSString*)databasePathForSignIn;
 + (NSString*)databasePathForCloudServices;
+
+#if TARGET_OS_OSX
++ (NSString*)databasePathForRootTrust;
++ (NSString*)databasePathForRootNetworking;
+#endif
 @end
 
 @interface SFAnalyticsReporter : NSObject
@@ -64,18 +73,15 @@ typedef NS_ENUM(NSInteger, SupdError) {
     SupdInvalidJSONError,
 };
 
-@interface supd : NSObject <supdProtocol>
-+ (instancetype)instance;
-+ (void)removeInstance;
-+ (void)instantiate;
-- (instancetype)initWithReporter:(SFAnalyticsReporter *)reporter;
+@interface supd : NSObject <supdProtocol, TrustdFileHelper_protocol>
+- (instancetype)initWithConnection:(NSXPCConnection *)connection;
 
 // --------------------------------
 // Things below are for unit testing
-@property (readonly) dispatch_queue_t queue;
 @property (readonly) NSArray<SFAnalyticsTopic*>* analyticsTopics;
 @property (readonly) SFAnalyticsReporter *reporter;
 - (void)sendNotificationForOncePerReportSamplers;
+- (instancetype)initWithConnection:(NSXPCConnection *)connection reporter:(SFAnalyticsReporter *)reporter;
 @end
 
 // --------------------------------

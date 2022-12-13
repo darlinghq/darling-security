@@ -51,6 +51,8 @@
 
 #include "SecdTestKeychainUtilities.h"
 
+#if SOS_ENABLED
+
 #define kAccountPasswordString ((uint8_t*) "FooFooFoo")
 #define kAccountPasswordStringLen 10
 
@@ -209,14 +211,17 @@ static void tests(void)
     bob_account = nil;
     SOSTestCleanup();
 }
+#endif
 
 int secd_56_account_apply(int argc, char *const *argv)
 {
+#if SOS_ENABLED
     plan_tests(181);
-    
     secd_test_setup_temp_keychain(__FUNCTION__, NULL);
-
     tests();
-    
+    secd_test_teardown_delete_temp_keychain(__FUNCTION__);
+#else
+    plan_tests(0);
+#endif
     return 0;
 }

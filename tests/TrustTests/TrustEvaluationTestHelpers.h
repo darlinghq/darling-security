@@ -30,6 +30,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+NSURL * _Nullable setUpTmpDir(void);
+int ping_host(char *host_name);
+
 @interface TestTrustEvaluation : NSObject
 @property (assign, nonnull) SecTrustRef trust;
 @property NSString *fullTestName;
@@ -54,6 +57,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype _Nullable) initWithTrustDictionary:(NSDictionary *)testDict;
 
 - (void)addAnchor:(SecCertificateRef)certificate;
+- (void)setNeedsEvaluation;
 
 - (bool)evaluate:(out NSError * _Nullable __autoreleasing * _Nullable)outError;
 - (bool)evaluateForExpectedResults:(out NSError * _Nullable __autoreleasing *)outError;

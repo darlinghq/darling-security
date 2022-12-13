@@ -10,8 +10,6 @@ NSString* const SecEscrowRequestHavePrecord = @"have_prerecord";
 NSString* const SecEscrowRequestPendingPasscode = @"pending_passcode";
 NSString* const SecEscrowRequestPendingCertificate = @"pending_certificate";
 
-// `!defined(DARLING)` is used to indicate that normally (in Apple's original code) the body is present without a conditional
-#if !defined(DARLING) || defined(__OBJC2__)
 @interface SecEscrowRequest ()
 @property NSXPCConnection *connection;
 @end
@@ -248,5 +246,3 @@ NSString* const SecEscrowRequestPendingCertificate = @"pending_certificate";
 }
 
 @end
-
-#endif // !defined(DARLING) || defined(__OBJC2__)

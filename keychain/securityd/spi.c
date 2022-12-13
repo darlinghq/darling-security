@@ -21,7 +21,7 @@
  * @APPLE_LICENSE_HEADER_END@
  */
 
-#if TARGET_DARWINOS
+#if defined(TARGET_DARWINOS) && TARGET_DARWINOS
 #undef OCTAGON
 #undef SECUREOBJECTSYNC
 #undef SHAREDWEBCREDENTIALS
@@ -62,7 +62,7 @@ static struct securityd securityd_spi = {
     .sec_item_copy_parent_certificates      = _SecItemCopyParentCertificates,
     .sec_item_certificate_exists            = _SecItemCertificateExists,
     .sec_roll_keys                          = _SecServerRollKeysGlue,
-    .sec_item_update_token_items            = _SecItemUpdateTokenItems,
+    .sec_item_update_token_items_for_access_groups  = _SecItemUpdateTokenItemsForAccessGroups,
     .sec_delete_items_with_access_groups    = _SecItemServerDeleteAllWithAccessGroups,
 #if SHAREDWEBCREDENTIALS
     .sec_add_shared_web_credential          = _SecAddSharedWebCredential,
@@ -72,6 +72,7 @@ static struct securityd securityd_spi = {
     .sec_keychain_backup_syncable           = _SecServerBackupSyncable,
     .sec_keychain_restore_syncable          = _SecServerRestoreSyncable,
     .sec_item_backup_copy_names             = SecServerItemBackupCopyNames,
+    .sec_item_backup_ensure_copy_view       = SecServerItemBackupEnsureCopyView,
     .sec_item_backup_handoff_fd             = SecServerItemBackupHandoffFD,
     .sec_item_backup_set_confirmed_manifest = SecServerItemBackupSetConfirmedManifest,
     .sec_item_backup_restore                = SecServerItemBackupRestore,
@@ -80,30 +81,18 @@ static struct securityd securityd_spi = {
     .soscc_TryUserCredentials               = SOSCCTryUserCredentials_Server,
     .soscc_SetUserCredentials               = SOSCCSetUserCredentials_Server,
     .soscc_SetUserCredentialsAndDSID        = SOSCCSetUserCredentialsAndDSID_Server,
-    .soscc_SetUserCredentialsAndDSIDWithAnalytics  = SOSCCSetUserCredentialsAndDSIDWithAnalytics_Server,
     .soscc_CanAuthenticate                  = SOSCCCanAuthenticate_Server,
     .soscc_PurgeUserCredentials             = SOSCCPurgeUserCredentials_Server,
     .soscc_ThisDeviceIsInCircle             = SOSCCThisDeviceIsInCircle_Server,
     .soscc_RequestToJoinCircle              = SOSCCRequestToJoinCircle_Server,
     .soscc_RequestToJoinCircleAfterRestore  = SOSCCRequestToJoinCircleAfterRestore_Server,
-    .soscc_RequestToJoinCircleAfterRestoreWithAnalytics  = SOSCCRequestToJoinCircleAfterRestoreWithAnalytics_Server,
-    .soscc_RequestEnsureFreshParameters     = SOSCCRequestEnsureFreshParameters_Server,
-    .soscc_GetAllTheRings                   = SOSCCGetAllTheRings_Server,
-    .soscc_ApplyToARing                     = SOSCCApplyToARing_Server,
-    .soscc_WithdrawlFromARing               = SOSCCWithdrawlFromARing_Server,
-    .soscc_EnableRing                       = SOSCCEnableRing_Server,
-    .soscc_RingStatus                       = SOSCCRingStatus_Server,
     .soscc_SetToNew                         = SOSCCAccountSetToNew_Server,
     .soscc_ResetToOffering                  = SOSCCResetToOffering_Server,
     .soscc_ResetToEmpty                     = SOSCCResetToEmpty_Server,
-    .soscc_ResetToEmptyWithAnalytics        = SOSCCResetToEmptyWithAnalytics_Server,
     .soscc_View                             = SOSCCView_Server,
     .soscc_ViewSet                          = SOSCCViewSet_Server,
-    .soscc_ViewSetWithAnalytics             = SOSCCViewSetWithAnalytics_Server,
     .soscc_RemoveThisDeviceFromCircle       = SOSCCRemoveThisDeviceFromCircle_Server,
-    .soscc_RemoveThisDeviceFromCircleWithAnalytics = SOSCCRemoveThisDeviceFromCircleWithAnalytics_Server,
     .soscc_RemovePeersFromCircle            = SOSCCRemovePeersFromCircle_Server,
-    .soscc_RemovePeersFromCircleWithAnalytics = SOSCCRemovePeersFromCircleWithAnalytics_Server,
     .soscc_LoggedOutOfAccount               = SOSCCLoggedOutOfAccount_Server,
     .soscc_BailFromCircle                   = SOSCCBailFromCircle_Server,
     .soscc_AcceptApplicants                 = SOSCCAcceptApplicants_Server,
@@ -130,22 +119,10 @@ static struct securityd securityd_spi = {
     .soscc_SetNewPublicBackupKey            = SOSCCSetNewPublicBackupKey_Server,
     .soscc_RegisterSingleRecoverySecret     = SOSCCRegisterSingleRecoverySecret_Server,
     .soscc_WaitForInitialSync               = SOSCCWaitForInitialSync_Server,
-    .soscc_WaitForInitialSyncWithAnalytics  = SOSCCWaitForInitialSyncWithAnalytics_Server,
-    .soscc_CopyYetToSyncViewsList           = SOSCCCopyYetToSyncViewsList_Server,
-    .soscc_SetEscrowRecords                 = SOSCCSetEscrowRecord_Server,
-    .soscc_CopyEscrowRecords                = SOSCCCopyEscrowRecord_Server,
-    .sosbskb_WrapToBackupSliceKeyBagForView = SOSWrapToBackupSliceKeyBagForView_Server,
-    .soscc_CopyAccountState                 = SOSCCCopyAccountState_Server,
-    .soscc_DeleteAccountState               = SOSCCDeleteAccountState_Server,
-    .soscc_CopyEngineData                   = SOSCCCopyEngineData_Server,
-    .soscc_DeleteEngineState                = SOSCCDeleteEngineState_Server,
     .soscc_AccountHasPublicKey              = SOSCCAccountHasPublicKey_Server,
-    .soscc_AccountIsNew                     = SOSCCAccountIsNew_Server,
-    .soscc_IsThisDeviceLastBackup           = SOSCCkSecXPCOpIsThisDeviceLastBackup_Server,
     .soscc_SOSCCPeersHaveViewsEnabled       = SOSCCPeersHaveViewsEnabled_Server,
     .soscc_RegisterRecoveryPublicKey        = SOSCCRegisterRecoveryPublicKey_Server,
     .soscc_CopyRecoveryPublicKey            = SOSCCCopyRecoveryPublicKey_Server,
-    .soscc_CopyBackupInformation            = SOSCCCopyBackupInformation_Server,
     .soscc_SOSCCMessageFromPeerIsPending    = SOSCCMessageFromPeerIsPending_Server,
     .soscc_SOSCCSendToPeerIsPending         = SOSCCSendToPeerIsPending_Server,
 #endif /* SECUREOBJECTSYNC */
@@ -189,7 +166,7 @@ void securityd_init_server(void) {
 
 void securityd_init(CFURLRef home_path) {
     if (home_path) {
-        SetCustomHomeURL(home_path);
+        SecSetCustomHomeURL(home_path);
     }
 
     securityd_init_server();

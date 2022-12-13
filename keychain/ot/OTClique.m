@@ -27,6 +27,7 @@
 #import <Foundation/Foundation.h>
 
 #import "keychain/ot/OTClique.h"
+#import "keychain/ot/OTClique+Private.h"
 #import "keychain/ot/OTConstants.h"
 #import "keychain/ot/OTDefines.h"
 #import "keychain/SigninMetrics/OctagonSignPosts.h"
@@ -37,6 +38,8 @@
 #import "keychain/SecureObjectSync/SOSCloudCircle.h"
 #import "KeychainCircle/PairingChannel.h"
 #import <Security/SecBase.h>
+#import "keychain/SecureObjectSync/SOSViews.h"
+#import "keychain/SecureObjectSync/SOSInternal.h"
 
 const NSString* kSecEntitlementPrivateOctagonEscrow = @"com.apple.private.octagon.escrow-content";
 
@@ -47,10 +50,11 @@ const NSString* kSecEntitlementPrivateOctagonEscrow = @"com.apple.private.octago
 #import <CloudServices/SecureBackup.h>
 #import <CloudServices/SecureBackupConstants.h>
 #import "keychain/ot/OTControl.h"
+#import "keychain/ckks/CKKSControl.h"
 #import "keychain/ot/categories/OctagonEscrowRecoverer.h"
 
 SOFT_LINK_FRAMEWORK(PrivateFrameworks, KeychainCircle);
-SOFT_LINK_FRAMEWORK(PrivateFrameworks, CloudServices);
+SOFT_LINK_OPTIONAL_FRAMEWORK(PrivateFrameworks, CloudServices);
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wstrict-prototypes"
@@ -58,16 +62,15 @@ SOFT_LINK_CLASS(KeychainCircle, KCPairingChannel);
 SOFT_LINK_CLASS(KeychainCircle, OTPairingChannel);
 SOFT_LINK_CLASS(CloudServices, SecureBackup);
 SOFT_LINK_CONSTANT(CloudServices, kSecureBackupErrorDomain, NSErrorDomain);
+SOFT_LINK_CONSTANT(CloudServices, kSecureBackupAuthenticationAppleID, NSString*);
+SOFT_LINK_CONSTANT(CloudServices, kSecureBackupAuthenticationPassword, NSString*);
+SOFT_LINK_CONSTANT(CloudServices, kSecureBackupiCloudDataProtectionDeleteAllRecordsKey, NSString*);
+SOFT_LINK_CONSTANT(CloudServices, kSecureBackupContainsiCDPDataKey, NSString*);
+SOFT_LINK_CONSTANT(CloudServices, kSecureBackupRecoveryKeyKey, NSString*);
+SOFT_LINK_CONSTANT(CloudServices, kSecureBackupUsesRecoveryKeyKey, NSString*);
 
 #pragma clang diagnostic pop
 #endif
-
-#endif // this #endif was added for Darling
-// see OTControlProtocol.m for an explanation of why we need to do this
-#if defined(DARLING) || defined(__OBJC2__)
-
-#import <Foundation/Foundation.h>
-#import "keychain/ot/OTClique.h"
 
 OTCliqueCDPContextType OTCliqueCDPContextTypeNone = @"cdpContextTypeNone";
 OTCliqueCDPContextType OTCliqueCDPContextTypeSignIn = @"cdpContextTypeSignIn";
@@ -76,6 +79,7 @@ OTCliqueCDPContextType OTCliqueCDPContextTypeFinishPasscodeChange = @"cdpContext
 OTCliqueCDPContextType OTCliqueCDPContextTypeRecoveryKeyGenerate = @"cdpContextTypeRecoveryKeyGenerate";
 OTCliqueCDPContextType OTCliqueCDPContextTypeRecoveryKeyNew = @"cdpContextTypeRecoveryKeyNew";
 OTCliqueCDPContextType OTCliqueCDPContextTypeUpdatePasscode = @"cdpContextTypeUpdatePasscode";
+OTCliqueCDPContextType OTCliqueCDPContextTypeConfirmPasscodeCyrus = @"cdpContextTypeConfirmPasscodeCyrus";
 
 NSString* OTCliqueStatusToString(CliqueStatus status)
 {
@@ -112,11 +116,21 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
     return CliqueStatusError;
 }
-#endif // defined(DARLING) || defined(__OBJC2__)
-#if __OBJC2__ // this #if was added for Darling
+
+NSString* OTCDPStatusToString(OTCDPStatus status) {
+    switch(status) {
+        case OTCDPStatusUnknown:
+            return @"unknown";
+        case OTCDPStatusDisabled:
+            return @"disabled";
+        case OTCDPStatusEnabled:
+            return @"enabled";
+    }
+}
 
 
 @implementation OTConfigurationContext
+
 - (OTControl* _Nullable)makeOTControl:(NSError**)error
 {
 #if OCTAGON
@@ -127,6 +141,26 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 #else
     return nil;
 #endif
+}
+
+- (CKKSControl* _Nullable)makeCKKSControl:(NSError**)error
+{
+#if OCTAGON
+    if(self.ckksControl) {
+        return self.ckksControl;
+    }
+    return [CKKSControl CKKSControlObject:true error:error];
+#else
+    return nil;
+#endif
+}
+
+- (instancetype)init
+{
+    if((self = [super init])) {
+        _context = OTDefaultContext;
+    }
+    return self;
 }
 @end
 
@@ -198,24 +232,28 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
     [self.defaults removeObjectForKey:OTDefaultsOctagonEnable];
 }
 
-- (instancetype)initWithContextData:(OTConfigurationContext *)ctx error:(NSError * __autoreleasing *)error
+- (instancetype)initWithContextData:(OTConfigurationContext *)ctx
 {
 #if OCTAGON
-    self = [super init];
-    if(self){
+    if ((self = [super init])) {
         _ctx = [[OTConfigurationContext alloc]init];
         _ctx.context = ctx.context ?: OTDefaultContext;
         _ctx.dsid = [ctx.dsid copy];
         _ctx.altDSID = [ctx.altDSID copy];
-        _ctx.analytics = ctx.analytics;
         _ctx.otControl = ctx.otControl;
+        _ctx.ckksControl = ctx.ckksControl;
+        _ctx.overrideEscrowCache = ctx.overrideEscrowCache;
 
         self.defaults = [NSMutableDictionary dictionary];
     }
     return self;
 #else
     NSAssert(false, @"OTClique is not implemented on this platform");
-    return nil;
+
+    // make the build analyzer happy
+    if ((self = [super init])) {
+    }
+    return self;
 #endif // OCTAGON
 }
 
@@ -251,6 +289,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
         SOSPeerInfoRef me = SOSCCCopyMyPeerInfo(&error);
         retPeerID =  (NSString*)CFBridgingRelease(CFRetainSafe(SOSPeerInfoGetPeerID(me)));
         CFReleaseNull(me);
+        CFBridgingRelease(error);
     }
 
     secnotice("clique", "cliqueMemberIdentifier complete: %@", retPeerID);
@@ -287,7 +326,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
         if(operationError) {
             secnotice("clique-establish", "establish returned an error: %@", operationError);
         }
-        success = !!operationError;
+        success = operationError == nil;
         localError = operationError;
     }];
     
@@ -321,7 +360,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
         if(operationError) {
             secnotice("clique-resetandestablish", "resetAndEstablish returned an error: %@", operationError);
         }
-        success = !!operationError;
+        success = operationError == nil;
         localError = operationError;
     }];
 
@@ -348,9 +387,9 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
     secnotice("clique-newfriends", "makeNewFriends invoked using context: %@, dsid: %@", data.context, data.dsid);
     bool result = false;
     bool subTaskSuccess = false;
-    OctagonSignpost performEscrowRecoverySignpost = OctagonSignpostBegin(OctagonSignpostNameMakeNewFriends);
+    OctagonSignpost newFriendsSignpost = OctagonSignpostBegin(OctagonSignpostNameMakeNewFriends);
 
-    OTClique* clique = [[OTClique alloc] initWithContextData:data error:error];
+    OTClique* clique = [[OTClique alloc] initWithContextData:data];
 
     if(OctagonIsEnabled()) {
         NSError* localError = nil;
@@ -361,7 +400,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
             if(error) {
                 *error = localError;
             }
-            OctagonSignpostEnd(performEscrowRecoverySignpost, OctagonSignpostNameMakeNewFriends, OctagonSignpostNumber1(OctagonSignpostNameMakeNewFriends), (int)subTaskSuccess);
+            OctagonSignpostEnd(newFriendsSignpost, OctagonSignpostNameMakeNewFriends, OctagonSignpostNumber1(OctagonSignpostNameMakeNewFriends), (int)subTaskSuccess);
             return nil;
         } else {
             secnotice("clique-newfriends", "Octagon account reset succeeded");
@@ -370,24 +409,16 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
     if([OTClique platformSupportsSOS]) {
         CFErrorRef resetError = NULL;
-        NSData* analyticsData = nil;
-        if(data.analytics) {
-            NSError* encodingError = nil;
-            analyticsData = [NSKeyedArchiver archivedDataWithRootObject:data.analytics requiringSecureCoding:YES error:&encodingError];
-
-            if(encodingError) {
-                secnotice("clique-newfriends", "newFriendsWithContextData: unable to serialize analytics: %@", encodingError);
-            }
-        }
-
         result = SOSCCResetToOffering(&resetError);
 
         if(!result || resetError){
             secnotice("clique-newfriends", "newFriendsWithContextData: resetToOffering failed: %@", resetError);
             if(error) {
                 *error = CFBridgingRelease(resetError);
+            } else {
+                CFBridgingRelease(resetError);
             }
-            OctagonSignpostEnd(performEscrowRecoverySignpost, OctagonSignpostNameMakeNewFriends, OctagonSignpostNumber1(OctagonSignpostNameMakeNewFriends), (int)subTaskSuccess);
+            OctagonSignpostEnd(newFriendsSignpost, OctagonSignpostNameMakeNewFriends, OctagonSignpostNumber1(OctagonSignpostNameMakeNewFriends), (int)subTaskSuccess);
             return nil;
         }
         secnotice("clique-newfriends", "newFriendsWithContextData: reset the SOS circle");
@@ -397,7 +428,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
     secnotice("clique-newfriends", "makeNewFriends complete");
 
     subTaskSuccess = true;
-    OctagonSignpostEnd(performEscrowRecoverySignpost, OctagonSignpostNameMakeNewFriends, OctagonSignpostNumber1(OctagonSignpostNameMakeNewFriends), (int)subTaskSuccess);
+    OctagonSignpostEnd(newFriendsSignpost, OctagonSignpostNameMakeNewFriends, OctagonSignpostNumber1(OctagonSignpostNameMakeNewFriends), (int)subTaskSuccess);
 
     return clique;
 
@@ -408,25 +439,40 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 #endif
 }
 
++ (BOOL)isCloudServicesAvailable
+{
+#if OCTAGON
+    if (isCloudServicesAvailable()) {
+        return YES;
+    }
+
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        secnotice("octagon", "CloudServices is unavailable on this platform");
+    });
+    return NO;
+#else
+    return NO;
+#endif
+}
+
 + (OTClique* _Nullable)performEscrowRecoveryWithContextData:(OTConfigurationContext*)data
                                             escrowArguments:(NSDictionary*)sbdRecoveryArguments
                                                       error:(NSError**)error
 {
 #if OCTAGON
+    if ([OTClique isCloudServicesAvailable] == NO) {
+        if (error) {
+            *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:errSecUnimplemented userInfo:nil];
+        }
+        return nil;
+    }
+
     OctagonSignpost performEscrowRecoverySignpost = OctagonSignpostBegin(OctagonSignpostNamePerformEscrowRecovery);
     bool subTaskSuccess = false;
     NSError* localError = nil;
-    OTClique* clique = [[OTClique alloc] initWithContextData:data
-                                                       error:&localError];
 
-    if(!clique || localError) {
-        secnotice("clique-recovery", "unable to create otclique: %@", localError);
-        if(error) {
-            *error = localError;
-        }
-        OctagonSignpostEnd(performEscrowRecoverySignpost, OctagonSignpostNamePerformEscrowRecovery, OctagonSignpostNumber1(OctagonSignpostNamePerformEscrowRecovery), (int)subTaskSuccess);
-        return nil;
-    }
+    OTClique* clique = [[OTClique alloc] initWithContextData:data];
 
     // Attempt the recovery from sbd
     secnotice("clique-recovery", "attempting an escrow recovery for context:%@, altdsid:%@", data.context, data.altDSID);
@@ -450,6 +496,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
                 } else {
                     secnotice("clique-recovery", "resetting SOS circle successful");
                 }
+                CFBridgingRelease(blowItAwayError);
             } else {
                 secnotice("clique-recovery", "Legacy restore failed on a non-SOS platform");
             }
@@ -467,6 +514,20 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
             [clique joinAfterRestore:&localError];
             secnotice("clique-recovery", "joinAfterRestore: %@", localError);
         }
+    }
+
+    NSString* recoveryKey = sbdRecoveryArguments[getkSecureBackupRecoveryKeyKey()];
+    NSNumber* usesRecoveryKey = sbdRecoveryArguments[getkSecureBackupUsesRecoveryKeyKey()];
+
+    if((recoveryKey != nil || [usesRecoveryKey boolValue] == YES)
+       && [clique fetchCliqueStatus:&localError] == CliqueStatusIn) {
+        secnotice("clique-recovery", "recovery key used during secure backup recovery, skipping bottle check");
+        secnotice("clique-recovery", "recovery complete: %@", clique);
+
+        subTaskSuccess = clique ? true : false;
+        OctagonSignpostEnd(performEscrowRecoverySignpost, OctagonSignpostNamePerformEscrowRecovery, OctagonSignpostNumber1(OctagonSignpostNamePerformEscrowRecovery), (int)subTaskSuccess);
+
+        return clique;
     }
 
     // look for OT Bottles
@@ -490,7 +551,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
         secnotice("clique-recovery", "recovering from bottle: %@", bottleID);
         __block NSError* restoreBottleError = nil;
 
-        OctagonSignpost bottleRecoverySignPost = OctagonSignpostBegin(OctagonSignpostNamePerformBottleRecovery);
+        OctagonSignpost bottleRecoverySignPost = OctagonSignpostBegin(OctagonSignpostNamePerformOctagonJoin);
         //restore bottle!
         [control restore:OTCKContainerName
                contextID:data.context
@@ -507,7 +568,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
             }];
 
         subTaskSuccess = (restoreBottleError == nil) ? true : false;
-        OctagonSignpostEnd(bottleRecoverySignPost, OctagonSignpostNamePerformBottleRecovery, OctagonSignpostNumber1(OctagonSignpostNamePerformBottleRecovery), (int)subTaskSuccess);
+        OctagonSignpostEnd(bottleRecoverySignPost, OctagonSignpostNamePerformOctagonJoin, OctagonSignpostNumber1(OctagonSignpostNamePerformOctagonJoin), (int)subTaskSuccess);
 
         if(restoreBottleError) {
             if(error){
@@ -532,6 +593,11 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
         if(resetError) {
             secnotice("clique-recovery", "failed to reset octagon: %@", resetError);
+            if(error){
+                *error = resetError;
+            }
+            OctagonSignpostEnd(performEscrowRecoverySignpost, OctagonSignpostNamePerformEscrowRecovery, OctagonSignpostNumber1(OctagonSignpostNamePerformEscrowRecovery), (int)subTaskSuccess);
+            return nil;
         } else{
             secnotice("clique-recovery", "reset octagon succeeded");
         }
@@ -770,20 +836,9 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
     if([OTClique platformSupportsSOS] && sosIdentifiers.count >0) {
         CFErrorRef removeFriendError = NULL;
-        NSData* analyticsData = nil;
 
         secnotice("clique-removefriends", "removing sos friends: %@", sosIdentifiers);
-
-        if(self.ctx.analytics){
-            NSError* encodingError = nil;
-            analyticsData = [NSKeyedArchiver archivedDataWithRootObject:self.ctx.analytics requiringSecureCoding:YES error:&encodingError];
-        }
-
-        if(analyticsData) {
-            result = SOSCCRemovePeersFromCircleWithAnalytics((__bridge CFArrayRef)friendIdentifiers, (__bridge CFDataRef)analyticsData, &removeFriendError);
-        } else {
-            result = SOSCCRemovePeersFromCircle((__bridge CFArrayRef)friendIdentifiers, &removeFriendError);
-        }
+        result = SOSCCRemovePeersFromCircle((__bridge CFArrayRef)friendIdentifiers, &removeFriendError);
 
         if(removeFriendError) {
             secnotice("clique-removefriends", "removeFriendsInClique failed: unable to remove friends: %@", removeFriendError);
@@ -858,21 +913,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
     }
 
     if([OTClique platformSupportsSOS]) {
-        NSData* analyticsData = nil;
-
-        if(self.ctx.analytics) {
-            NSError* encodingError = nil;
-            analyticsData = [NSKeyedArchiver archivedDataWithRootObject:self.ctx.analytics requiringSecureCoding:YES error:&encodingError];
-            if(!analyticsData){
-                secnotice("clique-leaveClique", "leaveClique unable to archive analytics object: %@", encodingError);
-            }
-        }
-
-        if(analyticsData) {
-            result &= SOSCCRemoveThisDeviceFromCircleWithAnalytics((__bridge CFDataRef)analyticsData, &removeThisDeviceError);
-        } else {
-            result &= SOSCCRemoveThisDeviceFromCircle(&removeThisDeviceError);
-        }
+        result &= SOSCCRemoveThisDeviceFromCircle(&removeThisDeviceError);
         if (error) {
             *error = (NSError*)CFBridgingRelease(removeThisDeviceError);
         } else {
@@ -993,6 +1034,11 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
 - (BOOL)safariPasswordSyncingEnabled:(NSError **)error
 {
+    return [self fetchUserControllableViewsSyncingEnabled:error];
+}
+
+- (BOOL)sosSafariPasswordSyncingEnabled:(NSError **)error
+{
     secnotice("clique-safari", "safariPasswordSyncingEnabled for context:%@, altdsid:%@", self.ctx.context, self.ctx.altDSID);
     OctagonSignpost safariSyncingEnabledSignPost = OctagonSignpostBegin(OctagonSignpostNameSafariPasswordSyncingEnabled);
     bool subTaskSuccess = false;
@@ -1025,6 +1071,158 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
     }
 }
 
+- (BOOL)setUserControllableViewsSyncStatus:(BOOL)enabled
+                                     error:(NSError* __autoreleasing *)error
+{
+    if([OTClique platformSupportsSOS]) {
+        // We either enable or disable this list of SOS views, taken from CDP.
+        NSSet<NSString*>* sosViews = [NSSet setWithObjects:(__bridge id)kSOSViewWiFi,
+                                      (__bridge id)kSOSViewAutofillPasswords,
+                                      (__bridge id)kSOSViewSafariCreditCards,
+                                      (__bridge id)kSOSViewOtherSyncable,
+                                      nil];
+
+        BOOL sosResult = NO;
+        if(enabled) {
+            sosResult = [self sosViewSet:sosViews disabledViews:[NSSet set]];
+        } else {
+            sosResult = [self sosViewSet:[NSSet set] disabledViews:sosViews];
+        }
+
+        if(sosResult == NO) {
+            secnotice("clique-user-sync", "SOS view setting failed, but no error returned");
+            if(error) {
+                *error = [NSError errorWithDomain:(__bridge NSString*)kSOSErrorDomain
+                                             code:kSOSErrorNotReady
+                                         userInfo:@{
+                                             NSLocalizedDescriptionKey: @"SOS reported failure, but no error given"
+                                         }];
+            }
+
+            return NO;
+        }
+    }
+
+    if(OctagonIsEnabled()) {
+        return [self setOctagonUserControllableViewsSyncEnabled:enabled
+                                                          error:error];
+    }
+
+    return YES;
+}
+
+- (BOOL)setOctagonUserControllableViewsSyncEnabled:(BOOL)enabled
+                                             error:(NSError* __autoreleasing *)error
+{
+#if OCTAGON
+    OTControl* control = [self makeOTControl:error];
+    if(!control) {
+        return NO;
+    }
+
+    __block NSError* localError = nil;
+
+    secnotice("clique-user-sync", "setting user-controllable-sync status to %@", enabled ? @"enabled" : @"paused");
+
+    [control setUserControllableViewsSyncStatus:self.ctx.containerName
+                                      contextID:self.ctx.context
+                                        enabled:enabled
+                                          reply:^(BOOL nowSyncing, NSError* _Nullable fetchError) {
+        if(fetchError) {
+            secnotice("clique-user-sync", "setting user-controllable-sync status errored: %@", fetchError);
+            localError = fetchError;
+        } else {
+            secnotice("clique-user-sync", "setting user-controllable-sync status succeeded, now : %@", nowSyncing ? @"enabled" : @"paused");
+        }
+    }];
+
+    if(error && localError) {
+        *error = localError;
+    }
+
+    return localError == nil;
+#else
+    if(error) {
+        *error = [NSError errorWithDomain:NSOSStatusErrorDomain
+                                     code:errSecUnimplemented
+                                 userInfo:@{NSLocalizedDescriptionKey: @"setOctagonUserControllableViewSync unimplemented on this platform"}];
+    }
+    return NO;
+#endif
+}
+
+- (BOOL)fetchUserControllableViewsSyncingEnabled:(NSError* __autoreleasing *)error
+{
+    if(!OctagonIsEnabled() && ![OTClique platformSupportsSOS]) {
+        secnotice("clique-user-sync", "No syncing platforms enabled; views are not syncing");
+        return NO;
+    }
+
+    __block BOOL octagonSyncing = NO;
+#if OCTAGON
+    if(OctagonIsEnabled()) {
+        OTControl* control = [self makeOTControl:error];
+        if(!control) {
+            return NO;
+        }
+
+        __block NSError* localError = nil;
+        [control fetchUserControllableViewsSyncStatus:self.ctx.containerName
+                                            contextID:self.ctx.context
+                                                reply:^(BOOL nowSyncing, NSError* _Nullable fetchError) {
+            if(fetchError) {
+                secnotice("clique-user-sync", "fetching user-controllable-sync status errored: %@", fetchError);
+            } else {
+                secnotice("clique-user-sync", "fetched user-controllable-sync status as : %@", nowSyncing ? @"enabled" : @"paused");
+            }
+            octagonSyncing = nowSyncing;
+            localError = fetchError;
+        }];
+
+        if(localError) {
+            if(error) {
+                *error = localError;
+            }
+            return octagonSyncing;
+        }
+    }
+#endif
+
+    BOOL sosSafariEnabled = NO;
+    if([OTClique platformSupportsSOS]) {
+        NSError* localError = nil;
+        sosSafariEnabled = [self sosSafariPasswordSyncingEnabled:&localError];
+
+        if(localError) {
+            if(error) {
+                *error = localError;
+            }
+            return sosSafariEnabled;
+        }
+    }
+
+    if(OctagonIsEnabled() && [OTClique platformSupportsSOS]) {
+        // Return the OR of this value, so that the UI checkbox will be on if any syncing is occurring
+        return octagonSyncing || sosSafariEnabled;
+
+    } else if(OctagonIsEnabled() && ![OTClique platformSupportsSOS]) {
+        return octagonSyncing;
+
+    } else if(!OctagonIsEnabled()&& [OTClique platformSupportsSOS]) {
+        return sosSafariEnabled;
+
+    } else {
+        // Should be impossible, due to the check above. So:
+        if(error) {
+            *error = [NSError errorWithDomain:NSOSStatusErrorDomain
+                                         code:errSecUnimplemented
+                                     userInfo:@{NSLocalizedDescriptionKey: @"fetchUserControllableViewsSyncingEnabled has no meaning if all sync systems are not on this platform"}];
+        }
+        return NO;
+    }
+}
+
+
 - (BOOL)isLastFriend:(NSError **)error
 {
     secnotice("clique-isLastFriend", "is last friend");
@@ -1040,20 +1238,8 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
     if([OTClique platformSupportsSOS]) {
         CFErrorRef initialSyncErrorRef = NULL;
-        bool result = false;
-        if(self.ctx.analytics){
-            NSError* encodingError = nil;
-            NSData* analyticsData = [NSKeyedArchiver archivedDataWithRootObject:self.ctx.analytics requiringSecureCoding:YES error:&encodingError];
-            if(!encodingError && analyticsData){
-                result = SOSCCWaitForInitialSyncWithAnalytics((__bridge CFDataRef)analyticsData, &initialSyncErrorRef);
-            }else{
-                result = SOSCCWaitForInitialSync(&initialSyncErrorRef);
-            }
-        }else{
-            result = SOSCCWaitForInitialSync(&initialSyncErrorRef);
-        }
+        BOOL initialSyncResult = SOSCCWaitForInitialSync(&initialSyncErrorRef) ? YES : NO;
 
-        BOOL initialSyncResult = result ? YES : NO;
         if (error) {
             *error = (NSError*)CFBridgingRelease(initialSyncErrorRef);
         } else {
@@ -1112,26 +1298,44 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
 - (BOOL)viewSet:(NSSet*)enabledViews disabledViews:(NSSet*)disabledViews
 {
-    secnotice("clique-legacy", "viewSet for context:%@, altdsid:%@", self.ctx.context, self.ctx.altDSID);
+    if(OctagonIsEnabled()) {
+
+        bool enableUserViews = [enabledViews containsObject:(__bridge NSString*)kSOSViewAutofillPasswords];
+        if(enableUserViews && SOSVisibleKeychainNotAllowed()) {
+            secnotice("clique-legacy", "Cannot enable visible keychain views due to profile restrictions");
+            return NO;
+        }
+
+        NSError* octagonError = nil;
+        // This function should log its success or failure
+        BOOL result = [self setOctagonUserControllableViewsSyncEnabled:enableUserViews error:&octagonError];
+        if(!result) {
+            return NO;
+        }
+    }
+
+    return [self sosViewSet:enabledViews disabledViews:disabledViews];
+}
+
+- (BOOL)sosViewSet:(NSSet*)enabledViews disabledViews:(NSSet*)disabledViews
+{
+    secnotice("clique-legacy", "viewSet for context:%@, altdsid:%@ enable:%@, disable:%@",
+              self.ctx.context, self.ctx.altDSID, enabledViews, disabledViews);
     OctagonSignpost signPost = OctagonSignpostBegin(OctagonSignpostNameViewSet);
     bool subTaskSuccess = false;
 
     if([OTClique platformSupportsSOS]) {
-        bool result = false;
-        if(self.ctx.analytics){
-            NSError* encodingError = nil;
-            NSData* analyticsData = [NSKeyedArchiver archivedDataWithRootObject:self.ctx.analytics requiringSecureCoding:YES error:&encodingError];
-            if(!encodingError && analyticsData){
-                result = SOSCCViewSetWithAnalytics((__bridge CFSetRef)enabledViews, (__bridge CFSetRef)disabledViews, (__bridge CFDataRef)analyticsData);
-            }else{
-                result = SOSCCViewSet((__bridge CFSetRef)enabledViews, (__bridge CFSetRef)disabledViews);
-            }
-        }else{
-            result = SOSCCViewSet((__bridge CFSetRef)enabledViews, (__bridge CFSetRef)disabledViews);
+        if(SOSVisibleKeychainNotAllowed() && enabledViews && [enabledViews count] && SOSViewSetIntersectsV0((__bridge CFSetRef)(enabledViews))) {
+            secnotice("clique-legacy", "Cannot enable visible keychain views due to profile restrictions");
+            enabledViews = nil;
         }
 
-        BOOL viewSetResult = result ? YES : NO;
-        subTaskSuccess = result;
+        BOOL viewSetResult = NO;
+        if(enabledViews || disabledViews) {
+            bool result = SOSCCViewSet((__bridge CFSetRef)enabledViews, (__bridge CFSetRef)disabledViews);
+            viewSetResult = result ? YES : NO;
+            subTaskSuccess = result;
+        }
         OctagonSignpostEnd(signPost, OctagonSignpostNameViewSet, OctagonSignpostNumber1(OctagonSignpostNameViewSet), (int)subTaskSuccess);
         return viewSetResult;
     } else {
@@ -1151,36 +1355,18 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
     if([OTClique platformSupportsSOS]) {
         CFErrorRef setCredentialsErrorRef = NULL;
-        bool result = false;
-        if(self.ctx.analytics){
-            NSError* encodingError = nil;
-            NSData* analyticsData = [NSKeyedArchiver archivedDataWithRootObject:self.ctx.analytics requiringSecureCoding:YES error:&encodingError];
-            if(!encodingError && analyticsData){
-                result = SOSCCSetUserCredentialsAndDSIDWithAnalytics((__bridge CFStringRef)userLabel,
-                                                                     (__bridge CFDataRef)userPassword,
-                                                                     (__bridge CFStringRef)self.ctx.dsid,
-                                                                     (__bridge CFDataRef)analyticsData,
-                                                                     &setCredentialsErrorRef);
-            }else{
-                result = SOSCCSetUserCredentialsAndDSID((__bridge CFStringRef)userLabel,
-                                                        (__bridge CFDataRef)userPassword,
-                                                        (__bridge CFStringRef)self.ctx.dsid,
-                                                        &setCredentialsErrorRef);
-            }
-        }else{
-            result = SOSCCSetUserCredentialsAndDSID((__bridge CFStringRef)userLabel,
-                                                    (__bridge CFDataRef)userPassword,
-                                                    (__bridge CFStringRef)self.ctx.dsid,
-                                                    &setCredentialsErrorRef);
-        }
+        bool result = SOSCCSetUserCredentialsAndDSID((__bridge CFStringRef)userLabel,
+                                                     (__bridge CFDataRef)userPassword,
+                                                     (__bridge CFStringRef)self.ctx.dsid,
+                                                     &setCredentialsErrorRef);
 
         BOOL setCredentialsResult = result ? YES : NO;
+        secnotice("clique-legacy", "setUserCredentialsAndDSID results: %d %@", setCredentialsResult, setCredentialsErrorRef);
         if (error) {
             *error = (NSError*)CFBridgingRelease(setCredentialsErrorRef);
         } else {
             CFBridgingRelease(setCredentialsErrorRef);
         }
-        secnotice("clique-legacy", "setUserCredentialsAndDSID results: %d %@", setCredentialsResult, setCredentialsErrorRef);
         subTaskSuccess = result;
         OctagonSignpostEnd(signPost, OctagonSignpostNameSetUserCredentialsAndDSID, OctagonSignpostNumber1(OctagonSignpostNameSetUserCredentialsAndDSID), (int)subTaskSuccess);
 
@@ -1213,12 +1399,12 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
                                                      &tryCredentialsErrorRef);
 
         BOOL tryCredentialsResult = result ? YES : NO;
+        secnotice("clique-legacy", "tryUserCredentialsAndDSID results: %d %@", tryCredentialsResult, tryCredentialsErrorRef);
         if (error) {
             *error = (NSError*)CFBridgingRelease(tryCredentialsErrorRef);
         } else {
             CFBridgingRelease(tryCredentialsErrorRef);
         }
-        secnotice("clique-legacy", "tryUserCredentialsAndDSID results: %d %@", tryCredentialsResult, tryCredentialsErrorRef);
         subTaskSuccess = result;
         OctagonSignpostEnd(signPost, OctagonSignpostNameTryUserCredentialsAndDSID, OctagonSignpostNumber1(OctagonSignpostNameTryUserCredentialsAndDSID), (int)subTaskSuccess);
         return tryCredentialsResult;
@@ -1247,12 +1433,12 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
         NSArray* peerList = (result ? (NSArray*)(CFBridgingRelease(result)) : nil);
 
+        secnotice("clique-legacy", "copyPeerPeerInfo results: %@ (%@)", peerList, copyPeerErrorRef);
         if (error) {
             *error = (NSError*)CFBridgingRelease(copyPeerErrorRef);
         } else {
             CFBridgingRelease(copyPeerErrorRef);
         }
-        secnotice("clique-legacy", "copyPeerPeerInfo results: %@", peerList);
         subTaskSuccess = (peerList != nil) ? true : false;
         OctagonSignpostEnd(signPost, OctagonSignpostNameCopyPeerPeerInfo, OctagonSignpostNumber1(OctagonSignpostNameCopyPeerPeerInfo), (int)subTaskSuccess);
         return peerList;
@@ -1282,12 +1468,13 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
         if(result){
             viewsEnabledResult = CFBooleanGetValue(result) ? YES : NO;
         }
+        secnotice("clique-legacy", "peersHaveViewsEnabled results: %@ (%@)", viewsEnabledResult ? @"YES" : @"NO",
+                  viewsEnabledErrorRef);
         if (error) {
             *error = (NSError*)CFBridgingRelease(viewsEnabledErrorRef);
         } else {
             CFBridgingRelease(viewsEnabledErrorRef);
         }
-        secnotice("clique-legacy", "peersHaveViewsEnabled results: %@", viewsEnabledResult ? @"YES" : @"NO");
         subTaskSuccess = viewsEnabledResult ? true : false;
         OctagonSignpostEnd(signPost, OctagonSignpostNamePeersHaveViewsEnabled, OctagonSignpostNumber1(OctagonSignpostNamePeersHaveViewsEnabled), (int)subTaskSuccess);
         return viewsEnabledResult;
@@ -1306,7 +1493,6 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 - (BOOL)requestToJoinCircle:(NSError *__autoreleasing*)error
 {
     bool result = false;
-    CFErrorRef joinErrorRef = NULL;
     bool subTaskSuccess = false;
     OctagonSignpost signPost = OctagonSignpostBegin(OctagonSignpostNameRequestToJoinCircle);
 
@@ -1349,7 +1535,7 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 
         // If we didn't early-exit, and we aren't going to invoke SOS below, we succeeded.
         if(!OctagonPlatformSupportsSOS()) {
-            secnotice("clique-legacy", "requestToJoinCircle results: %d %@", result, joinErrorRef);
+            secnotice("clique-legacy", "requestToJoinCircle platform does not support SOS");
             subTaskSuccess = true;
             OctagonSignpostEnd(signPost, OctagonSignpostNameRequestToJoinCircle, OctagonSignpostNumber1(OctagonSignpostNameRequestToJoinCircle), (int)subTaskSuccess);
             return YES;
@@ -1358,26 +1544,16 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
 #endif // OCTAGON
 
     if([OTClique platformSupportsSOS]) {
-        NSData* analyticsData = nil;
-        if(self.ctx.analytics){
-            NSError* encodingError = nil;
-            analyticsData = [NSKeyedArchiver archivedDataWithRootObject:self.ctx.analytics requiringSecureCoding:YES error:&encodingError];
-        }
-
-        if(analyticsData){
-            result = SOSCCRequestToJoinCircleWithAnalytics((__bridge CFDataRef)analyticsData, &joinErrorRef);
-        } else {
-            result = SOSCCRequestToJoinCircle(&joinErrorRef);
-        }
-
+        CFErrorRef joinErrorRef = NULL;
+        result = SOSCCRequestToJoinCircle(&joinErrorRef);
         secnotice("clique-legacy", "sos requestToJoinCircle complete: %d %@", result, joinErrorRef);
+        if (error) {
+            *error = (NSError*)CFBridgingRelease(joinErrorRef);
+        } else {
+            CFBridgingRelease(joinErrorRef);
+        }
     }
 
-    if (error) {
-        *error = (NSError*)CFBridgingRelease(joinErrorRef);
-    } else {
-        CFBridgingRelease(joinErrorRef);
-    }
     subTaskSuccess = result;
     OctagonSignpostEnd(signPost, OctagonSignpostNameRequestToJoinCircle, OctagonSignpostNumber1(OctagonSignpostNameRequestToJoinCircle), (int)subTaskSuccess);
 
@@ -1403,6 +1579,62 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
         OctagonSignpostEnd(signPost, OctagonSignpostNameAccountUserKeyAvailable, OctagonSignpostNumber1(OctagonSignpostNameAccountUserKeyAvailable), (int)subTaskSuccess);
         return NO;
     }
+}
+
++ (NSArray<NSData*>* _Nullable)fetchEscrowRecordsInternal:(OTConfigurationContext*)configurationContext
+                                                    error:(NSError**)error
+{
+#if OCTAGON
+    secnotice("clique-fetchrecords", "fetching escrow records for context:%@, altdsid:%@", configurationContext.context, configurationContext.altDSID);
+
+    if(OctagonIsEnabled()) {
+        __block NSError* localError = nil;
+        __block NSArray<NSData*>* localRecords = nil;
+
+        OTControl *control = [configurationContext makeOTControl:&localError];
+        if (!control) {
+            secnotice("clique-fetchrecords", "unable to create otcontrol: %@", localError);
+            if (error) {
+                *error = localError;
+            }
+            return nil;
+        }
+        [control fetchEscrowRecords:OTCKContainerName
+                          contextID:configurationContext.context
+                         forceFetch:configurationContext.overrideEscrowCache
+                              reply:^(NSArray<NSData *> * _Nullable records,
+                                      NSError * _Nullable fetchError) {
+            if(fetchError) {
+                secnotice("clique-fetchrecords", "fetchEscrowRecords errored: %@", fetchError);
+            } else {
+                secnotice("clique-fetchrecords", "fetchEscrowRecords succeeded: %@", records);
+            }
+            localError = fetchError;
+            localRecords = records;
+        }];
+        
+        if(error && localError) {
+            *error = localError;
+        }
+
+        secnotice("clique-fetchrecords", "fetchEscrowRecords complete");
+
+        return localRecords;
+    } else {
+        // With octagon off, fail with 'unimplemented'
+        if(error) {
+            *error = [NSError errorWithDomain:NSOSStatusErrorDomain
+                                         code:errSecUnimplemented
+                                     userInfo:@{NSLocalizedDescriptionKey: @"fetching escrow records unimplemented"}];
+        }
+        return nil;
+    }
+#else // !OCTAGON
+    if (error) {
+        *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:errSecUnimplemented userInfo:nil];
+    }
+    return NULL;
+#endif
 }
 
 // MARK: SBD interfaces
@@ -1552,7 +1784,11 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
         secerror("octagon-setrecoverykey, SecRKCreateRecoveryKeyWithError() failed: %@", createRecoveryKeyError);
         userInfo[NSLocalizedDescriptionKey] = @"SecRKCreateRecoveryKeyWithError() failed";
         userInfo[NSUnderlyingErrorKey] = createRecoveryKeyError;
-        retError = [NSError errorWithDomain:getkSecureBackupErrorDomain() code:kSecureBackupInternalError userInfo:userInfo];
+        if ([OTClique isCloudServicesAvailable] == NO) {
+            retError = [NSError errorWithDomain:NSOSStatusErrorDomain code:errSecUnimplemented userInfo:userInfo];
+        } else {
+            retError = [NSError errorWithDomain:getkSecureBackupErrorDomain() code:kSecureBackupInternalError userInfo:userInfo];
+        }
         OctagonSignpostEnd(signPost, OctagonSignpostNameSetNewRecoveryKeyWithData, OctagonSignpostNumber1(OctagonSignpostNameSetNewRecoveryKeyWithData), (int)subTaskSuccess);
         reply(nil, retError);
         return;
@@ -1564,7 +1800,11 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
             NSError *underlyingError = CFBridgingRelease(registerError);
             userInfo[NSLocalizedDescriptionKey] = @"SecRKRegisterBackupPublicKey() failed";
             userInfo[NSUnderlyingErrorKey] = underlyingError;
-            retError = [NSError errorWithDomain:getkSecureBackupErrorDomain() code:kSecureBackupInternalError userInfo:userInfo];
+            if ([OTClique isCloudServicesAvailable] == NO) {
+                retError = [NSError errorWithDomain:NSOSStatusErrorDomain code:errSecUnimplemented userInfo:userInfo];
+            } else {
+                retError = [NSError errorWithDomain:getkSecureBackupErrorDomain() code:kSecureBackupInternalError userInfo:userInfo];
+            }
             OctagonSignpostEnd(signPost, OctagonSignpostNameSetNewRecoveryKeyWithData, OctagonSignpostNumber1(OctagonSignpostNameSetNewRecoveryKeyWithData), (int)subTaskSuccess);
             reply(nil,retError);
             return;
@@ -1748,6 +1988,174 @@ CliqueStatus OTCliqueStatusFromString(NSString* str)
                                         reply:(void(^)(NSError* _Nullable error))reply
 {
     [self performedCDPStateMachineRun:type success:YES error:nil reply:reply];
+}
+
++ (BOOL)setCDPEnabled:(OTConfigurationContext*)arguments
+                error:(NSError* __autoreleasing*)error
+{
+#if OCTAGON
+    NSError *controlError = nil;
+    OTControl* control = [arguments makeOTControl:&controlError];
+    if (!control) {
+        secerror("octagon-setcdpenabled: failed to fetch OTControl object: %@", controlError);
+        if (error) {
+            *error = controlError;
+        }
+        return NO;
+    }
+
+    __block NSError* reterror = nil;
+
+    [control setCDPEnabled:nil
+                 contextID:arguments.context
+                     reply:^(NSError * _Nullable resultError) {
+        if(resultError) {
+            secnotice("octagon-setcdpenabled", "failed to set CDP bit: %@", resultError);
+            reterror = resultError;
+        } else {
+            secnotice("octagon-setcdpenabled", "successfully set CDP bit");
+        }
+    }];
+
+    if(reterror && error) {
+        *error = reterror;
+    }
+
+    return (reterror == nil);
+#else // !OCTAGON
+    if(error) {
+        *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:errSecUnimplemented userInfo:nil];
+    }
+    return NO;
+#endif
+}
+
++ (OTCDPStatus)getCDPStatus:(OTConfigurationContext*)arguments
+                      error:(NSError* __autoreleasing *)error
+{
+#if OCTAGON
+    NSError *controlError = nil;
+    OTControl* control = [arguments makeOTControl:&controlError];
+    if (!control) {
+        secerror("octagon-cdp-status: failed to fetch OTControl object: %@", controlError);
+        if (error) {
+            *error = controlError;
+        }
+        return OTCDPStatusUnknown;
+    }
+
+    __block NSError* reterror = nil;
+    __block OTCDPStatus retcdpstatus = OTCDPStatusUnknown;
+
+    [control getCDPStatus:nil
+                contextID:arguments.context
+                    reply:^(OTCDPStatus status, NSError * _Nullable resultError) {
+        if(resultError) {
+            secnotice("octagon-cdp-status", "failed to fetch CDP status: %@", resultError);
+            reterror = resultError;
+
+        } else {
+            secnotice("octagon-cdp-status", "successfully fetched CDP status as %@", OTCDPStatusToString(status));
+            retcdpstatus = status;
+        }
+    }];
+
+    if(reterror && error) {
+       *error = reterror;
+    }
+
+    return retcdpstatus;
+#else // !OCTAGON
+    if(error) {
+        *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:errSecUnimplemented userInfo:nil];
+    }
+    return OTCDPStatusDisabled;
+#endif
+}
+
++ (OTClique* _Nullable)resetProtectedData:(OTConfigurationContext*)data error:(NSError**)error
+{
+#if OCTAGON
+    if ([OTClique isCloudServicesAvailable] == NO) {
+        if (error) {
+            *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:errSecUnimplemented userInfo:nil];
+        }
+        return nil;
+    }
+    NSError *controlError = nil;
+    OTControl *control = [data makeOTControl:&controlError];
+    if (!control) {
+        secerror("clique-reset-protected-data: unable to create otcontrol: %@", controlError);
+        if (error) {
+            *error = controlError;
+        }
+        return nil;
+    }
+
+    __block NSError* localError = nil;
+
+    //delete all records
+    id<OctagonEscrowRecovererPrococol> sb = data.sbd ?: [[getSecureBackupClass() alloc] init];
+
+    NSDictionary* deletionInformation = @{ getkSecureBackupAuthenticationAppleID() : data.authenticationAppleID,
+                                           getkSecureBackupAuthenticationPassword() : data.passwordEquivalentToken,
+                                           getkSecureBackupiCloudDataProtectionDeleteAllRecordsKey() : @YES,
+                                           getkSecureBackupContainsiCDPDataKey() : @YES};
+
+    NSError* sbError = [sb disableWithInfo:deletionInformation];
+    if(sbError) {
+        secerror("clique-reset-protected-data: secure backup escrow record deletion failed: %@", sbError);
+        if(error) {
+            *error = sbError;
+        }
+        return nil;
+    } else {
+        secnotice("clique-reset-protected-data", "sbd disableWithInfo succeeded");
+    }
+
+    //reset sos
+    if(OctagonPlatformSupportsSOS()) {
+        //reset SOS
+        CFErrorRef sosError = NULL;
+        bool resetSuccess = SOSCCResetToOffering(&sosError);
+
+        if(sosError || !resetSuccess) {
+            secerror("clique-reset-protected-data: sos reset failed: %@", sosError);
+            if(error) {
+                *error = (NSError*)CFBridgingRelease(sosError);
+            }
+            return nil;
+        } else {
+            secnotice("clique-reset-protected-data", "sos reset succeeded");
+        }
+    } else {
+        secnotice("clique-reset-protected-data", "platform does not support sos");
+    }
+
+    //reset octagon
+    OTClique* clique = [[OTClique alloc] initWithContextData:data];
+    if(OctagonIsEnabled()) {
+        [clique resetAndEstablish:CuttlefishResetReasonUserInitiatedReset error:&localError];
+
+        if(localError) {
+            secerror("clique-reset-protected-data: account reset failed: %@", localError);
+            if(error) {
+                *error = localError;
+            }
+            return nil;
+        } else {
+            secnotice("clique-reset-protected-data", "Octagon account reset succeeded");
+        }
+    }
+
+    return clique;
+#else // !OCTAGON
+    if(error) {
+        *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:errSecUnimplemented userInfo:nil];
+    }
+    return nil;
+#endif
+
 }
 
 @end

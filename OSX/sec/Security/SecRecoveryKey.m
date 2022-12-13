@@ -9,9 +9,9 @@
 #import <corecrypto/cchkdf.h>
 #import <corecrypto/ccsha2.h>
 #import <corecrypto/ccec.h>
+#import <corecrypto/ccrng.h>
 
 #import <utilities/SecCFWrappers.h>
-#import <CommonCrypto/CommonRandomSPI.h>
 #import <AssertMacros.h>
 
 
@@ -20,9 +20,7 @@
 
 #if !TARGET_OS_BRIDGE
 #include <dlfcn.h>
-#ifndef DARLING
 #include <AppleIDAuthSupport/AppleIDAuthSupport.h>
-#endif
 #define PATH_FOR_APPLEIDAUTHSUPPORTFRAMEWORK "/System/Library/PrivateFrameworks/AppleIDAuthSupport.framework/AppleIDAuthSupport"
 #endif
 
@@ -303,7 +301,7 @@ RKBackupCreateECKey(SecRecoveryKey *rk, bool returnFullkey)
 
     status = ccec_generate_key_deterministic(cp,
                                              CFDataGetLength(derivedSecret), CFDataGetBytePtr(derivedSecret),
-                                             ccDRBGGetRngState(),
+                                             ccrng(NULL),
                                              CCEC_GENKEY_DETERMINISTIC_COMPACT,
                                              fullKey);
     require_noerr(status, fail);

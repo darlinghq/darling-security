@@ -15,13 +15,13 @@ enum Handler {
     case updateTrust((UpdateTrustRequest, @escaping (UpdateTrustResponse?, Error?) -> Void) -> Void)
     case setRecoveryKey((SetRecoveryKeyRequest, @escaping (SetRecoveryKeyResponse?, Error?) -> Void) -> Void)
     case fetchChanges((FetchChangesRequest, @escaping (FetchChangesResponse?, Error?) -> Void) -> Void)
-    case fetchViableBottles((FetchViableBottlesRequest, @escaping (FetchViableBottlesResponse?, Error?) -> Void) ->Void)
+    case fetchViableBottles((FetchViableBottlesRequest, @escaping (FetchViableBottlesResponse?, Error?) -> Void) -> Void)
     case fetchPolicyDocuments((FetchPolicyDocumentsRequest,
         @escaping (FetchPolicyDocumentsResponse?, Error?) -> Void) -> Void)
 }
 
 class MockCuttlefishAPIAsyncClient: CuttlefishAPIAsync {
-
+    
     var handlers: [Handler] = []
     var index: Int = 0
 
@@ -164,10 +164,20 @@ class MockCuttlefishAPIAsyncClient: CuttlefishAPIAsync {
     }
     func getRepairAction(_: GetRepairActionRequest, completion: @escaping (GetRepairActionResponse?, Error?) -> Void) {
         completion(GetRepairActionResponse(), nil)
-
     }
     func getSupportAppInfo(_: GetSupportAppInfoRequest, completion: @escaping (GetSupportAppInfoResponse?, Error?) -> Void) {
         completion(GetSupportAppInfoResponse(), nil)
     }
-
+    func getClubCertificates(_: GetClubCertificatesRequest, completion: @escaping (GetClubCertificatesResponse?, Error?) -> Void) {
+        completion(GetClubCertificatesResponse(), nil)
+    }
+    func fetchSosiCloudIdentity(_: FetchSOSiCloudIdentityRequest, completion: @escaping (FetchSOSiCloudIdentityResponse?, Error?) -> Void) {
+        completion(FetchSOSiCloudIdentityResponse(), nil)
+    }
+    func addCustodianRecoveryKey(_: AddCustodianRecoveryKeyRequest, completion: @escaping (AddCustodianRecoveryKeyResponse?, Error?) -> Void) {
+        completion(AddCustodianRecoveryKeyResponse(), nil)
+    }
+    func resetAccountCdpcontents(_: ResetAccountCDPContentsRequest, completion: @escaping (ResetAccountCDPContentsResponse?, Error?) -> Void) {
+        completion(ResetAccountCDPContentsResponse(), nil)
+    }
 }

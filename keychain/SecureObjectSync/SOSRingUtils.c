@@ -54,7 +54,7 @@
 #include <utilities/der_date.h>
 
 #include <stdlib.h>
-#include <assert.h>
+#include <utilities/simulatecrash_assert.h>
 
 #include "SOSRing.h"
 #include "SOSRingUtils.h"
@@ -80,12 +80,6 @@ CFStringRef sRingVersionKey              = CFSTR("RingVersion");
 
 SOSRingRef SOSRingAllocate(void) {
     return (SOSRingRef) CFTypeAllocate(SOSRing, struct __OpaqueSOSRing, ALLOCATOR);
-}
-
-__unused static bool addValueToDict(CFMutableDictionaryRef thedict, CFStringRef key, CFTypeRef value) {
-    if(!value) return false;
-    CFDictionaryAddValue(thedict, key, value);
-    return true;
 }
 
 static bool setValueInDict(CFMutableDictionaryRef thedict, CFStringRef key, CFTypeRef value) {
@@ -736,16 +730,18 @@ static CFStringRef CreateCommaSeparatedPeerIDs(CFSetRef peers) {
 
     __block bool addSeparator = false;
 
-    CFSetForEachPeerID(peers, ^(CFStringRef peerID) {
-        if (addSeparator) {
-            CFStringAppendCString(result, ", ", kCFStringEncodingUTF8);
-        }
-        CFStringRef spid = CFStringCreateTruncatedCopy(peerID, 8);
-        CFStringAppend(result, spid);
-        CFReleaseNull(spid);
+    if(peers) {
+        CFSetForEachPeerID(peers, ^(CFStringRef peerID) {
+            if (addSeparator) {
+                CFStringAppendCString(result, ", ", kCFStringEncodingUTF8);
+            }
+            CFStringRef spid = CFStringCreateTruncatedCopy(peerID, 8);
+            CFStringAppend(result, spid);
+            CFReleaseNull(spid);
 
-        addSeparator = true;
-    });
+            addSeparator = true;
+        });
+    }
 
     return result;
 }
@@ -768,7 +764,7 @@ CFDictionaryRef SOSRingCopyPeerIDList(SOSRingRef ring) {
 
  CFStringRef SOSRingCopySignerList(SOSRingRef ring) {
     __block bool addSeparator = false;
-   CFMutableStringRef signers = CFStringCreateMutable(ALLOCATOR, 0);
+    CFMutableStringRef signers = CFStringCreateMutable(ALLOCATOR, 0);
     CFDictionaryForEach(ring->signatures, ^(const void *key, const void *value) {
         CFStringRef peerID = (CFStringRef) key;
         CFStringRef spid = CFStringCreateTruncatedCopy(peerID, 8);

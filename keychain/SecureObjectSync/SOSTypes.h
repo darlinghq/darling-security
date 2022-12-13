@@ -116,6 +116,8 @@ typedef NS_OPTIONS(uint32_t, SOSAccountGhostBustingOptions) {
 - (void)ghostBustPeriodic:(SOSAccountGhostBustingOptions)options complete: (void(^)(bool busted, NSError *error))complete;
 - (void)ghostBustTriggerTimed:(SOSAccountGhostBustingOptions)options complete: (void(^)(bool ghostBusted, NSError *error))complete;
 - (void)ghostBustInfo: (void(^)(NSData *json, NSError *error))complete;
+- (void)iCloudIdentityStatus_internal: (void(^)(NSDictionary *tableSpid, NSError *error))complete;
+- (void)iCloudIdentityStatus: (void (^)(NSData *json, NSError *error))complete;
 
 - (void)myPeerInfo:(void (^)(NSData *, NSError *))complete;
 - (void)circleHash:(void (^)(NSString *, NSError *))complete;
@@ -131,6 +133,8 @@ typedef NS_OPTIONS(uint32_t, SOSAccountGhostBustingOptions) {
 
 - (void)rpcTriggerBackup:(NSArray<NSString *>*)backupPeers complete:(void (^)(NSError *error))complete;
 - (void)rpcTriggerRingUpdate:(void (^)(NSError *error))complete;
+
+- (void)removeV0Peers:(void(^)(bool removedV0Peer, NSError *error))reply;
 
 @end
 #endif

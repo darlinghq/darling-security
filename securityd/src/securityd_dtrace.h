@@ -1,7 +1,0 @@
-// fake DTrace probes for Darling
-#ifndef _SECURITYD_SECURITYD_DTRACE_H
-#define _SECURITYD_SECURITYD_DTRACE_H
-
-
-
-#endif // _SECURITYD_SECURITYD_DTRACE_H

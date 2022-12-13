@@ -2,16 +2,20 @@
 //  Use this file to import your target's public headers that you would like to expose to Swift.
 //
 
+#import <XCTest/XCTest.h>
+
 #import <CloudKit/CloudKit.h>
 #import <CloudKit/CloudKit_Private.h>
 
 #import <AuthKit/AuthKit.h>
+#import <AuthKit/AKError.h>
 
 #import <KeychainCircle/KeychainCircle.h>
 #import "KeychainCircle/KCJoiningSession.h"
 #import "KeychainCircle/KCJoiningRequestSession+Internal.h"
 #import "KeychainCircle/KCJoiningAcceptSession+Internal.h"
 #import <KeychainCircle/KCJoiningMessages.h>
+#import <KeychainCircle/PairingChannel.h>
 
 #import <TrustedPeers/TrustedPeers.h>
 #import <TrustedPeers/TPHash.h>
@@ -36,6 +40,7 @@
 
 #import "keychain/ot/OT.h"
 #import "keychain/ot/OTClique.h"
+#import "keychain/ot/OTClique+Private.h"
 #import "keychain/ot/OTControl.h"
 #import "keychain/ot/OTControlProtocol.h"
 #import "keychain/ot/OTManager.h"
@@ -59,12 +64,20 @@
 #import "keychain/ckks/CKKSTLKShare.h"
 #import "keychain/ckks/CKKSAnalytics.h"
 #import "keychain/ckks/CloudKitCategories.h"
+#import "keychain/ckks/CKKSCurrentKeyPointer.h"
+#import "keychain/ckks/CKKSReachabilityTracker.h"
 
 #import "keychain/ot/OctagonControlServer.h"
 
 #import "keychain/ot/proto/generated_source/OTAccountMetadataClassC.h"
 #import "keychain/ot/categories/OTAccountMetadataClassC+KeychainSupport.h"
 #import "keychain/ot/categories/OctagonEscrowRecoverer.h"
+
+#import "KeychainCircle/generated_source/KCInitialMessageData.h"
+#import "keychain/ot/proto/generated_source/OTPairingMessage.h"
+#import "keychain/ot/proto/generated_source/OTSponsorToApplicantRound1M2.h"
+#import "keychain/ot/proto/generated_source/OTApplicantToSponsorRound2M1.h"
+#import "keychain/ot/proto/generated_source/OTSponsorToApplicantRound2M2.h"
 
 #import "keychain/otctl/OTControlCLI.h"
 
@@ -74,6 +87,7 @@
 #import "keychain/SecureObjectSync/SOSControlServer.h"
 #import "KeychainCircle/Tests/FakeSOSControl.h"
 #import "keychain/escrowrequest/Framework/SecEscrowRequest.h"
+#import "OSX/sec/ipc/server_security_helpers.h"
 
 //CDP
 #import <CoreCDP/CDPFollowUpController.h>
@@ -92,3 +106,6 @@
 
 #include <dispatch/dispatch.h>
 #import "keychain/ot/OctagonCKKSPeerAdapter.h"
+#import "keychain/ot/proto/generated_source/OTEscrowRecord.h"
+#import "keychain/ot/proto/generated_source/OTEscrowRecordMetadata.h"
+#import "keychain/ot/proto/generated_source/OTEscrowRecordMetadataClientMetadata.h"

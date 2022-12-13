@@ -27,6 +27,9 @@
 #include "SecdTestKeychainUtilities.h"
 #include <utilities/SecCFWrappers.h>
 #include "keychain/SecureObjectSync/SOSPeer.h"
+#include "SOSAccountTesting.h"
+
+#if SOS_ENABLED
 
 static int kTestTestCount = 53;
 
@@ -109,21 +112,24 @@ static void test_engine_views(void) {
     SOSTestDeviceListSync(name, test_directive, test_reason, testDevices, pre, post);
     SOSTestDeviceListInSync(name, test_directive, test_reason, testDevices);
     SOSTestDeviceDestroyEngine(testDevices);
+    SOSTestDeviceForceCloseDatabases(testDevices);
     CFReleaseNull(testDevices);
 
     CFReleaseNull(views);
     CFReleaseNull(objectNames);
     CFReleaseNull(itemData);
 }
+#endif
 
 int secd_75_engine_views(int argc, char *const *argv)
 {
+#if SOS_ENABLED
     plan_tests(kTestTestCount);
-    
-    /* custom keychain dir */
     secd_test_setup_temp_keychain(__FUNCTION__, NULL);
-    
     test_engine_views();
-    
+    secd_test_teardown_delete_temp_keychain(__FUNCTION__);
+#else
+    plan_tests(0);
+#endif
     return 0;
 }

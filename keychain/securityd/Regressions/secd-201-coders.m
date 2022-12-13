@@ -58,6 +58,7 @@
 #include "SOSAccountTesting.h"
 
 #include "SecdTestKeychainUtilities.h"
+#if SOS_ENABLED
 
 static void tests(void)
 {
@@ -143,7 +144,7 @@ static void tests(void)
             bob_account.factory = device->dsf;
             SOSTestDeviceAddGenericItem(device, CFSTR("Bob"), CFSTR("Bob-add"));
         }
-
+        SOSTestDeviceForceCloseDatabase(device);
         CFReleaseNull(device);
     }
     CFReleaseNull(deviceIDs);
@@ -164,14 +165,17 @@ static void tests(void)
 
     CFReleaseNull(changes);
 }
+#endif
 
 int secd_201_coders(int argc, char *const *argv)
 {
+#if SOS_ENABLED
     plan_tests(38);
-
     secd_test_setup_temp_keychain(__FUNCTION__, NULL);
-
     tests();
-    
+    secd_test_teardown_delete_temp_keychain(__FUNCTION__);
+#else
+    plan_tests(0);
+#endif
     return 0;
 }

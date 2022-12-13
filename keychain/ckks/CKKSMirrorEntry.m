@@ -78,7 +78,7 @@
         // Why is obj-c nullable equality so difficult?
         if(!((record[SecCKRecordServerWasCurrent] == nil && self.wasCurrent == 0) ||
              [record[SecCKRecordServerWasCurrent] isEqual: [NSNumber numberWithUnsignedLongLong:self.wasCurrent]])) {
-            secinfo("ckksitem", "was_current does not match");
+            ckksinfo_global("ckksitem", "was_current does not match");
             matches = false;
         }
     }
@@ -149,7 +149,7 @@
     return results;
 }
 
-+ (NSNumber*)counts:(CKRecordZoneID*)zoneID error: (NSError * __autoreleasing *) error {
++ (NSNumber* _Nullable)counts:(CKRecordZoneID*)zoneID error: (NSError * __autoreleasing *) error {
     __block NSNumber *result = nil;
 
     [CKKSSQLDatabaseObject queryDatabaseTable: [[self class] sqlTable]
@@ -163,7 +163,6 @@
                                    }
                                         error: error];
     return result;
-
 }
 
 

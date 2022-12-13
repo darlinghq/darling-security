@@ -50,7 +50,7 @@
 #include "secitem.h"
 
 #include <security_asn1/secerr.h>
-#include <CoreServices/MacErrors.h>
+#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
 
 /*
  * SecCmsContentInfoCreate - create a content info

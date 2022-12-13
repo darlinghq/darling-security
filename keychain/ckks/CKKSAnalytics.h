@@ -38,10 +38,16 @@ extern NSString* const CKKSAnalyticsLastUnlock;
 extern NSString* const CKKSAnalyticsLastKeystateReady;
 extern NSString* const CKKSAnalyticsLastInCircle;
 
+extern NSString* const CKKSAnalyticsNumberOfSyncItems;
+extern NSString* const CKKSAnalyticsNumberOfTLKShares;
+extern NSString* const CKKSAnalyticsNumberOfSyncKeys;
+
 extern NSString* const OctagonAnalyticsStateMachineState;
 extern NSString* const OctagonAnalyticIcloudAccountState;
+extern NSString* const OctagonAnalyticCDPBitStatus;
 extern NSString* const OctagonAnalyticsTrustState;
 extern NSString* const OctagonAnalyticsAttemptedJoin;
+extern NSString* const OctagonAnalyticsUserControllableViewsSyncing;
 extern NSString* const OctagonAnalyticsLastHealthCheck;
 extern NSString* const OctagonAnalyticsSOSStatus;
 extern NSString* const OctagonAnalyticsDateOfLastPreflightPreapprovedJoin;
@@ -55,6 +61,10 @@ extern NSString* const OctagonAnalyticsCDPStateRun;
 extern NSString* const OctagonAnalyticsHaveMachineID;
 extern NSString* const OctagonAnalyticsMIDOnMemoizedList;
 extern NSString* const OctagonAnalyticsPeersWithMID;
+extern NSString* const OctagonAnalyticsEgoMIDMatchesCurrentMID;
+
+extern NSString* const OctagonAnalyticsTotalPeers;
+extern NSString* const OctagonAnalyticsTotalViablePeers;
 
 extern NSString* const CKKSAnalyticsLastCKKSPush;
 extern NSString* const CKKSAnalyticsLastOctagonPush;
@@ -65,8 +75,13 @@ extern NSString* const OctagonAnalyticsKeychainSyncProvisioned;
 extern NSString* const OctagonAnalyticsKeychainSyncEnabled;
 extern NSString* const OctagonAnalyticsCloudKitProvisioned;
 extern NSString* const OctagonAnalyticsCloudKitEnabled;
+extern NSString* const OctagonAnalyticsSecureBackupTermsAccepted;
 
-@class CKKSKeychainView;
+extern NSString* const OctagonAnalyticsBottledUniqueTLKsRecovered;
+extern NSString* const OctagonAnalyticsBottledTotalTLKShares;
+extern NSString* const OctagonAnalyticsBottledTotalTLKSharesRecovered;
+extern NSString* const OctagonAnalyticsBottledUniqueTLKsWithSharesCount;
+extern NSString* const OctagonAnalyticsBottledTLKUniqueViewCount;
 
 @protocol CKKSAnalyticsFailableEvent <NSObject>
 @end
@@ -129,6 +144,7 @@ extern CKKSAnalyticsFailableEvent* const OctagonEventPreflightVouchWithBottle;
 extern CKKSAnalyticsFailableEvent* const OctagonEventVoucherWithBottle;
 
 /* inner: join with recovery key */
+extern CKKSAnalyticsFailableEvent* const OctagonEventPreflightVouchWithRecoveryKey;
 extern CKKSAnalyticsFailableEvent* const OctagonEventVoucherWithRecoveryKey;
 extern CKKSAnalyticsFailableEvent* const OctagonEventJoinRecoveryKeyValidationFailed;
 extern CKKSAnalyticsFailableEvent* const OctagonEventJoinRecoveryKeyFailed;
@@ -203,16 +219,11 @@ extern CKKSAnalyticsActivity* const OctagonSOSAdapterUpdateKeys;
 
 + (instancetype)logger;
 
-- (void)logSuccessForEvent:(CKKSAnalyticsFailableEvent*)event inView:(CKKSKeychainView*)view;
+- (void)logSuccessForEvent:(CKKSAnalyticsFailableEvent*)event zoneName:(NSString*)viewName;
 - (void)logRecoverableError:(NSError*)error
                    forEvent:(CKKSAnalyticsFailableEvent*)event
-                     inView:(CKKSKeychainView*)view
+                   zoneName:(NSString*)viewName
              withAttributes:(NSDictionary*)attributes;
-
-- (void)logRecoverableError:(NSError*)error
-                   forEvent:(CKKSAnalyticsFailableEvent*)event
-                   zoneName:(NSString*)zoneName
-             withAttributes:(NSDictionary *)attributes;
 
 - (void)logRecoverableError:(NSError*)error
                    forEvent:(CKKSAnalyticsFailableEvent*)event
@@ -224,21 +235,21 @@ extern CKKSAnalyticsActivity* const OctagonSOSAdapterUpdateKeys;
 
 - (void)logUnrecoverableError:(NSError*)error
                      forEvent:(CKKSAnalyticsFailableEvent*)event
-                       inView:(CKKSKeychainView*)view
+                     zoneName:(NSString*)viewName
                withAttributes:(NSDictionary*)attributes;
 
 - (void)noteEvent:(CKKSAnalyticsSignpostEvent*)event;
-- (void)noteEvent:(CKKSAnalyticsSignpostEvent*)event inView:(CKKSKeychainView*)view;
+- (void)noteEvent:(CKKSAnalyticsSignpostEvent*)event zoneName:(NSString*)zoneName;
 
-- (void)setDateProperty:(NSDate*)date forKey:(NSString*)key inView:(CKKSKeychainView *)view;
-- (NSDate *)datePropertyForKey:(NSString *)key inView:(CKKSKeychainView *)view;
+- (void)setDateProperty:(NSDate*)date forKey:(NSString*)key zoneName:(NSString*)zoneName;
+- (NSDate *)datePropertyForKey:(NSString *)key zoneName:(NSString*)zoneName;
 
 @end
 
 @interface CKKSAnalytics (UnitTesting)
 
 - (NSDate*)dateOfLastSuccessForEvent:(CKKSAnalyticsFailableEvent*)event
-                              inView:(CKKSKeychainView*)view;
+                            zoneName:(NSString*)zoneName;
 - (NSDictionary *)errorChain:(NSError *)error
                        depth:(NSUInteger)depth;
 - (NSDictionary *)createErrorAttributes:(NSError *)error

@@ -34,8 +34,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class OTJoiningConfiguration;
 
-typedef void (^OTNextJoinCompleteBlock)(BOOL finished, NSData* _Nullable message, NSError* _Nullable error);
-
 @protocol OTControlProtocol
 - (void)restore:(NSString *)contextID dsid:(NSString *)dsid secret:(NSData*)secret escrowRecordID:(NSString*)escrowRecordID reply:(void (^)(NSData* _Nullable signingKeyData, NSData* _Nullable encryptionKeyData, NSError * _Nullable error))reply;
 - (void)octagonEncryptionPublicKey:(void (^)(NSData* _Nullable encryptionKey, NSError * _Nullable))reply;
@@ -86,7 +84,6 @@ typedef void (^OTNextJoinCompleteBlock)(BOOL finished, NSData* _Nullable message
 - (void)rpcJoinWithConfiguration:(OTJoiningConfiguration*)config
                        vouchData:(NSData*)vouchData
                         vouchSig:(NSData*)vouchSig
-                 preapprovedKeys:(NSArray<NSData*>* _Nullable)preapprovedKeys
                            reply:(void (^)(NSError * _Nullable error))reply;
 
 - (void)preflightBottledPeer:(NSString*)contextID
@@ -186,10 +183,6 @@ typedef void (^OTNextJoinCompleteBlock)(BOOL finished, NSData* _Nullable message
 skipRateLimitingCheck:(BOOL)skipRateLimitingCheck
               reply:(void (^)(NSError *_Nullable error))reply;
 
-- (void)attemptSosUpgrade:(NSString* _Nullable)container
-                  context:(NSString*)context
-                    reply:(void (^)(NSError* _Nullable error))reply;
-
 - (void)waitForOctagonUpgrade:(NSString* _Nullable)container
                       context:(NSString*)context
                         reply:(void (^)(NSError* _Nullable error))reply;
@@ -206,6 +199,41 @@ skipRateLimitingCheck:(BOOL)skipRateLimitingCheck
              radar:(NSString *)radar
              reply:(void (^)(NSError* _Nullable error))reply;
 
+- (void)refetchCKKSPolicy:(NSString* _Nullable)container
+                contextID:(NSString*)contextID
+                    reply:(void (^)(NSError* _Nullable error))reply;
+
+- (void)setCDPEnabled:(NSString* _Nullable)containerName
+            contextID:(NSString*)contextID
+                reply:(void (^)(NSError* _Nullable error))reply;
+
+- (void)getCDPStatus:(NSString* _Nullable)containerName
+           contextID:(NSString*)contextID
+               reply:(void (^)(OTCDPStatus status, NSError* _Nullable error))reply;
+
+- (void)fetchEscrowRecords:(NSString * _Nullable)container
+                 contextID:(NSString*)contextID
+                forceFetch:(BOOL)forceFetch
+                     reply:(void (^)(NSArray<NSData*>* _Nullable records,
+                                     NSError* _Nullable error))reply;
+
+- (void)invalidateEscrowCache:(NSString * _Nullable)containerName
+                    contextID:(NSString*)contextID
+                        reply:(nonnull void (^)(NSError * _Nullable error))reply;
+
+/* View Handling */
+- (void)setUserControllableViewsSyncStatus:(NSString* _Nullable)containerName
+                                 contextID:(NSString*)contextID
+                                   enabled:(BOOL)enabled
+                                     reply:(void (^)(BOOL nowSyncing, NSError* _Nullable error))reply;
+
+- (void)fetchUserControllableViewsSyncStatus:(NSString* _Nullable)containerName
+                                   contextID:(NSString*)contextID
+                                       reply:(void (^)(BOOL nowSyncing, NSError* _Nullable error))reply;
+
+- (void)resetAccountCDPContents:(NSString* _Nullable)containerName
+                      contextID:(NSString*)contextID
+                          reply:(void (^)(NSError* _Nullable error))reply;
 @end
 
 NSXPCInterface* OTSetupControlProtocol(NSXPCInterface* interface);

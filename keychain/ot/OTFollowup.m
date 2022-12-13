@@ -46,8 +46,8 @@ NSString* OTFollowupContextTypeToString(OTFollowupContextType contextType)
             return @"recovery key";
         case OTFollowupContextTypeStateRepair:
             return @"repair";
-        case OTFollowupContextTypeOfflinePasscodeChange:
-            return @"offline passcode change";
+        case OTFollowupContextTypeConfirmExistingSecret:
+            return @"confirm existing secret";
     }
 }
 
@@ -56,6 +56,8 @@ NSString* OTFollowupContextTypeToString(OTFollowupContextType contextType)
 @property NSTimeInterval previousFollowupEnd;
 @property NSTimeInterval followupStart;
 @property NSTimeInterval followupEnd;
+
+@property NSMutableSet<NSString*>* postedCFUTypes;
 @end
 
 @implementation OTFollowup : NSObject
@@ -64,6 +66,8 @@ NSString* OTFollowupContextTypeToString(OTFollowupContextType contextType)
 {
     if (self = [super init]) {
         self.cdpd = cdpFollowupController;
+
+        _postedCFUTypes = [NSMutableSet set];
     }
     return self;
 }
@@ -77,8 +81,8 @@ NSString* OTFollowupContextTypeToString(OTFollowupContextType contextType)
         case OTFollowupContextTypeRecoveryKeyRepair: {
             return [CDPFollowUpContext contextForRecoveryKeyRepair];
         }
-        case OTFollowupContextTypeOfflinePasscodeChange: {
-            return [CDPFollowUpContext contextForOfflinePasscodeChange];
+        case OTFollowupContextTypeConfirmExistingSecret: {
+            return [CDPFollowUpContext contextForConfirmExistingSecret];
         }
         default: {
             return nil;
@@ -95,9 +99,16 @@ NSString* OTFollowupContextTypeToString(OTFollowupContextType contextType)
     }
 
     NSError *followupError = nil;
+
+    secnotice("followup", "Posting a follow up (for Octagon) of type %@", OTFollowupContextTypeToString(contextType));
     BOOL result = [self.cdpd postFollowUpWithContext:context error:&followupError];
-    if (error) {
-        *error = followupError;
+
+    if(result) {
+        [self.postedCFUTypes addObject:OTFollowupContextTypeToString(contextType)];
+    } else {
+        if (error) {
+            *error = followupError;
+        }
     }
 
     return result;
@@ -112,11 +123,17 @@ NSString* OTFollowupContextTypeToString(OTFollowupContextType contextType)
         return NO;
     }
 
-    return [self.cdpd clearFollowUpWithContext:context error:error];
+    secnotice("followup", "Clearing follow ups (for Octagon) of type %@", OTFollowupContextTypeToString(contextType));
+    BOOL result = [self.cdpd clearFollowUpWithContext:context error:error];
+    if(result) {
+        [self.postedCFUTypes removeObject:OTFollowupContextTypeToString(contextType)];
+    }
+
+    return result;
 }
 
 
-- (NSDictionary *)sysdiagnoseStatus
+- (NSDictionary *_Nullable)sysdiagnoseStatus
 {
     NSMutableDictionary *pendingCFUs = nil;
 
@@ -168,7 +185,18 @@ NSString* OTFollowupContextTypeToString(OTFollowupContextType contextType)
     return values;
 }
 
+@end
 
+@implementation OTFollowup (Testing)
+- (BOOL)hasPosted:(OTFollowupContextType)contextType
+{
+    return [self.postedCFUTypes containsObject:OTFollowupContextTypeToString(contextType)];
+}
+
+- (void)clearAllPostedFlags
+{
+    [self.postedCFUTypes removeAllObjects];
+}
 @end
 
 #endif // OCTAGON

@@ -54,6 +54,7 @@
 #include <dispatch/private.h>
 #include <CommonCrypto/CommonDigest.h>
 #include "trust/trustd/SecPinningDb.h"
+#include "trust/trustd/trustdFileLocations.h"
 #import <ipc/securityd_client.h>
 
 #if !TARGET_OS_BRIDGE
@@ -88,28 +89,6 @@ static inline bool isNSDate(id nsType) {
 
 static inline bool isNSData(id nsType) {
     return nsType && [nsType isKindOfClass:[NSData class]];
-}
-
-#define SECURITYD_ROLE_ACCOUNT 64
-#define ROOT_ACCOUNT 0
-
-bool SecOTAPKIIsSystemTrustd() {
-    static bool result = false;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-#ifdef NO_SERVER
-        // Test app running as trustd
-#elif TARGET_OS_IPHONE
-        if (getuid() == SECURITYD_ROLE_ACCOUNT ||
-            (getuid() == ROOT_ACCOUNT && gTrustd)) // Test app running as trustd
-#else
-        if (getuid() == ROOT_ACCOUNT)
-#endif
-        {
-                result = true;
-        }
-    });
-    return result;
 }
 
 dispatch_queue_t SecTrustServerGetWorkloop(void) {
@@ -206,11 +185,16 @@ NSString *kOTATrustContentVersionKey = @"MobileAssetContentVersion";
 NSString *kOTATrustLastCheckInKey = @"MobileAssetLastCheckIn";
 NSString *kOTATrustContextFilename = @"OTAPKIContext.plist";
 NSString *kOTATrustTrustedCTLogsFilename = @"TrustedCTLogs.plist";
+NSString *kOTATrustTrustedCTLogsNonTLSFilename = @"TrustedCTLogs_nonTLS.plist";
 NSString *kOTATrustAnalyticsSamplingRatesFilename = @"AnalyticsSamplingRates.plist";
 NSString *kOTATrustAppleCertifcateAuthoritiesFilename = @"AppleCertificateAuthorities.plist";
 NSString *kOTASecExperimentConfigFilename = @"SecExperimentAssets.plist";
 
+/* A device will honor a kill switch until it gets a new asset xml that sets the kill switch value to 0/false
+ * OR the asset is (completely) reset to shipping version. Such resets can happen if asset files cannot be
+ * read properly or if the OS is updated and contains a newer asset version or pinning DB version. */
 const CFStringRef kOTAPKIKillSwitchCT = CFSTR("CTKillSwitch");
+const CFStringRef kOTAPKIKillSwitchNonTLSCT = CFSTR("CTKillSwitch_nonTLS");
 
 #if !TARGET_OS_BRIDGE
 NSString *OTATrustMobileAssetType = @"com.apple.MobileAsset.PKITrustSupplementals";
@@ -272,9 +256,9 @@ static void LogRemotelyWithAttributes(OTATrustLogLevel level, NSError **error, N
 #if ENABLE_TRUSTD_ANALYTICS
     /* only report errors and notices */
     if (error && level == OTATrustLogLevelError) {
-        [[TrustdHealthAnalytics logger] logResultForEvent:TrustdHealthAnalyticsEventOTAPKIEvent hardFailure:YES result:*error withAttributes:attributes];
+        [[TrustAnalytics logger] logResultForEvent:TrustdHealthAnalyticsEventOTAPKIEvent hardFailure:YES result:*error withAttributes:attributes];
     } else if (error && level == OTATrustLogLevelNotice) {
-        [[TrustdHealthAnalytics logger] logResultForEvent:TrustdHealthAnalyticsEventOTAPKIEvent hardFailure:NO result:*error withAttributes:attributes];
+        [[TrustAnalytics logger] logResultForEvent:TrustdHealthAnalyticsEventOTAPKIEvent hardFailure:NO result:*error withAttributes:attributes];
     }
 #endif // ENABLE_TRUSTD_ANALYTICS
 }
@@ -380,18 +364,19 @@ static BOOL ShouldUpdateWithAsset(NSString *assetType, NSNumber *asset_version) 
 
 // MARK: File management functions
 static bool verify_create_path(const char *path) {
-    int ret = mkpath_np(path, 0755);
-    if (!(ret == 0 || ret ==  EEXIST)) {
-        secerror("could not create path: %s (%s)", path, strerror(ret));
-        return false;
+    if (SecOTAPKIIsSystemTrustd()) {
+        int ret = mkpath_np(path, 0755);
+        if (!(ret == 0 || ret ==  EEXIST)) {
+            secerror("could not create path: %s (%s)", path, strerror(ret));
+            return false;
+        }
+        chmod(path, 0755);
     }
     return true;
 }
 
 static NSURL *GetAssetFileURL(NSString *filename) {
-    /* Make sure the /Library/Keychains directory is there */
-    NSURL *keychainsDirectory = CFBridgingRelease(SecCopyURLForFileInSystemKeychainDirectory(nil));
-    NSURL *directory = [keychainsDirectory URLByAppendingPathComponent:@"SupplementalsAssets/" isDirectory:YES];
+    NSURL *directory = CFBridgingRelease(SecCopyURLForFileInProtectedTrustdDirectory(CFSTR("SupplementalsAssets")));
     if (!verify_create_path([directory fileSystemRepresentation])) {
         return nil;
     }
@@ -417,7 +402,12 @@ static BOOL UpdateOTAContextOnDisk(NSString *key, id value, NSError **error) {
     if (SecOTAPKIIsSystemTrustd()) {
         /* Get current context, if applicable, and update/add key/value */
         NSURL *otaContextFile = GetAssetFileURL(kOTATrustContextFilename);
-        NSDictionary *currentContext = [NSDictionary dictionaryWithContentsOfURL:otaContextFile];
+        NSDictionary *currentContext = nil;
+        if (otaContextFile) {
+            currentContext = [NSDictionary dictionaryWithContentsOfURL:otaContextFile];
+        } else {
+            return NO;
+        }
         NSMutableDictionary *newContext = nil;
         if (currentContext) {
             newContext = [currentContext mutableCopy];
@@ -427,7 +417,7 @@ static BOOL UpdateOTAContextOnDisk(NSString *key, id value, NSError **error) {
         newContext[key] = value;
 
         /* Write dictionary to disk */
-        if (![newContext writeToURL:otaContextFile error:error]) {
+        if (![newContext writeToClassDURL:otaContextFile permissions:0644 error:error]) {
             secerror("OTATrust: unable to write OTA Context to disk: %@", error ? *error : nil);
             LogRemotely(OTATrustLogLevelError, error);
             return NO;
@@ -446,6 +436,7 @@ static void DeleteOldAssetData(void) {
     if (SecOTAPKIIsSystemTrustd()) {
         /* Delete the asset files, but keep the check-in time and version */
         DeleteFileWithName(kOTATrustTrustedCTLogsFilename);
+        DeleteFileWithName(kOTATrustTrustedCTLogsNonTLSFilename);
         DeleteFileWithName(kOTATrustAnalyticsSamplingRatesFilename);
         DeleteFileWithName(kOTATrustAppleCertifcateAuthoritiesFilename);
     }
@@ -482,6 +473,19 @@ static bool ChangeFileProtectionToClassD(NSURL *fileURL, NSError **error) {
 }
 #endif
 
+static bool ChangeFilePermissions(NSURL *fileURL, mode_t permissions, NSError **error) {
+    const char *path = [fileURL fileSystemRepresentation];
+    int ret = chmod(path, permissions);
+    if (!(ret == 0)) {
+        int localErrno = errno;
+        secerror("failed to change permissions of %s: %s", path, strerror(localErrno));
+        MakeOTATrustError(OTATrustMobileAssetType, error, OTATrustLogLevelError, NSPOSIXErrorDomain, errno,
+                          @"failed to change permissions of %s: %s", path, strerror(localErrno));
+        return NO;
+    }
+    return YES;
+}
+
 static BOOL CopyFileToDisk(NSString *filename, NSURL *localURL, NSError **error) {
     if (SecOTAPKIIsSystemTrustd()) {
         NSURL *toFileURL = GetAssetFileURL(filename);
@@ -495,15 +499,20 @@ static BOOL CopyFileToDisk(NSString *filename, NSURL *localURL, NSError **error)
                               @"copyfile error for asset %d: %s", errno, strerror(errno));
             return NO;
         } else {
-            /* make sure we can read this file before first unlock */
+            /* make sure all processes can read this file before first unlock */
 #if TARGET_OS_IPHONE && !TARGET_OS_SIMULATOR
-            return ChangeFileProtectionToClassD(toFileURL, error);
+            return ChangeFilePermissions(toFileURL, 0644, error) && ChangeFileProtectionToClassD(toFileURL, error);
 #else
-            return YES;
+            return ChangeFilePermissions(toFileURL, 0644, error);
 #endif
         }
     }
     return NO;
+}
+
+static void DisableKillSwitches() {
+    UpdateOTAContextOnDisk((__bridge NSString*)kOTAPKIKillSwitchCT, @0, nil);
+    UpdateOTAContextOnDisk((__bridge NSString*)kOTAPKIKillSwitchNonTLSCT, @0, nil);
 }
 
 static void GetKillSwitchAttributes(NSDictionary *attributes) {
@@ -516,6 +525,16 @@ static void GetKillSwitchAttributes(NSDictionary *attributes) {
         UpdateOTAContextOnDisk((__bridge NSString*)kOTAPKIKillSwitchCT, ctKillSwitch, &error);
         UpdateKillSwitch((__bridge NSString*)kOTAPKIKillSwitchCT, [ctKillSwitch boolValue]);
         secnotice("OTATrust", "got CT kill switch = %d", [ctKillSwitch boolValue]);
+        killSwitchEnabled = true;
+    }
+
+    // Non-TLS CT Kill Switch
+    ctKillSwitch = [attributes objectForKey:(__bridge NSString*)kOTAPKIKillSwitchNonTLSCT];
+    if (isNSNumber(ctKillSwitch)) {
+        NSError *error = nil;
+        UpdateOTAContextOnDisk((__bridge NSString*)kOTAPKIKillSwitchNonTLSCT, ctKillSwitch, &error);
+        UpdateKillSwitch((__bridge NSString*)kOTAPKIKillSwitchNonTLSCT, [ctKillSwitch boolValue]);
+        secnotice("OTATrust", "got non-TLS CT kill switch = %d", [ctKillSwitch boolValue]);
         killSwitchEnabled = true;
     }
 
@@ -536,7 +555,7 @@ static NSNumber *PKIUpdateAndPurgeAsset(MAAsset *asset, NSNumber *asset_version,
         UpdateFromAsset([asset getLocalFileUrl], asset_version, error)) {
         secnotice("OTATrust", "finished update to version %@ from installed asset. purging asset.", asset_version);
 #if ENABLE_TRUSTD_ANALYTICS
-        [[TrustdHealthAnalytics logger] logSuccessForEventNamed:TrustdHealthAnalyticsEventOTAPKIEvent];
+        [[TrustAnalytics logger] logSuccessForEventNamed:TrustdHealthAnalyticsEventOTAPKIEvent];
 #endif // ENABLE_TRUSTD_ANALYTICS
         [asset purge:^(MAPurgeResult purge_result) {
             if (purge_result != MAPurgeSucceeded) {
@@ -846,6 +865,7 @@ static void InitializeOTATrustAsset(dispatch_queue_t queue) {
         int out_token3 = 0;
         notify_register_dispatch(kOTATrustKillSwitchNotification, &out_token3, queue, ^(int __unused token) {
             UpdateKillSwitch((__bridge NSString*)kOTAPKIKillSwitchCT, InitializeKillSwitch((__bridge NSString*)kOTAPKIKillSwitchCT));
+            UpdateKillSwitch((__bridge NSString*)kOTAPKIKillSwitchNonTLSCT, InitializeKillSwitch((__bridge NSString*)kOTAPKIKillSwitchNonTLSCT));
         });
     }
 }
@@ -1054,13 +1074,13 @@ CFDictionaryRef SecOTAPKICreateTrustedCTLogsDictionaryFromArray(CFArrayRef trust
     }
 }
 
-static CF_RETURNS_RETAINED CFDictionaryRef InitializeTrustedCTLogs() {
+static CF_RETURNS_RETAINED CFDictionaryRef InitializeTrustedCTLogs(NSString *filename) {
     @autoreleasepool {
         NSArray *trustedCTLogs = nil;
         NSError *error = nil;
 #if !TARGET_OS_BRIDGE
         if (ShouldInitializeWithAsset()) {
-            trustedCTLogs = [NSArray arrayWithContentsOfURL:GetAssetFileURL(kOTATrustTrustedCTLogsFilename) error:&error];
+            trustedCTLogs = [NSArray arrayWithContentsOfURL:GetAssetFileURL(filename) error:&error];
             if (!isNSArray(trustedCTLogs)) {
                 secerror("OTATrust: failed to read CT list from asset data: %@", error);
                 LogRemotely(OTATrustLogLevelError, &error);
@@ -1071,7 +1091,7 @@ static CF_RETURNS_RETAINED CFDictionaryRef InitializeTrustedCTLogs() {
         }
 #endif
         if (!isNSArray(trustedCTLogs)) {
-            trustedCTLogs = [NSArray arrayWithContentsOfURL:SecSystemTrustStoreCopyResourceNSURL(kOTATrustTrustedCTLogsFilename)];
+            trustedCTLogs = [NSArray arrayWithContentsOfURL:SecSystemTrustStoreCopyResourceNSURL(filename)];
         }
         if (isNSArray(trustedCTLogs)) {
             return CFBridgingRetain(ConvertTrustedCTLogsArrayToDictionary(trustedCTLogs));
@@ -1456,6 +1476,7 @@ struct _OpaqueSecOTAPKI {
     CFSetRef            _grayListSet;
     CFDictionaryRef     _allowList;
     CFDictionaryRef     _trustedCTLogs;
+    CFDictionaryRef     _nonTlsTrustedCTLogs;
     CFURLRef            _pinningList;
     CFArrayRef          _escrowCertificates;
     CFArrayRef          _escrowPCSCertificates;
@@ -1473,6 +1494,7 @@ struct _OpaqueSecOTAPKI {
     CFDictionaryRef     _secExperimentConfig;
     uint64_t            _secExperimentAssetVersion;
     bool                _ctKillSwitch;
+    bool                _nonTlsCtKillSwitch;
 };
 
 CFGiblisFor(SecOTAPKI)
@@ -1495,6 +1517,7 @@ static void SecOTAPKIDestroy(CFTypeRef cf) {
     CFReleaseNull(otapkiref->_anchorLookupTable);
 
     CFReleaseNull(otapkiref->_trustedCTLogs);
+    CFReleaseNull(otapkiref->_nonTlsTrustedCTLogs);
     CFReleaseNull(otapkiref->_pinningList);
     CFReleaseNull(otapkiref->_eventSamplingRates);
     CFReleaseNull(otapkiref->_appleCAs);
@@ -1547,6 +1570,7 @@ static uint64_t GetAssetVersion(CFErrorRef *error) {
                 *error = CFRetainSafe((__bridge CFErrorRef)nserror);
             }
             DeleteOldAssetData();
+            DisableKillSwitches();
         }
 #endif
         return version;
@@ -1610,7 +1634,8 @@ static SecOTAPKIRef SecOTACreate() {
     // (now loaded lazily in SecOTAPKICopyAllowList)
 
     // Get the trusted Certificate Transparency Logs
-    otapkiref->_trustedCTLogs = InitializeTrustedCTLogs();
+    otapkiref->_trustedCTLogs = InitializeTrustedCTLogs(kOTATrustTrustedCTLogsFilename);
+    otapkiref->_nonTlsTrustedCTLogs = InitializeTrustedCTLogs(kOTATrustTrustedCTLogsNonTLSFilename);
 
     // Get the pinning list
     otapkiref->_pinningList = InitializePinningList();
@@ -1675,15 +1700,13 @@ static SecOTAPKIRef SecOTACreate() {
 
 #if !TARGET_OS_BRIDGE
     /* Initialize our update handling */
-#ifndef DARLING
     InitializeOTATrustAsset(kOTABackgroundQueue);
-#endif
     otapkiref->_ctKillSwitch = InitializeKillSwitch((__bridge NSString*)kOTAPKIKillSwitchCT);
-#ifndef DARLING
+    otapkiref->_nonTlsCtKillSwitch = InitializeKillSwitch((__bridge NSString*)kOTAPKIKillSwitchNonTLSCT);
     InitializeOTASecExperimentAsset(kOTABackgroundQueue);
-#endif
 #else // TARGET_OS_BRIDGE
     otapkiref->_ctKillSwitch = true; // bridgeOS never enforces CT
+    otapkiref->_nonTlsCtKillSwitch = true;
 #endif // TARGET_OS_BRIDGE
 
     return otapkiref;
@@ -1742,6 +1765,8 @@ void UpdateKillSwitch(NSString *key, bool value) {
     dispatch_sync(kOTAQueue, ^{
         if ([key isEqualToString:(__bridge NSString*)kOTAPKIKillSwitchCT]) {
             kCurrentOTAPKIRef->_ctKillSwitch = value;
+        } else if ([key isEqualToString:(__bridge NSString*)kOTAPKIKillSwitchNonTLSCT]) {
+            kCurrentOTAPKIRef->_nonTlsCtKillSwitch = value;
         }
     });
 }
@@ -1753,6 +1778,7 @@ static BOOL UpdateFromAsset(NSURL *localURL, NSNumber *asset_version, NSError **
         return NO;
     }
     __block NSArray *newTrustedCTLogs = NULL;
+    __block NSArray *newNonTlsTrustedCTLogs = NULL;
     __block uint64_t version = [asset_version unsignedLongLongValue];
     __block NSDictionary *newAnalyticsSamplingRates = NULL;
     __block NSArray *newAppleCAs = NULL;
@@ -1762,6 +1788,15 @@ static BOOL UpdateFromAsset(NSURL *localURL, NSNumber *asset_version, NSError **
     newTrustedCTLogs = [NSArray arrayWithContentsOfURL:TrustedCTLogsFileLoc error:error];
     if (!newTrustedCTLogs) {
         secerror("OTATrust: unable to create TrustedCTLogs from asset file: %@", error ? *error: nil);
+        LogRemotely(OTATrustLogLevelError, error);
+        return NO;
+    }
+
+    NSURL *nonTLSTrustedCTLogsFileLoc = [NSURL URLWithString:kOTATrustTrustedCTLogsNonTLSFilename
+                                         relativeToURL:localURL];
+    newNonTlsTrustedCTLogs = [NSArray arrayWithContentsOfURL:nonTLSTrustedCTLogsFileLoc error:error];
+    if (!newNonTlsTrustedCTLogs) {
+        secerror("OTATrust: unable to create TrustedCTLogs_nonTLS from asset file: %@", error ? *error: nil);
         LogRemotely(OTATrustLogLevelError, error);
         return NO;
     }
@@ -1788,14 +1823,21 @@ static BOOL UpdateFromAsset(NSURL *localURL, NSNumber *asset_version, NSError **
     dispatch_sync(kOTAQueue, ^{
         secnotice("OTATrust", "updating asset version from %llu to %llu", kCurrentOTAPKIRef->_assetVersion, version);
         CFRetainAssign(kCurrentOTAPKIRef->_trustedCTLogs, (__bridge CFDictionaryRef)ConvertTrustedCTLogsArrayToDictionary(newTrustedCTLogs));
+        CFRetainAssign(kCurrentOTAPKIRef->_nonTlsTrustedCTLogs, (__bridge CFDictionaryRef)ConvertTrustedCTLogsArrayToDictionary(newNonTlsTrustedCTLogs));
         CFRetainAssign(kCurrentOTAPKIRef->_eventSamplingRates, (__bridge CFDictionaryRef)newAnalyticsSamplingRates);
         CFRetainAssign(kCurrentOTAPKIRef->_appleCAs, (__bridge CFArrayRef)newAppleCAs);
         kCurrentOTAPKIRef->_assetVersion = version;
     });
 
-    /* Write the data to disk (so that we don't have to re-download the asset on re-launch) */
-    DeleteAssetFromDisk();
+    /* Reset the current files, version, and checkin so that in the case of write failures, we'll re-try
+     * to update the data. We don't call DeleteAssetFromDisk() here to preserve any kill switches. */
+    DeleteOldAssetData();
+    UpdateOTAContext(@(0), nil);
+    UpdateOTAContextOnDisk(kOTATrustLastCheckInKey, [NSDate dateWithTimeIntervalSince1970:0], nil);
+
+    /* Write the data to disk (so that we don't have to re-download the asset on re-launch). */
     if (CopyFileToDisk(kOTATrustTrustedCTLogsFilename, TrustedCTLogsFileLoc, error) &&
+        CopyFileToDisk(kOTATrustTrustedCTLogsNonTLSFilename, nonTLSTrustedCTLogsFileLoc, error) &&
         CopyFileToDisk(kOTATrustAnalyticsSamplingRatesFilename, AnalyticsSamplingRatesFileLoc, error) &&
         CopyFileToDisk(kOTATrustAppleCertifcateAuthoritiesFilename, AppleCAsFileLoc, error) &&
         UpdateOTAContext(asset_version, error)) { // Set version and check-in time last (after success)
@@ -1916,6 +1958,23 @@ CFDictionaryRef SecOTAPKICopyTrustedCTLogs(SecOTAPKIRef otapkiRef) {
 #endif
 
     result = otapkiRef->_trustedCTLogs;
+    CFRetainSafe(result);
+    return result;
+}
+
+CFDictionaryRef SecOTAPKICopyNonTlsTrustedCTLogs(SecOTAPKIRef otapkiRef) {
+    CFDictionaryRef result = NULL;
+    if (NULL == otapkiRef) {
+        return result;
+    }
+
+#if !TARGET_OS_BRIDGE
+    /* Trigger periodic background MA checks in system trustd
+     * We also check on trustd launch and listen for notifications. */
+    TriggerPeriodicOTATrustAssetChecks(kOTABackgroundQueue);
+#endif
+
+    result = otapkiRef->_nonTlsTrustedCTLogs;
     CFRetainSafe(result);
     return result;
 }
@@ -2084,7 +2143,7 @@ NSNumber *SecOTAPKIGetSamplingRateForEvent(SecOTAPKIRef otapkiRef, NSString *eve
 
     if (otapkiRef->_eventSamplingRates) {
         CFTypeRef value = CFDictionaryGetValue(otapkiRef->_eventSamplingRates, (__bridge CFStringRef)eventName);
-        if (isNumberOfType(value, kCFNumberSInt64Type)) {
+        if (isNumberOfType(value, kCFNumberSInt64Type) || isNumberOfType(value, kCFNumberSInt32Type)) {
             return (__bridge NSNumber *)value;
         }
     }
@@ -2111,6 +2170,8 @@ bool SecOTAPKIKillSwitchEnabled(SecOTAPKIRef otapkiRef, CFStringRef key) {
     }
     if (CFEqualSafe(key, kOTAPKIKillSwitchCT)) {
         return otapkiRef->_ctKillSwitch;
+    } else if (CFEqualSafe(key, kOTAPKIKillSwitchNonTLSCT)) {
+        return otapkiRef->_nonTlsCtKillSwitch;
     }
     return false;
 }
@@ -2170,14 +2231,24 @@ CFDictionaryRef SecOTAPKICopyCTLogForKeyID(CFDataRef keyID, CFErrorRef* error) {
         return NULL;
     }
 
-    CFDictionaryRef trustedLogs = SecOTAPKICopyTrustedCTLogs(otapkiref);
+    /* Get the log lists */
+    CFDictionaryRef trustedTlsLogs = SecOTAPKICopyTrustedCTLogs(otapkiref);
+    CFDictionaryRef trustedNonTlsLogs = SecOTAPKICopyNonTlsTrustedCTLogs(otapkiref);
     CFReleaseNull(otapkiref);
-    if (!trustedLogs) {
+    if (!trustedTlsLogs || !trustedNonTlsLogs) {
+        CFReleaseNull(trustedTlsLogs);
+        CFReleaseNull(trustedNonTlsLogs);
         return NULL;
     }
-    CFDictionaryRef logDict = CFDictionaryGetValue(trustedLogs, keyID);
+
+    /* Find the log */
+    CFDictionaryRef logDict = CFDictionaryGetValue(trustedTlsLogs, keyID);
+    if (!logDict) {
+        logDict = CFDictionaryGetValue(trustedNonTlsLogs, keyID);
+    }
     CFRetainSafe(logDict);
-    CFReleaseSafe(trustedLogs);
+    CFReleaseNull(trustedTlsLogs);
+    CFReleaseNull(trustedNonTlsLogs);
     return logDict;
 }
 

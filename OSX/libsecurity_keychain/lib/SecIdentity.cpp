@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2015 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2002-2020 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -36,9 +36,11 @@
 #include <security_cdsa_utilities/Schema.h>
 #include <security_utilities/simpleprefs.h>
 #include <utilities/SecCFRelease.h>
+#include <utilities/SecXPCUtils.h>
 #include <sys/param.h>
 #include <syslog.h>
 #include <os/activity.h>
+#include "LegacyAPICounts.h"
 
 /* private function declarations */
 OSStatus
@@ -216,6 +218,7 @@ SecIdentityCreate(
 	SecCertificateRef certificate,
 	SecKeyRef privateKey)
 {
+	COUNTLEGACYAPI
 	SecIdentityRef identityRef = NULL;
 	OSStatus __secapiresult;
 	SecCertificateRef __itemImplRef = NULL;
@@ -244,45 +247,28 @@ SecIdentityCreate(
 	return identityRef;
 }
 
-CFComparisonResult
-SecIdentityCompare(
-	SecIdentityRef identity1,
-	SecIdentityRef identity2,
-	CFOptionFlags compareOptions)
+static
+bool _SecIdentityNameIsURL(CFStringRef name)
 {
-	if (!identity1 || !identity2)
-	{
-		if (identity1 == identity2)
-			return kCFCompareEqualTo;
-		else if (identity1 < identity2)
-			return kCFCompareLessThan;
-		else
-			return kCFCompareGreaterThan;
-	}
-
-    try {
-        SecPointer<Identity> id1(Identity::required(identity1));
-        SecPointer<Identity> id2(Identity::required(identity2));
-
-        if (id1 == id2)
-            return kCFCompareEqualTo;
-        else if (id1 < id2)
-            return kCFCompareLessThan;
-        else
-            return kCFCompareGreaterThan;
-    } catch(...)
-    {}
-
-    return kCFCompareGreaterThan;
+    CFURLRef url = (name) ? CFURLCreateWithString(NULL, name, NULL) : NULL;
+    bool result = (url && CFURLCanBeDecomposed(url));
+    if (result) {
+        CFStringRef schemeStr = CFURLCopyScheme(url);
+        result = (schemeStr && (CFStringGetLength(schemeStr) > 0));
+        CFReleaseSafe(schemeStr);
+    }
+    CFReleaseSafe(url);
+    return result;
 }
 
 static
 CFArrayRef _SecIdentityCopyPossiblePaths(
-    CFStringRef name)
+    CFStringRef name, CFStringRef appIdentifier)
 {
     // utility function to build and return an array of possible paths for the given name.
     // if name is not a URL, this returns a single-element array.
     // if name is a URL, the array may contain 1..N elements, one for each level of the path hierarchy.
+    // if name is a URL and appIdentifier is non-NULL, it is appended in parentheses to each array entry.
 
     CFMutableArrayRef names = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
     if (!name) {
@@ -375,8 +361,22 @@ CFArrayRef _SecIdentityCopyPossiblePaths(
 		}
 		CFRelease(url);
 	}
+	if (appIdentifier) {
+		CFIndex count = CFArrayGetCount(names);
+		for (CFIndex idx=0; idx < count; idx++) {
+			CFStringRef oldStr = (CFStringRef)CFArrayGetValueAtIndex(names, idx);
+			CFStringRef appStr = CFStringCreateWithFormat(NULL, NULL, CFSTR("%@ (%@)"), oldStr, appIdentifier);
+			if (appStr) {
+				// only use app identifier string if name is a URL
+				if (_SecIdentityNameIsURL(oldStr)) {
+					CFArraySetValueAtIndex(names, idx, appStr);
+				}
+				CFRelease(appStr);
+			}
+		}
+	}
 
-    return names;
+	return names;
 }
 
 static
@@ -401,8 +401,9 @@ OSStatus _SecIdentityCopyPreferenceMatchingName(
 	FourCharCode itemType = 'iprf';
     cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecServiceItemAttr), service);
 	cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecTypeItemAttr), itemType);
-    if (keyUsage)
+    if (keyUsage) {
         cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecScriptCodeItemAttr), (sint32)keyUsage);
+    }
 
 	Item prefItem;
 	if (!cursor->next(prefItem))
@@ -435,6 +436,26 @@ OSStatus _SecIdentityCopyPreferenceMatchingName(
 	}
 
 	return status;
+}
+
+static CFStringRef SecIdentityCopyPerAppNameForName(CFStringRef name)
+{
+    CFStringRef perAppName = NULL;
+    // Currently, per-app identity preferences require a URL form name,
+    // and the client must not be one whose role is to edit the item's ownership.
+    if (_SecIdentityNameIsURL(name) && !SecXPCClientCanEditPreferenceOwnership()) {
+        CFStringRef identifier = SecXPCCopyClientApplicationIdentifier();
+        if (identifier) {
+            // create per-app name with application identifier in parentheses
+            perAppName = CFStringCreateWithFormat(NULL, NULL, CFSTR("%@ (%@)"), name, identifier);
+        }
+        CFReleaseNull(identifier);
+    }
+    if (!perAppName && name) {
+        // no application identifier, use name unchanged
+        perAppName = (CFStringRef)CFRetain(name);
+    }
+    return perAppName;
 }
 
 SecIdentityRef SecIdentityCopyPreferred(CFStringRef name, CFArrayRef keyUsage, CFArrayRef validIssuers)
@@ -482,10 +503,17 @@ OSStatus SecIdentityCopyPreference(
             logging = CFBooleanGetValue((CFBooleanRef)val);
         }
     }
-     CFReleaseNull(val);
+    CFReleaseNull(val);
 
     OSStatus status = errSecItemNotFound;
-    CFArrayRef names = _SecIdentityCopyPossiblePaths(name);
+    CFStringRef appIdentifier = NULL;
+    // We don't want to include the identifier if the app creating this pref has an editing role,
+    // e.g. Keychain Access or security; this lets it create an item for another client, e.g. Safari.
+    if (!SecXPCClientCanEditPreferenceOwnership()) {
+        appIdentifier = SecXPCCopyClientApplicationIdentifier();
+    }
+    CFArrayRef names = _SecIdentityCopyPossiblePaths(name, appIdentifier);
+    CFReleaseNull(appIdentifier);
     if (!names) {
         return status;
     }
@@ -527,11 +555,11 @@ OSStatus SecIdentityCopyPreference(
             }
 
             syslog(LOG_NOTICE, "preferred identity: \"%s\" found for \"%s\"\n", labelBuf, serviceBuf);
-            if (!status && name) {
+            if (!status && aName) {
                 char *nameBuf = NULL;
-                CFIndex nameBufSize = CFStringGetLength(name) * 4;
+                CFIndex nameBufSize = CFStringGetLength(aName) * 4;
                 nameBuf = (char *)malloc(nameBufSize);
-                if (!CFStringGetCString(name, nameBuf, nameBufSize, kCFStringEncodingUTF8)) {
+                if (!CFStringGetCString(aName, nameBuf, nameBufSize, kCFStringEncodingUTF8)) {
                     nameBuf[0] = 0;
                 }
                 syslog(LOG_NOTICE, "lookup complete; will use: \"%s\" for \"%s\"\n", labelBuf, nameBuf);
@@ -558,14 +586,20 @@ OSStatus SecIdentitySetPreference(
     CFStringRef name,
     CSSM_KEYUSE keyUsage)
 {
-	if (!name) {
-		return errSecParam;
-	}
-	if (!identity) {
-		// treat NULL identity as a request to clear the preference
-		// (note: if keyUsage is 0, this clears all key usage prefs for name)
-		return SecIdentityDeletePreferenceItemWithNameAndKeyUsage(NULL, name, keyUsage);
-	}
+    if (!name) {
+        return errSecParam;
+    }
+    CFStringRef perAppName = SecIdentityCopyPerAppNameForName(name);
+    if (!perAppName) {
+        return errSecInternal;
+    }
+    if (!identity) {
+        // treat NULL identity as a request to clear the preference
+        // (note: if keyUsage is 0, this clears all key usage prefs for name)
+        OSStatus result = SecIdentityDeletePreferenceItemWithNameAndKeyUsage(NULL, perAppName, keyUsage);
+        CFReleaseNull(perAppName);
+        return result;
+    }
 
     BEGIN_SECAPI
     os_activity_t activity = os_activity_create("SecIdentitySetPreference", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
@@ -575,105 +609,114 @@ OSStatus SecIdentitySetPreference(
     CFRef<SecCertificateRef>  certRef;
     OSStatus status = SecIdentityCopyCertificate(identity, certRef.take());
     if(status != errSecSuccess) {
+        CFReleaseNull(perAppName);
         MacOSError::throwMe(status);
     }
 
-	// determine the account attribute
-	//
-	// This attribute must be synthesized from certificate label + pref item type + key usage,
-	// as only the account and service attributes can make a generic keychain item unique.
-	// For 'iprf' type items (but not 'cprf'), we append a trailing space. This insures that
-	// we can save a certificate preference if an identity preference already exists for the
-	// given service name, and vice-versa.
-	// If the key usage is 0 (i.e. the normal case), we omit the appended key usage string.
-	//
+    // determine the account attribute
+    //
+    // This attribute must be synthesized from certificate label + pref item type + key usage,
+    // as only the account and service attributes can make a generic keychain item unique.
+    // For 'iprf' type items (but not 'cprf'), we append a trailing space. This insures that
+    // we can save a certificate preference if an identity preference already exists for the
+    // given service name, and vice-versa.
+    // If the key usage is 0 (i.e. the normal case), we omit the appended key usage string.
+    //
     CFStringRef labelStr = nil;
     SecCertificateInferLabel(certRef.get(), &labelStr);
-	if (!labelStr) {
+    if (!labelStr) {
+        CFReleaseNull(perAppName);
         MacOSError::throwMe(errSecDataTooLarge); // data is "in a format which cannot be displayed"
-	}
-	CFIndex accountUTF8Len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(labelStr), kCFStringEncodingUTF8) + 1;
-	const char *templateStr = "%s [key usage 0x%X]";
-	const int keyUsageMaxStrLen = 8;
-	accountUTF8Len += strlen(templateStr) + keyUsageMaxStrLen;
-	char *accountUTF8 = (char *)malloc(accountUTF8Len);
-	if (!accountUTF8) {
-		MacOSError::throwMe(errSecMemoryError);
-	}
-    if (!CFStringGetCString(labelStr, accountUTF8, accountUTF8Len-1, kCFStringEncodingUTF8))
-		accountUTF8[0] = (char)'\0';
-	if (keyUsage)
-		snprintf(accountUTF8, accountUTF8Len-1, templateStr, accountUTF8, keyUsage);
-	snprintf(accountUTF8, accountUTF8Len-1, "%s ", accountUTF8);
+    }
+    CFIndex accountUTF8Len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(labelStr), kCFStringEncodingUTF8) + 1;
+    const char *templateStr = "%s [key usage 0x%X]";
+    const int keyUsageMaxStrLen = 8;
+    accountUTF8Len += strlen(templateStr) + keyUsageMaxStrLen;
+    char *accountUTF8 = (char *)malloc(accountUTF8Len);
+    if (!accountUTF8) {
+        CFReleaseNull(perAppName);
+        MacOSError::throwMe(errSecMemoryError);
+    }
+    if (!CFStringGetCString(labelStr, accountUTF8, accountUTF8Len-1, kCFStringEncodingUTF8)) {
+        accountUTF8[0] = (char)'\0';
+    }
+    if (keyUsage) {
+        snprintf(accountUTF8, accountUTF8Len-1, templateStr, accountUTF8, keyUsage);
+    }
+    snprintf(accountUTF8, accountUTF8Len-1, "%s ", accountUTF8);
     CssmDataContainer account(const_cast<char *>(accountUTF8), strlen(accountUTF8));
     free(accountUTF8);
     CFRelease(labelStr);
 
-	// service attribute (name provided by the caller)
-	CFIndex serviceUTF8Len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(name), kCFStringEncodingUTF8) + 1;;
-	char *serviceUTF8 = (char *)malloc(serviceUTF8Len);
-	if (!serviceUTF8) {
-		MacOSError::throwMe(errSecMemoryError);
-	}
-    if (!CFStringGetCString(name, serviceUTF8, serviceUTF8Len-1, kCFStringEncodingUTF8))
+    // service attribute (name provided by the caller)
+    CFIndex serviceUTF8Len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(perAppName), kCFStringEncodingUTF8) + 1;;
+    char *serviceUTF8 = (char *)malloc(serviceUTF8Len);
+    if (!serviceUTF8) {
+        CFReleaseNull(perAppName);
+        MacOSError::throwMe(errSecMemoryError);
+    }
+    if (!CFStringGetCString(perAppName, serviceUTF8, serviceUTF8Len-1, kCFStringEncodingUTF8)) {
         serviceUTF8[0] = (char)'\0';
+    }
     CssmDataContainer service(const_cast<char *>(serviceUTF8), strlen(serviceUTF8));
     free(serviceUTF8);
+    CFRelease(perAppName);
 
     // look for existing identity preference item, in case this is an update
-	StorageManager::KeychainList keychains;
-	globals().storageManager.getSearchList(keychains);
-	KCCursor cursor(keychains, kSecGenericPasswordItemClass, NULL);
+    StorageManager::KeychainList keychains;
+    globals().storageManager.getSearchList(keychains);
+    KCCursor cursor(keychains, kSecGenericPasswordItemClass, NULL);
     FourCharCode itemType = 'iprf';
     cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecServiceItemAttr), service);
-	cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecTypeItemAttr), itemType);
+    cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecTypeItemAttr), itemType);
     if (keyUsage) {
         cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecScriptCodeItemAttr), (sint32)keyUsage);
-	}
+    }
 
-	Item item(kSecGenericPasswordItemClass, 'aapl', 0, NULL, false);
+    Item item(kSecGenericPasswordItemClass, 'aapl', 0, NULL, false);
     bool add = (!cursor->next(item));
-	// at this point, we either have a new item to add or an existing item to update
+    // at this point, we either have a new item to add or an existing item to update
 
     // set item attribute values
     item->setAttribute(Schema::attributeInfo(kSecServiceItemAttr), service);
     item->setAttribute(Schema::attributeInfo(kSecTypeItemAttr), itemType);
     item->setAttribute(Schema::attributeInfo(kSecAccountItemAttr), account);
-	item->setAttribute(Schema::attributeInfo(kSecScriptCodeItemAttr), (sint32)keyUsage);
+    item->setAttribute(Schema::attributeInfo(kSecScriptCodeItemAttr), (sint32)keyUsage);
     item->setAttribute(Schema::attributeInfo(kSecLabelItemAttr), service);
 
-	// generic attribute (store persistent certificate reference)
-	CFDataRef pItemRef = nil;
+    // generic attribute (store persistent certificate reference)
+    CFDataRef pItemRef = nil;
     SecKeychainItemCreatePersistentReference((SecKeychainItemRef)certRef.get(), &pItemRef);
-	if (!pItemRef) {
-		MacOSError::throwMe(errSecInvalidItemRef);
+    if (!pItemRef) {
+        MacOSError::throwMe(errSecInvalidItemRef);
     }
-	const UInt8 *dataPtr = CFDataGetBytePtr(pItemRef);
-	CFIndex dataLen = CFDataGetLength(pItemRef);
-	CssmData pref(const_cast<void *>(reinterpret_cast<const void *>(dataPtr)), dataLen);
-	item->setAttribute(Schema::attributeInfo(kSecGenericItemAttr), pref);
-	CFRelease(pItemRef);
+    const UInt8 *dataPtr = CFDataGetBytePtr(pItemRef);
+    CFIndex dataLen = CFDataGetLength(pItemRef);
+    CssmData pref(const_cast<void *>(reinterpret_cast<const void *>(dataPtr)), dataLen);
+    item->setAttribute(Schema::attributeInfo(kSecGenericItemAttr), pref);
+    CFRelease(pItemRef);
 
     if (add) {
         Keychain keychain = nil;
         try {
             keychain = globals().storageManager.defaultKeychain();
             if (!keychain->exists())
-                MacOSError::throwMe(errSecNoSuchKeychain);	// Might be deleted or not available at this time.
+                MacOSError::throwMe(errSecNoSuchKeychain); // Might be deleted or not available at this time.
         }
         catch(...) {
             keychain = globals().storageManager.defaultKeychainUI(item);
         }
 
-		try {
-			keychain->add(item);
-		}
-		catch (const MacOSError &err) {
-			if (err.osStatus() != errSecDuplicateItem)
-				throw; // if item already exists, fall through to update
-		}
+        try {
+            keychain->add(item);
+        }
+        catch (const MacOSError &err) {
+            if (err.osStatus() != errSecDuplicateItem) {
+                throw; // if item already exists, fall through to update
+            }
+        }
     }
-	item->update();
+    item->update();
 
     END_SECAPI
 }
@@ -681,48 +724,9 @@ OSStatus SecIdentitySetPreference(
 OSStatus
 SecIdentitySetPreferred(SecIdentityRef identity, CFStringRef name, CFArrayRef keyUsage)
 {
+	COUNTLEGACYAPI
 	CSSM_KEYUSE keyUse = ConvertArrayToKeyUsage(keyUsage);
 	return SecIdentitySetPreference(identity, name, keyUse);
-}
-
-OSStatus
-SecIdentityFindPreferenceItem(
-	CFTypeRef keychainOrArray,
-	CFStringRef idString,
-	SecKeychainItemRef *itemRef)
-{
-    BEGIN_SECAPI
-    os_activity_t activity = os_activity_create("SecIdentityFindPreferenceItem", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
-    os_activity_scope(activity);
-    os_release(activity);
-
-	StorageManager::KeychainList keychains;
-	globals().storageManager.optionalSearchList(keychainOrArray, keychains);
-	KCCursor cursor(keychains, kSecGenericPasswordItemClass, NULL);
-
-	char idUTF8[MAXPATHLEN];
-    idUTF8[0] = (char)'\0';
-	if (idString)
-	{
-		if (!CFStringGetCString(idString, idUTF8, sizeof(idUTF8)-1, kCFStringEncodingUTF8))
-			idUTF8[0] = (char)'\0';
-	}
-    size_t idUTF8Len = strlen(idUTF8);
-    if (!idUTF8Len)
-        MacOSError::throwMe(errSecParam);
-
-    CssmData service(const_cast<char *>(idUTF8), idUTF8Len);
-    cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecServiceItemAttr), service);
-	cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecTypeItemAttr), (FourCharCode)'iprf');
-
-	Item item;
-	if (!cursor->next(item))
-		MacOSError::throwMe(errSecItemNotFound);
-
-	if (itemRef)
-		*itemRef=item->handle();
-
-    END_SECAPI
 }
 
 OSStatus
@@ -755,8 +759,9 @@ SecIdentityFindPreferenceItemWithNameAndKeyUsage(
     CssmData service(const_cast<char *>(idUTF8), idUTF8Len);
     cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecServiceItemAttr), service);
 	cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecTypeItemAttr), (FourCharCode)'iprf');
-    if (keyUsage)
+    if (keyUsage) {
         cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecScriptCodeItemAttr), (sint32)keyUsage);
+    }
 
 	Item item;
 	if (!cursor->next(item))
@@ -773,6 +778,7 @@ OSStatus SecIdentityDeletePreferenceItemWithNameAndKeyUsage(
 	CFStringRef name,
 	int32_t keyUsage)
 {
+	COUNTLEGACYAPI
 	// when a specific key usage is passed, we'll only match & delete that pref;
 	// when a key usage of 0 is passed, all matching prefs should be deleted.
 	// maxUsages represents the most matches there could theoretically be, so
@@ -793,292 +799,72 @@ OSStatus SecIdentityDeletePreferenceItemWithNameAndKeyUsage(
 	return (status == errSecItemNotFound) ? errSecSuccess : status;
 }
 
-
-static
-OSStatus _SecIdentityAddPreferenceItemWithName(
-	SecKeychainRef keychainRef,
-	SecIdentityRef identityRef,
-	CFStringRef idString,
-	SecKeychainItemRef *itemRef)
+OSStatus SecIdentityDeleteApplicationPreferenceItems(void)
 {
-    // this is NOT exported, and called only from SecIdentityAddPreferenceItem (below), so no BEGIN/END macros here;
-    // caller must handle exceptions
-
-	if (!identityRef || !idString)
-		return errSecParam;
-	SecPointer<Certificate> cert(Identity::required(identityRef)->certificate());
-	Item item(kSecGenericPasswordItemClass, 'aapl', 0, NULL, false);
-	sint32 keyUsage = 0;
-
-	// determine the account attribute
-	//
-	// This attribute must be synthesized from certificate label + pref item type + key usage,
-	// as only the account and service attributes can make a generic keychain item unique.
-	// For 'iprf' type items (but not 'cprf'), we append a trailing space. This insures that
-	// we can save a certificate preference if an identity preference already exists for the
-	// given service name, and vice-versa.
-	// If the key usage is 0 (i.e. the normal case), we omit the appended key usage string.
-	//
-    CFStringRef labelStr = nil;
-	cert->inferLabel(false, &labelStr);
-	if (!labelStr) {
-        return errSecDataTooLarge; // data is "in a format which cannot be displayed"
-	}
-	CFIndex accountUTF8Len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(labelStr), kCFStringEncodingUTF8) + 1;
-	const char *templateStr = "%s [key usage 0x%X]";
-	const int keyUsageMaxStrLen = 8;
-	accountUTF8Len += strlen(templateStr) + keyUsageMaxStrLen;
-	char *accountUTF8 = (char *)malloc(accountUTF8Len);
-	if (!accountUTF8) {
-		MacOSError::throwMe(errSecMemoryError);
-	}
-    if (!CFStringGetCString(labelStr, accountUTF8, accountUTF8Len-1, kCFStringEncodingUTF8))
-		accountUTF8[0] = (char)'\0';
-	if (keyUsage)
-		snprintf(accountUTF8, accountUTF8Len-1, templateStr, accountUTF8, keyUsage);
-	snprintf(accountUTF8, accountUTF8Len-1, "%s ", accountUTF8);
-    CssmDataContainer account(const_cast<char *>(accountUTF8), strlen(accountUTF8));
-    free(accountUTF8);
-    CFRelease(labelStr);
-
-	// service attribute (name provided by the caller)
-	CFIndex serviceUTF8Len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(idString), kCFStringEncodingUTF8) + 1;;
-	char *serviceUTF8 = (char *)malloc(serviceUTF8Len);
-	if (!serviceUTF8) {
-		MacOSError::throwMe(errSecMemoryError);
-	}
-    if (!CFStringGetCString(idString, serviceUTF8, serviceUTF8Len-1, kCFStringEncodingUTF8))
-        serviceUTF8[0] = (char)'\0';
-    CssmDataContainer service(const_cast<char *>(serviceUTF8), strlen(serviceUTF8));
-    free(serviceUTF8);
-
-	// set item attribute values
-	item->setAttribute(Schema::attributeInfo(kSecServiceItemAttr), service);
-	item->setAttribute(Schema::attributeInfo(kSecLabelItemAttr), service);
-	item->setAttribute(Schema::attributeInfo(kSecTypeItemAttr), (FourCharCode)'iprf');
-	item->setAttribute(Schema::attributeInfo(kSecAccountItemAttr), account);
-	item->setAttribute(Schema::attributeInfo(kSecScriptCodeItemAttr), keyUsage);
-
-	// generic attribute (store persistent certificate reference)
-	CFDataRef pItemRef = nil;
-	OSStatus status = SecKeychainItemCreatePersistentReference((SecKeychainItemRef)cert->handle(), &pItemRef);
-	if (!pItemRef)
-		status = errSecInvalidItemRef;
-	if (status)
-		 return status;
-	const UInt8 *dataPtr = CFDataGetBytePtr(pItemRef);
-	CFIndex dataLen = CFDataGetLength(pItemRef);
-	CssmData pref(const_cast<void *>(reinterpret_cast<const void *>(dataPtr)), dataLen);
-	item->setAttribute(Schema::attributeInfo(kSecGenericItemAttr), pref);
-	CFRelease(pItemRef);
-
-	Keychain keychain = nil;
-	try {
-        keychain = Keychain::optional(keychainRef);
-        if (!keychain->exists())
-            MacOSError::throwMe(errSecNoSuchKeychain);	// Might be deleted or not available at this time.
-    }
-    catch(...) {
-        keychain = globals().storageManager.defaultKeychainUI(item);
-    }
-
-	try {
-		keychain->add(item);
-	}
-	catch (const MacOSError &err) {
-		if (err.osStatus() != errSecDuplicateItem)
-			throw; // if item already exists, fall through to update
-	}
-
-	item->update();
-
-    if (itemRef)
-		*itemRef = item->handle();
-
-    return status;
-}
-
-OSStatus SecIdentityAddPreferenceItem(
-	SecKeychainRef keychainRef,
-	SecIdentityRef identityRef,
-	CFStringRef idString,
-	SecKeychainItemRef *itemRef)
-{
-    // The original implementation of SecIdentityAddPreferenceItem adds the exact string only.
-    // That implementation has been moved to _SecIdentityAddPreferenceItemWithName (above),
-    // and this function is a wrapper which calls it, so that existing clients will get the
-    // extended behavior of server domain matching for items that specify URLs.
-    // (Note that behavior is unchanged if the specified idString is not a URL.)
-
     BEGIN_SECAPI
-    os_activity_t activity = os_activity_create("SecIdentityAddPreferenceItem", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
+    os_activity_t activity = os_activity_create("SecIdentityDeleteApplicationPreferenceItems", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
     os_activity_scope(activity);
     os_release(activity);
 
-    OSStatus status = errSecInternalComponent;
-    CFArrayRef names = _SecIdentityCopyPossiblePaths(idString);
-    if (!names) {
-        return status;
-    }
+    StorageManager::KeychainList keychains;
+    globals().storageManager.optionalSearchList(NULL, keychains);
+    KCCursor cursor(keychains, kSecGenericPasswordItemClass, NULL);
+    cursor->add(CSSM_DB_EQUAL, Schema::attributeInfo(kSecTypeItemAttr), (FourCharCode)'iprf');
 
-    CFIndex total = CFArrayGetCount(names);
-    if (total > 0) {
-        // add item for name (first element in array)
-        CFStringRef aName = (CFStringRef)CFArrayGetValueAtIndex(names, 0);
-        try {
-            status = _SecIdentityAddPreferenceItemWithName(keychainRef, identityRef, aName, itemRef);
+    CFMutableArrayRef matches = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
+    CFStringRef appIdentifier = SecXPCCopyClientApplicationIdentifier();
+    CFStringRef suffixString = NULL;
+    if (appIdentifier) {
+        suffixString = CFStringCreateWithFormat(NULL, NULL, CFSTR(" (%@)"), appIdentifier);
+        CFReleaseNull(appIdentifier);
+    }
+    if (!suffixString || !matches) {
+        CFReleaseNull(matches);
+        CFReleaseNull(suffixString);
+        MacOSError::throwMe(errSecItemNotFound);
+    }
+    // iterate through candidate items and add matches to array
+    Item item;
+    while (cursor->next(item)) {
+        SecKeychainAttribute attr[] = {
+            { kSecServiceItemAttr, 0, NULL },
+        };
+        SecKeychainAttributeList attrList = { sizeof(attr) / sizeof(SecKeychainAttribute), attr };
+        SecKeychainItemRef itemRef = item->handle();
+        if (errSecSuccess == SecKeychainItemCopyContent(itemRef, NULL, &attrList, NULL, NULL)) {
+            if (attr[0].length > 0 && attr[0].data != NULL) {
+                CFStringRef serviceString = CFStringCreateWithBytes(NULL,
+                    (const UInt8 *)attr[0].data, attr[0].length,
+                    kCFStringEncodingUTF8, false);
+                if (serviceString && (CFStringHasSuffix(serviceString, suffixString))) {
+                    CFArrayAppendValue(matches, itemRef);
+                }
+                CFReleaseNull(serviceString);
+            }
+            SecKeychainItemFreeContent(&attrList, NULL);
         }
-        catch (const MacOSError &err)   { status=err.osStatus(); }
-        catch (const CommonError &err)  { status=SecKeychainErrFromOSStatus(err.osStatus()); }
-        catch (const std::bad_alloc &)  { status=errSecAllocate; }
-        catch (...)                     { status=errSecInternalComponent; }
+        CFReleaseNull(itemRef);
     }
-    if (total > 2) {
-		Boolean setDomainDefaultIdentity = FALSE;
-		CFTypeRef val = (CFTypeRef)CFPreferencesCopyValue(CFSTR("SetDomainDefaultIdentity"),
-														  CFSTR("com.apple.security.identities"),
-														  kCFPreferencesCurrentUser,
-														  kCFPreferencesAnyHost);
-		if (val) {
-			if (CFGetTypeID(val) == CFBooleanGetTypeID())
-				setDomainDefaultIdentity = CFBooleanGetValue((CFBooleanRef)val) ? TRUE : FALSE;
-			CFRelease(val);
-		}
-		if (setDomainDefaultIdentity) {
-			// add item for domain (second-to-last element in array, e.g. "*.apple.com")
-			OSStatus tmpStatus = errSecSuccess;
-			CFStringRef aName = (CFStringRef)CFArrayGetValueAtIndex(names, total-2);
-			try {
-				tmpStatus = _SecIdentityAddPreferenceItemWithName(keychainRef, identityRef, aName, itemRef);
-			}
-			catch (const MacOSError &err)   { tmpStatus=err.osStatus(); }
-			catch (const CommonError &err)  { tmpStatus=SecKeychainErrFromOSStatus(err.osStatus()); }
-			catch (const std::bad_alloc &)  { tmpStatus=errSecAllocate; }
-			catch (...)                     { tmpStatus=errSecInternalComponent; }
-		}
+    // delete matching items, if any
+    CFIndex numDeleted=0, count = CFArrayGetCount(matches);
+    OSStatus status = (count > 0) ? errSecSuccess : errSecItemNotFound;
+    for (CFIndex idx=0; idx < count; idx++) {
+        SecKeychainItemRef itemRef = (SecKeychainItemRef)CFArrayGetValueAtIndex(matches, idx);
+        OSStatus tmpStatus = SecKeychainItemDelete(itemRef);
+        if (errSecSuccess == tmpStatus) {
+            ++numDeleted;
+        } else {
+            status = tmpStatus; // remember failure, but keep going
+        }
     }
+    syslog(LOG_NOTICE, "identity preferences found: %ld, deleted: %ld (status: %ld)",
+           (long)count, (long)numDeleted, (long)status);
+    CFReleaseNull(matches);
+    CFReleaseNull(suffixString);
 
-    CFRelease(names);
-    return status;
-
-    END_SECAPI
-}
-
-/* deprecated in 10.5 */
-OSStatus SecIdentityUpdatePreferenceItem(
-			SecKeychainItemRef itemRef,
-			SecIdentityRef identityRef)
-{
-    BEGIN_SECAPI
-    os_activity_t activity = os_activity_create("SecIdentityUpdatePreferenceItem", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
-    os_activity_scope(activity);
-    os_release(activity);
-
-	if (!itemRef || !identityRef)
-		MacOSError::throwMe(errSecParam);
-	SecPointer<Certificate> certificate(Identity::required(identityRef)->certificate());
-	Item prefItem = ItemImpl::required(itemRef);
-
-	// get the current key usage value for this item
-	sint32 keyUsage = 0;
-	UInt32 actLen = 0;
-	SecKeychainAttribute attr = { kSecScriptCodeItemAttr, sizeof(sint32), &keyUsage };
-	try {
-		prefItem->getAttribute(attr, &actLen);
-	}
-	catch(...) {
-		keyUsage = 0;
-	};
-
-	// set the account attribute
-	//
-	// This attribute must be synthesized from certificate label + pref item type + key usage,
-	// as only the account and service attributes can make a generic keychain item unique.
-	// For 'iprf' type items (but not 'cprf'), we append a trailing space. This insures that
-	// we can save a certificate preference if an identity preference already exists for the
-	// given service name, and vice-versa.
-	// If the key usage is 0 (i.e. the normal case), we omit the appended key usage string.
-	//
-    CFStringRef labelStr = nil;
-	certificate->inferLabel(false, &labelStr);
-	if (!labelStr) {
-        MacOSError::throwMe(errSecDataTooLarge); // data is "in a format which cannot be displayed"
-	}
-	CFIndex accountUTF8Len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(labelStr), kCFStringEncodingUTF8) + 1;
-	const char *templateStr = "%s [key usage 0x%X]";
-	const int keyUsageMaxStrLen = 8;
-	accountUTF8Len += strlen(templateStr) + keyUsageMaxStrLen;
-	char *accountUTF8 = (char *)malloc(accountUTF8Len);
-	if (!accountUTF8) {
-		MacOSError::throwMe(errSecMemoryError);
-	}
-	if (!CFStringGetCString(labelStr, accountUTF8, accountUTF8Len-1, kCFStringEncodingUTF8))
-		accountUTF8[0] = (char)'\0';
-	if (keyUsage)
-		snprintf(accountUTF8, accountUTF8Len-1, templateStr, accountUTF8, keyUsage);
-	snprintf(accountUTF8, accountUTF8Len-1, "%s ", accountUTF8);
-	CssmDataContainer account(const_cast<char *>(accountUTF8), strlen(accountUTF8));
-	prefItem->setAttribute(Schema::attributeInfo(kSecAccountItemAttr), account);
-	free(accountUTF8);
-	CFRelease(labelStr);
-
-	// generic attribute (store persistent certificate reference)
-	CFDataRef pItemRef = nil;
-	OSStatus status = SecKeychainItemCreatePersistentReference((SecKeychainItemRef)certificate->handle(), &pItemRef);
-	if (!pItemRef)
-		status = errSecInvalidItemRef;
-	if (status)
-		MacOSError::throwMe(status);
-	const UInt8 *dataPtr = CFDataGetBytePtr(pItemRef);
-	CFIndex dataLen = CFDataGetLength(pItemRef);
-	CssmData pref(const_cast<void *>(reinterpret_cast<const void *>(dataPtr)), dataLen);
-	prefItem->setAttribute(Schema::attributeInfo(kSecGenericItemAttr), pref);
-	CFRelease(pItemRef);
-
-	prefItem->update();
-
-    END_SECAPI
-}
-
-OSStatus SecIdentityCopyFromPreferenceItem(
-			SecKeychainItemRef itemRef,
-			SecIdentityRef *identityRef)
-{
-    BEGIN_SECAPI
-    os_activity_t activity = os_activity_create("SecIdentityCopyFromPreferenceItem", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_IF_NONE_PRESENT);
-    os_activity_scope(activity);
-    os_release(activity);
-
-	if (!itemRef || !identityRef)
-		MacOSError::throwMe(errSecParam);
-	Item prefItem = ItemImpl::required(itemRef);
-
-	// get persistent certificate reference
-	SecKeychainAttribute itemAttrs[] = { { kSecGenericItemAttr, 0, NULL } };
-	SecKeychainAttributeList itemAttrList = { sizeof(itemAttrs) / sizeof(itemAttrs[0]), itemAttrs };
-	prefItem->getContent(NULL, &itemAttrList, NULL, NULL);
-
-	// find certificate, given persistent reference data
-	CFDataRef pItemRef = CFDataCreateWithBytesNoCopy(NULL, (const UInt8 *)itemAttrs[0].data, itemAttrs[0].length, kCFAllocatorNull);
-	SecKeychainItemRef certItemRef = nil;
-	OSStatus status = SecKeychainItemCopyFromPersistentReference(pItemRef, &certItemRef); //%%% need to make this a method of ItemImpl
-	prefItem->freeContent(&itemAttrList, NULL);
-	if (pItemRef)
-		CFRelease(pItemRef);
-	if (status)
-		return status;
-
-	// create identity reference, given certificate
-	StorageManager::KeychainList keychains;
-	globals().storageManager.optionalSearchList((CFTypeRef)NULL, keychains);
-	Item certItem = ItemImpl::required(SecKeychainItemRef(certItemRef));
-	SecPointer<Certificate> certificate(static_cast<Certificate *>(certItem.get()));
-	SecPointer<Identity> identity(new Identity(keychains, certificate));
-	if (certItemRef)
-		CFRelease(certItemRef);
-
-	Required(identityRef) = identity->handle();
-
+    if (status != errSecSuccess) {
+        MacOSError::throwMe(status);
+    }
     END_SECAPI
 }
 
@@ -1114,7 +900,7 @@ OSStatus SecIdentityCopySystemIdentity(
     os_release(activity);
 
 	StLock<Mutex> _(systemIdentityLock());
-	auto_ptr<Dictionary> identDict;
+	unique_ptr<Dictionary> identDict;
 
 	/* get top-level dictionary - if not present, we're done */
 	Dictionary* d = Dictionary::CreateDictionary(IDENTITY_DOMAIN, Dictionary::US_System);
@@ -1189,7 +975,7 @@ OSStatus SecIdentitySetSystemIdentity(
 		MacOSError::throwMe(errSecAuthFailed);
 	}
 
-	auto_ptr<MutableDictionary> identDict;
+	unique_ptr<MutableDictionary> identDict;
 	MutableDictionary *d = MutableDictionary::CreateMutableDictionary(IDENTITY_DOMAIN, Dictionary::US_System);
 	if (d)
 	{

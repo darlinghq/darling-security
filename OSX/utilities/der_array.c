@@ -32,21 +32,26 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 
-const uint8_t* der_decode_array(CFAllocatorRef allocator, CFOptionFlags mutability,
+const uint8_t* der_decode_array(CFAllocatorRef allocator,
                                 CFArrayRef* array, CFErrorRef *error,
                                 const uint8_t* der, const uint8_t *der_end)
 {
-    if (NULL == der)
+    if (NULL == der) {
+        SecCFDERCreateError(kSecDERErrorNullInput, CFSTR("null input"), NULL, error);
         return NULL;
+    }
 
     CFMutableArrayRef result = CFArrayCreateMutable(allocator, 0, &kCFTypeArrayCallBacks);
 
     const uint8_t *elements_end;
     const uint8_t *current_element = ccder_decode_sequence_tl(&elements_end, der, der_end);
+    if (!current_element) {
+        SecCFDERCreateError(kSecDERErrorUnknownEncoding, CFSTR("tag/length decode failed"), NULL, error);
+    }
     
     while (current_element != NULL && current_element < elements_end) {
         CFPropertyListRef element = NULL;
-        current_element = der_decode_plist(allocator, mutability, &element, error, current_element, elements_end);
+        current_element = der_decode_plist(allocator, &element, error, current_element, elements_end);
         if (current_element) {
             CFArrayAppendValue(result, element);
             CFReleaseNull(element);
@@ -79,13 +84,21 @@ size_t der_sizeof_array(CFArrayRef data, CFErrorRef *error)
 uint8_t* der_encode_array(CFArrayRef array, CFErrorRef *error,
                           const uint8_t *der, uint8_t *der_end)
 {
+    return der_encode_array_repair(array, error, false, der, der_end);
+}
+
+uint8_t* der_encode_array_repair(CFArrayRef array, CFErrorRef *error,
+                                 bool repair,
+                                 const uint8_t *der, uint8_t *der_end)
+{
     uint8_t* original_der_end = der_end;
     for(CFIndex position = CFArrayGetCount(array) - 1;
         position >= 0;
         --position)
     {
-        der_end = der_encode_plist(CFArrayGetValueAtIndex(array, position), error, der, der_end);
+        der_end = der_encode_plist_repair(CFArrayGetValueAtIndex(array, position), error, repair, der, der_end);
     }
-    
-    return ccder_encode_constructed_tl(CCDER_CONSTRUCTED_SEQUENCE, original_der_end, der, der_end);
+
+    return SecCCDEREncodeHandleResult(ccder_encode_constructed_tl(CCDER_CONSTRUCTED_SEQUENCE, original_der_end, der, der_end),
+                                      error);
 }

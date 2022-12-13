@@ -30,7 +30,7 @@ extern const NSString *SecExperimentConfigurationKeyConfigurationData;
 
 @interface SecExperiment : NSObject
 @property (readonly) NSString *name;
-@property (readonly) NSString *identifier;
+@property (readonly, nullable) NSString *identifier;
 @property (readonly) BOOL samplingDisabled;
 - (instancetype)initWithName:(const char *)name;
 - (BOOL)experimentIsAllowedForProcess;
@@ -50,8 +50,8 @@ extern const NSString *SecExperimentConfigurationKeyConfigurationData;
  * @abstract
  *      Create an ARC-able `sec_experiment_t` instance wrapping an internal `SecExperiment` object.
  *
- * @param experiment_name
- *      Name of the experiment.
+ * @param experiment
+ *      The experiment
  *
  * @return a `sec_experiment_t` instance.
  */

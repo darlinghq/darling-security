@@ -5,6 +5,7 @@
 #import "keychain/ckks/CKKSResultOperation.h"
 #import "keychain/ckks/CKKSCondition.h"
 #import "keychain/ckks/CKKSLockStateTracker.h"
+#import "keychain/ckks/CKKSReachabilityTracker.h"
 
 #import "keychain/ot/OctagonStateMachineHelpers.h"
 #import "keychain/ot/OctagonStateMachineObservers.h"
@@ -27,12 +28,15 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol OctagonStateMachineEngine
 - (CKKSResultOperation<OctagonStateTransitionOperationProtocol>* _Nullable)_onqueueNextStateMachineTransition:(OctagonState*)currentState
                                                                                                         flags:(OctagonFlags*)flags
-                                                                                                 pendingFlags:(id<OctagonStateOnqueuePendingFlagHandler>)pendingFlagHandler;
+                                                                                                 pendingFlags:(id<OctagonStateOnqueuePendingFlagHandler>)pendingFlags;
 @end
 
 @protocol OctagonStateFlagHandler
 - (void)handleFlag:(OctagonFlag*)flag;
 - (void)handlePendingFlag:(OctagonPendingFlag*)pendingFlag;
+
+// If you've truly broken your queue ordering, then call this from whatever queue your flag handler is using.
+- (void)_onqueueHandleFlag:(OctagonFlag*)flag;
 @end
 
 @interface OctagonStateMachine : NSObject <OctagonStateFlagHandler, OctagonStateOnqueuePendingFlagHandler>
@@ -42,16 +46,18 @@ NS_ASSUME_NONNULL_BEGIN
 // Adding flags should use -handleFlag on the state machine
 @property (readonly) id<OctagonFlagContainer> flags;
 
-@property NSMutableDictionary<OctagonState*, CKKSCondition*>* stateConditions;
+@property (readonly) NSDictionary<OctagonState*, CKKSCondition*>* stateConditions;
 
 @property (readonly) CKKSCondition* paused;
 
 @property (readonly) NSSet* allowableStates;
 @property (nonatomic) uint64_t timeout;
 
-@property (nullable) CKKSLockStateTracker* lockStateTracker;
+@property (readonly, nullable) CKKSLockStateTracker* lockStateTracker;
+@property (readonly, nullable) CKKSReachabilityTracker* reachabilityTracker;
 
 // If you don't pass a lock state tracker, then you cannot reasonably use OctagonPendingConditionsDeviceUnlocked
+// If you don't pass a reachability tracker, then you cannot reasonably use OctagonPendingConditionsNetworkReachable
 
 - (instancetype)initWithName:(NSString*)name
                       states:(NSSet<OctagonState*>*)possibleStates
@@ -59,7 +65,8 @@ NS_ASSUME_NONNULL_BEGIN
                 initialState:(OctagonState*)initialState
                        queue:(dispatch_queue_t)queue
                  stateEngine:(id<OctagonStateMachineEngine>)stateEngine
-            lockStateTracker:(CKKSLockStateTracker*)lockStateTracker;
+            lockStateTracker:(CKKSLockStateTracker* _Nullable)lockStateTracker
+         reachabilityTracker:(CKKSReachabilityTracker* _Nullable)reachabilityTracker;
 
 - (void)startOperation;
 - (void)haltOperation;
@@ -70,27 +77,27 @@ NS_ASSUME_NONNULL_BEGIN
 
 // This will set the given flag, and ensure that the state machine spins to handle it.
 - (void)handleFlag:(OctagonFlag*)flag;
+- (void)_onqueueHandleFlag:(OctagonFlag*)flag;
 
 // This will schedule the flag for future addition
 - (void)handlePendingFlag:(OctagonPendingFlag *)pendingFlag;
 
 - (NSDictionary<NSString*, NSString*>*)dumpPendingFlags;
-// For testing
-- (NSArray<OctagonFlag*>*)possiblePendingFlags;
-- (void)disablePendingFlags;
 
 - (void)handleExternalRequest:(OctagonStateTransitionRequest<CKKSResultOperation<OctagonStateTransitionOperationProtocol>*>*)request;
+
 - (void)registerStateTransitionWatcher:(OctagonStateTransitionWatcher*)watcher;
+- (void)registerMultiStateArrivalWatcher:(OctagonStateMultiStateArrivalWatcher*)watcher;
 
 - (void)doSimpleStateMachineRPC:(NSString*)name
                              op:(CKKSResultOperation<OctagonStateTransitionOperationProtocol>*)op
                    sourceStates:(NSSet<OctagonState*>*)sourceStates
                           reply:(nonnull void (^)(NSError * _Nullable))reply;
 
-- (void)doWatchedStateMachineRPC:(NSString*)name
-                    sourceStates:(NSSet<OctagonState*>*)sourceStates
-                            path:(OctagonStateTransitionPath*)path
-                           reply:(nonnull void (^)(NSError *error))reply;
+- (CKKSResultOperation*)doWatchedStateMachineRPC:(NSString*)name
+                                    sourceStates:(NSSet<OctagonState*>*)sourceStates
+                                            path:(OctagonStateTransitionPath*)path
+                                           reply:(nonnull void (^)(NSError *error))reply;
 - (void)setWatcherTimeout:(uint64_t)timeout;
 - (BOOL)isPaused;
 
@@ -99,6 +106,15 @@ NS_ASSUME_NONNULL_BEGIN
 // if you want that, you need to run an RPC.
 - (OctagonState* _Nonnull)waitForState:(OctagonState* _Nonnull)wantedState wait:(uint64_t)timeout;
 
+@end
+
+@interface OctagonStateMachine (Testing)
+// For testing
+- (NSArray<OctagonFlag*>*)possiblePendingFlags;
+- (void)disablePendingFlags;
+
+- (void)testPauseStateMachineAfterEntering:(OctagonState*)pauseState;
+- (void)testReleaseStateMachinePause:(OctagonState*)pauseState;
 @end
 
 NS_ASSUME_NONNULL_END

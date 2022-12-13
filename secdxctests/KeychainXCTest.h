@@ -37,6 +37,9 @@ typedef enum {
     LockStateLockedAndAllowAKS // this state matches how backup works while locked
 } LockState;
 
+@interface KeychainXCTestFailureLogger : NSObject <XCTestObservation>
+@end
+
 @interface KeychainXCTest : XCTestCase
 
 @property LockState lockState;
@@ -47,8 +50,10 @@ typedef enum {
 @property BOOL simulateRolledAKSKey;
 @property keyclass_t keyclassUsedForAKSDecryption;
 
+@property NSString* keychainDirectoryPrefix;
+
 @property SFAESKeySpecifier* keySpecifier;
-@property SFAESKey* fakeAKSKey;
+@property NSData* fakeAKSKey;
 
 @property id keychainPartialMock;
 
@@ -56,7 +61,7 @@ typedef enum {
 
 - (void)setEntitlements:(NSDictionary<NSString *, id> *)entitlements validated:(BOOL)validated;
 
-- (NSData*)getDatabaseKeyDataithError:(NSError**)error;
+- (NSData*)getDatabaseKeyDataWithError:(NSError**)error;
 
 @end
 

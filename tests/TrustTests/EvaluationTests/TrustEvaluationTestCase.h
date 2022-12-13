@@ -39,9 +39,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)removeTestRootAsSystem;
 
 // ported from regressionBase
-- (void)runCertificateTestForDirectory:(SecPolicyRef)policy subDirectory:(NSString *)resourceSubDirectory verifyDate:(NSDate*)date;
+- (void)runCertificateTestForDirectory:(SecPolicyRef)policy subDirectory:(NSString *)resourceSubDirectory verifyDate:(NSDate* _Nullable)date;
 
 - (id _Nullable) CF_RETURNS_RETAINED SecCertificateCreateFromResource:(NSString * )name subdirectory:(NSString *)dir;
+- (id _Nullable) CF_RETURNS_RETAINED SecCertificateCreateFromPEMResource:(NSString *)name subdirectory:(NSString *)dir;
 @end
 
 /* Use this interface to get a SecCertificateRef that has the same CFTypeID
@@ -50,6 +51,14 @@ CF_RETURNS_RETAINED _Nullable
 SecCertificateRef SecFrameworkCertificateCreate(const uint8_t * der_bytes, CFIndex der_length);
 CF_RETURNS_RETAINED _Nullable
 SecCertificateRef SecFrameworkCertificateCreateFromTestCert(SecCertificateRef cert);
+CF_RETURNS_RETAINED
+SecPolicyRef SecFrameworkPolicyCreateSSL(Boolean server, CFStringRef __nullable hostname);
+CF_RETURNS_RETAINED
+SecPolicyRef SecFrameworkPolicyCreateBasicX509(void);
+CF_RETURNS_RETAINED
+SecPolicyRef SecFrameworkPolicyCreateSMIME(CFIndex smimeUsage, CFStringRef __nullable email);
+CF_RETURNS_RETAINED
+SecPolicyRef SecFrameworkPolicyCreatePassbookCardSigner(CFStringRef cardIssuer, CFStringRef teamIdentifier);
 
 NS_ASSUME_NONNULL_END
 

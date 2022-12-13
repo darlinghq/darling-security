@@ -47,7 +47,7 @@
 
 #include <security_asn1/secasn1.h>
 #include <security_asn1/secerr.h>
-#include <CoreServices/MacErrors.h>
+#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
 
 struct nss_cms_encoder_output {
     SecCmsContentCallback outputfn;

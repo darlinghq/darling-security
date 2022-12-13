@@ -142,7 +142,7 @@
 
     // Check that the record is where we expect it in CloudKit
     [self waitForCKModifications];
-    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3" zoneID:self.keychainZoneID];
+    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"50184A35-4480-E8BA-769B-567CF72F1EC0" zoneID:self.keychainZoneID];
     CKRecord* record = self.keychainZone.currentDatabase[pcsItemRecordID];
     XCTAssertNotNil(record, "Found record in CloudKit at expected UUID");
 
@@ -153,6 +153,7 @@
         deletedRecordTypeCounts:nil
                          zoneID:self.keychainZoneID
             checkModifiedRecord:nil
+          inspectOperationGroup:nil
            runAfterModification:nil];
 
     // Set the 'current' pointer.
@@ -206,7 +207,7 @@
 
     // Check that the record is where we expect it
     [self waitForCKModifications];
-    CKRecordID* pcsOtherItemRecordID = [[CKRecordID alloc] initWithRecordName: @"878BEAA6-1EE9-1079-1025-E6832AC8F2F3" zoneID:self.keychainZoneID];
+    CKRecordID* pcsOtherItemRecordID = [[CKRecordID alloc] initWithRecordName: @"2DEA6136-2505-6BFD-E3E8-B44A6E39C3B5" zoneID:self.keychainZoneID];
     CKRecord* recordOther = self.keychainZone.currentDatabase[pcsOtherItemRecordID];
     XCTAssertNotNil(recordOther, "Found other record in CloudKit at expected UUID");
 
@@ -228,7 +229,7 @@
     CFReleaseNull(cfresult);
 
     if(![actualSHA1 isEqual:sha1]) {
-        secnotice("ckks", "SHA1s don't match, but why?");
+        ckksnotice_global("ckks", "SHA1s don't match, but why?");
     }
 
     XCTestExpectation* otherSetCurrentExpectation = [self expectationWithDescription: @"callback occurs"];
@@ -237,6 +238,7 @@
         deletedRecordTypeCounts:nil
                          zoneID:self.keychainZoneID
             checkModifiedRecord:nil
+          inspectOperationGroup:nil
            runAfterModification:nil];
 
     // Ensure that setting the current pointer sends a notification
@@ -344,7 +346,7 @@
 
     // Check that the record is where we expect it in CloudKit
     [self waitForCKModifications];
-    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3" zoneID:self.keychainZoneID];
+    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"50184A35-4480-E8BA-769B-567CF72F1EC0" zoneID:self.keychainZoneID];
     CKRecord* record = self.keychainZone.currentDatabase[pcsItemRecordID];
     XCTAssertNotNil(record, "Found record in CloudKit at expected UUID");
 
@@ -547,11 +549,11 @@
 
     // Check that the records are where we expect them in CloudKit
     [self waitForCKModifications];
-    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3" zoneID:self.keychainZoneID];
+    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"50184A35-4480-E8BA-769B-567CF72F1EC0" zoneID:self.keychainZoneID];
     CKRecord* record = self.keychainZone.currentDatabase[pcsItemRecordID];
     XCTAssertNotNil(record, "Found record in CloudKit at expected UUID");
 
-    CKRecordID* pcsItemRecordID2 = [[CKRecordID alloc] initWithRecordName: @"3AB8E78D-75AF-CFEF-F833-FA3E3E90978A" zoneID:self.keychainZoneID];
+    CKRecordID* pcsItemRecordID2 = [[CKRecordID alloc] initWithRecordName: @"10E76B80-CE1C-A52A-B0CB-462A2EBA05AF" zoneID:self.keychainZoneID];
     CKRecord* record2 = self.keychainZone.currentDatabase[pcsItemRecordID2];
     XCTAssertNotNil(record2, "Found 2nd record in CloudKit at expected UUID");
 
@@ -560,7 +562,7 @@
 
     // Another machine comes along and updates the pointer!
     CKKSCurrentItemPointer* cip = [[CKKSCurrentItemPointer alloc] initForIdentifier:@"com.apple.security.ckks-pcsservice"
-                                                                    currentItemUUID:@"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3"
+                                                                    currentItemUUID:@"50184A35-4480-E8BA-769B-567CF72F1EC0"
                                                                               state:SecCKKSProcessedStateRemote
                                                                              zoneID:self.keychainZoneID
                                                                     encodedCKRecord:nil];
@@ -572,7 +574,7 @@
     // Ensure that receiving the current item pointer generates a notification
     keychainChanged = [self expectChangeForView:self.keychainZoneID.zoneName];
 
-    [self.keychainView notifyZoneChange:nil];
+    [self.injectedManager.zoneChangeFetcher notifyZoneChange:nil];
     [self.keychainView waitForFetchAndIncomingQueueProcessing];
 
     [self waitForExpectations:@[keychainChanged] timeout:8];
@@ -591,7 +593,7 @@
 
     keychainChanged = [self expectChangeForView:self.keychainZoneID.zoneName];
 
-    [self.keychainView notifyZoneChange:nil];
+    [self.injectedManager.zoneChangeFetcher notifyZoneChange:nil];
     [self.keychainView waitForFetchAndIncomingQueueProcessing];
 
     [self waitForExpectations:@[keychainChanged] timeout:8];
@@ -638,7 +640,7 @@
 
     // Check that the record is where we expect it in CloudKit
     [self waitForCKModifications];
-    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3" zoneID:self.keychainZoneID];
+    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"50184A35-4480-E8BA-769B-567CF72F1EC0" zoneID:self.keychainZoneID];
     CKRecord* record = self.keychainZone.currentDatabase[pcsItemRecordID];
     XCTAssertNotNil(record, "Found record in CloudKit at expected UUID");
 
@@ -647,7 +649,7 @@
 
     // Another machine comes along and updates the pointer!
     CKKSCurrentItemPointer* cip = [[CKKSCurrentItemPointer alloc] initForIdentifier:@"com.apple.security.ckks-pcsservice"
-                                                                    currentItemUUID:@"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3"
+                                                                    currentItemUUID:@"50184A35-4480-E8BA-769B-567CF72F1EC0"
                                                                               state:SecCKKSProcessedStateRemote
                                                                              zoneID:self.keychainZoneID
                                                                     encodedCKRecord:nil];
@@ -656,7 +658,7 @@
     CKRecord* currentPointerRecord = self.keychainZone.currentDatabase[currentPointerRecordID];
     XCTAssertNotNil(currentPointerRecord, "Found record in CloudKit at expected UUID");
 
-    [self.keychainView notifyZoneChange:nil];
+    [self.injectedManager.zoneChangeFetcher notifyZoneChange:nil];
     [self.keychainView waitForFetchAndIncomingQueueProcessing];
 
     [self fetchCurrentPointer:false persistentRef:persistentRef];
@@ -666,7 +668,8 @@
 
     // Another machine comes along and deletes the pointer!
     [self.keychainZone deleteCKRecordIDFromZone: currentPointerRecordID];
-    [self.keychainView notifyZoneChange:nil];
+
+    [self.injectedManager.zoneChangeFetcher notifyZoneChange:nil];
     [self.keychainView waitForFetchAndIncomingQueueProcessing];
     [self waitForExpectations:@[keychainChanged] timeout:8];
 
@@ -712,7 +715,7 @@
 
     // Check that the record is where we expect it in CloudKit
     [self waitForCKModifications];
-    NSString* recordUUID = @"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3";
+    NSString* recordUUID = @"50184A35-4480-E8BA-769B-567CF72F1EC0";
     CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName:recordUUID zoneID:self.keychainZoneID];
     CKRecord* record = self.keychainZone.currentDatabase[pcsItemRecordID];
     XCTAssertNotNil(record, "Found record in CloudKit at expected UUID");
@@ -792,7 +795,7 @@
 
     // Check that the record is where we expect it in CloudKit
     [self waitForCKModifications];
-    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3" zoneID:self.keychainZoneID];
+    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"50184A35-4480-E8BA-769B-567CF72F1EC0" zoneID:self.keychainZoneID];
     CKRecord* record = self.keychainZone.currentDatabase[pcsItemRecordID];
     XCTAssertNotNil(record, "Found record in CloudKit at expected UUID");
 
@@ -803,6 +806,7 @@
         deletedRecordTypeCounts:nil
                          zoneID:self.keychainZoneID
             checkModifiedRecord:nil
+          inspectOperationGroup:nil
            runAfterModification:nil];
 
     // Set the 'current' pointer.
@@ -826,20 +830,18 @@
     modifiedRecord[SecCKRecordServerWasCurrent] = [NSNumber numberWithInteger:10];
     [self.keychainZone addToZone:modifiedRecord];
 
-    [self.keychainView notifyZoneChange:nil];
+    [self.injectedManager.zoneChangeFetcher notifyZoneChange:nil];
     [self.keychainView waitForFetchAndIncomingQueueProcessing];
 
     // Check that the number is on the CKKSMirrorEntry
-    [self.keychainView dispatchSync: ^bool {
+    [self.keychainView dispatchSyncWithReadOnlySQLTransaction:^{
         NSError* error = nil;
-        CKKSMirrorEntry* ckme = [CKKSMirrorEntry fromDatabase:@"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3" zoneID:self.keychainZoneID error:&error];
+        CKKSMirrorEntry* ckme = [CKKSMirrorEntry fromDatabase:@"50184A35-4480-E8BA-769B-567CF72F1EC0" zoneID:self.keychainZoneID error:&error];
 
         XCTAssertNil(error, "no error fetching ckme");
         XCTAssertNotNil(ckme, "Received a ckme");
 
         XCTAssertEqual(ckme.wasCurrent, 10u, "Properly received wasCurrent");
-
-        return true;
     }];
 }
 
@@ -879,7 +881,7 @@
 
     // Check that the record is where we expect it in CloudKit
     [self waitForCKModifications];
-    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3" zoneID:self.keychainZoneID];
+    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"50184A35-4480-E8BA-769B-567CF72F1EC0" zoneID:self.keychainZoneID];
     CKRecord* record = self.keychainZone.currentDatabase[pcsItemRecordID];
     XCTAssertNotNil(record, "Found record in CloudKit at expected UUID");
 
@@ -943,7 +945,7 @@
 
     // Check that the record is where we expect it in CloudKit
     [self waitForCKModifications];
-    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3" zoneID:self.keychainZoneID];
+    CKRecordID* pcsItemRecordID = [[CKRecordID alloc] initWithRecordName: @"50184A35-4480-E8BA-769B-567CF72F1EC0" zoneID:self.keychainZoneID];
     CKRecord* record = self.keychainZone.currentDatabase[pcsItemRecordID];
     XCTAssertNotNil(record, "Found record in CloudKit at expected UUID");
 
@@ -954,6 +956,7 @@
         deletedRecordTypeCounts:nil
                          zoneID:self.keychainZoneID
             checkModifiedRecord:nil
+          inspectOperationGroup:nil
            runAfterModification:nil];
 
     // Set the 'current' pointer.
@@ -1009,6 +1012,7 @@
         deletedRecordTypeCounts:nil
                          zoneID:self.keychainZoneID
             checkModifiedRecord:nil
+          inspectOperationGroup:nil
            runAfterModification:nil];
 
     // Set the 'current' pointer.
@@ -1061,12 +1065,13 @@
     XCTAssertNil(error, "Error should be nil parsing base64 item");
 
     item[@"v_Data"] = [@"conflictingdata" dataUsingEncoding:NSUTF8StringEncoding];
-    CKRecordID* ckrid = [[CKRecordID alloc] initWithRecordName:@"DD7C2F9B-B22D-3B90-C299-E3B48174BFA3" zoneID:self.keychainZoneID];
+    item[@"vwht"] = @"keychain";
+    CKRecordID* ckrid = [[CKRecordID alloc] initWithRecordName:@"50184A35-4480-E8BA-769B-567CF72F1EC0" zoneID:self.keychainZoneID];
     CKRecord* mismatchedRecord = [self newRecord:ckrid withNewItemData:item];
     [self.keychainZone addToZone: mismatchedRecord];
 
     self.keychainView.holdIncomingQueueOperation = [CKKSResultOperation named:@"hold-incoming" withBlock:^{
-        secnotice("ckks", "Releasing process incoming queue hold");
+        ckksnotice_global("ckks", "Releasing process incoming queue hold");
     }];
 
     NSData* firstItemData = [@"asdf" dataUsingEncoding:NSUTF8StringEncoding];
@@ -1142,6 +1147,7 @@
     [self waitForExpectations:@[setCurrentExpectation] timeout:20];
 
     // Reissue a fetch and find the new persistent ref and sha1 for the item at this UUID
+    [self.injectedManager.zoneChangeFetcher notifyZoneChange:nil];
     [self.keychainView waitForFetchAndIncomingQueueProcessing];
 
     // The conflicting item update should have won
@@ -1168,6 +1174,7 @@
         deletedRecordTypeCounts:nil
                          zoneID:self.keychainZoneID
             checkModifiedRecord:nil
+          inspectOperationGroup:nil
            runAfterModification:nil];
 
     XCTestExpectation* newSetCurrentExpectation = [self expectationWithDescription: @"callback occurs"];

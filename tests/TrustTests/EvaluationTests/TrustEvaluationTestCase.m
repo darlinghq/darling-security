@@ -23,9 +23,11 @@
  */
 #import <XCTest/XCTest.h>
 #include "trust/trustd/trustd_spi.h"
+#include "trust/trustd/SecRevocationDb.h"
 #include <Security/SecCertificatePriv.h>
 #include <Security/SecTrustPriv.h>
 #include <Security/SecPolicy.h>
+#include <Security/SecPolicyPriv.h>
 #include <Security/SecTrustSettings.h>
 #include <Security/SecTrustSettingsPriv.h>
 #include "OSX/utilities/SecCFWrappers.h"
@@ -44,47 +46,14 @@
 
 @implementation TrustEvaluationTestCase
 
-static int current_dir = -1;
-static char *home_var = NULL;
-
 /* Build in trustd functionality to the tests */
 + (void) setUp {
-    /* Set up TMP directory for trustd's files */
-    int ok = 0;
-    NSError* error = nil;
-    NSString* pid = [NSString stringWithFormat: @"tst-%d", [[NSProcessInfo processInfo] processIdentifier]];
-    NSURL* tmpDirURL = [[NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES] URLByAppendingPathComponent:pid];
-    ok = (bool)tmpDirURL;
+    /* Use the production Valid DB by default (so we'll have data to test against) */
+    CFPreferencesSetAppValue(CFSTR("ValidUpdateServer"), kValidUpdateProdServer, kSecurityPreferencesDomain);
+    CFPreferencesAppSynchronize(kSecurityPreferencesDomain);
 
-    if (current_dir == -1 && home_var == NULL) {
-        ok = ok && [[NSFileManager defaultManager] createDirectoryAtURL:tmpDirURL
-                                            withIntermediateDirectories:NO
-                                                             attributes:NULL
-                                                                  error:&error];
-
-        NSURL* libraryURL = [tmpDirURL URLByAppendingPathComponent:@"Library"];
-        NSURL* preferencesURL = [tmpDirURL URLByAppendingPathComponent:@"Preferences"];
-
-        ok =  (ok && (current_dir = open(".", O_RDONLY) >= 0)
-               && (chdir([tmpDirURL fileSystemRepresentation]) >= 0)
-               && (setenv("HOME", [tmpDirURL fileSystemRepresentation], 1) >= 0)
-               && (bool)(home_var = getenv("HOME")));
-
-        ok = ok && [[NSFileManager defaultManager] createDirectoryAtURL:libraryURL
-                                            withIntermediateDirectories:NO
-                                                             attributes:NULL
-                                                                  error:&error];
-
-        ok = ok && [[NSFileManager defaultManager] createDirectoryAtURL:preferencesURL
-                                            withIntermediateDirectories:NO
-                                                             attributes:NULL
-                                                                  error:&error];
-    }
-
-    if (ok > 0) {
-        /* Be trustd */
-        trustd_init((__bridge CFURLRef) tmpDirURL);
-    }
+    NSURL *tmpDirURL = setUpTmpDir();
+    trustd_init((__bridge CFURLRef) tmpDirURL);
 }
 
 - (id)addTrustSettingsForCert:(SecCertificateRef)cert trustSettings:(id)trustSettings
@@ -176,8 +145,29 @@ const CFStringRef kTestSystemRootKey = CFSTR("TestSystemRoot");
 {
     NSURL *url = [[NSBundle bundleForClass:[self class]] URLForResource:name withExtension:@".cer"
                                                            subdirectory:dir];
+    if (!url) {
+        url = [[NSBundle bundleForClass:[self class]] URLForResource:name withExtension:@".crt"
+                                                        subdirectory:dir];
+    }
     NSData *certData = [NSData dataWithContentsOfURL:url];
-    SecCertificateRef cert = SecCertificateCreateWithData(kCFAllocatorDefault, (CFDataRef)certData);
+    if (!certData) {
+        return nil;
+    }
+    SecCertificateRef cert = SecCertificateCreateWithData(kCFAllocatorDefault, (__bridge CFDataRef)certData);
+    return (__bridge id)cert;
+}
+
+- (id _Nullable) CF_RETURNS_RETAINED SecCertificateCreateFromPEMResource:(NSString *)name
+                                                            subdirectory:(NSString *)dir
+{
+    NSURL *url = [[NSBundle bundleForClass:[self class]] URLForResource:name withExtension:@".pem"
+                                                           subdirectory:dir];
+    NSData *certData = [NSData dataWithContentsOfURL:url];
+    if (!certData) {
+        return nil;
+    }
+
+    SecCertificateRef cert = SecCertificateCreateWithPEM(kCFAllocatorDefault, (__bridge CFDataRef)certData);
     return (__bridge id)cert;
 }
 
@@ -244,8 +234,10 @@ const CFStringRef kTestSystemRootKey = CFSTR("TestSystemRoot");
         ok_status(err, "SecTrustCreateWithCertificates");
         goto exit;
     }
-    if ([anchors count])
+    if ([anchors count]) {
         SecTrustSetAnchorCertificates(trustRef, (CFArrayRef)anchors);
+        SecTrustSetAnchorCertificatesOnly(trustRef, false);
+    }
 
     SecTrustSetVerifyDate(trustRef, (__bridge CFDateRef)date);
 
@@ -313,11 +305,13 @@ exit:
 
 @end
 
-typedef SecCertificateRef (*create_f)(CFAllocatorRef allocator,
+/* MARK: Framework type conversion functions */
+
+typedef SecCertificateRef (*cert_create_f)(CFAllocatorRef allocator,
                            const UInt8 *der_bytes, CFIndex der_length);
 CF_RETURNS_RETAINED _Nullable
 SecCertificateRef SecFrameworkCertificateCreate(const uint8_t * _Nonnull der_bytes, CFIndex der_length) {
-    static create_f FrameworkCertCreateFunctionPtr = NULL;
+    static cert_create_f FrameworkCertCreateFunctionPtr = NULL;
     static dispatch_once_t onceToken;
 
     dispatch_once(&onceToken, ^{
@@ -337,4 +331,84 @@ SecCertificateRef SecFrameworkCertificateCreate(const uint8_t * _Nonnull der_byt
 
 SecCertificateRef SecFrameworkCertificateCreateFromTestCert(SecCertificateRef cert) {
     return SecFrameworkCertificateCreate(SecCertificateGetBytePtr(cert), SecCertificateGetLength(cert));
+}
+
+typedef  SecPolicyRef (*ssl_policy_create_f)(Boolean server, CFStringRef hostname);
+SecPolicyRef SecFrameworkPolicyCreateSSL(Boolean server, CFStringRef __nullable hostname) {
+    static ssl_policy_create_f FrameworkPolicyCreateFunctionPtr = NULL;
+    static dispatch_once_t onceToken;
+
+    dispatch_once(&onceToken, ^{
+        void *framework = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY);
+        if (framework) {
+            FrameworkPolicyCreateFunctionPtr  = dlsym(framework, "SecPolicyCreateSSL");
+        }
+    });
+
+    if (FrameworkPolicyCreateFunctionPtr) {
+        return FrameworkPolicyCreateFunctionPtr(server, hostname);
+    } else {
+        NSLog(@"WARNING: not using Security framework policy");
+        return SecPolicyCreateSSL(server, hostname);
+    }
+}
+
+typedef  SecPolicyRef (*basic_policy_create_f)(void);
+SecPolicyRef SecFrameworkPolicyCreateBasicX509(void) {
+    static basic_policy_create_f FrameworkPolicyCreateFunctionPtr = NULL;
+    static dispatch_once_t onceToken;
+
+    dispatch_once(&onceToken, ^{
+        void *framework = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY);
+        if (framework) {
+            FrameworkPolicyCreateFunctionPtr  = dlsym(framework, "SecPolicyCreateBasicX509");
+        }
+    });
+
+    if (FrameworkPolicyCreateFunctionPtr) {
+        return FrameworkPolicyCreateFunctionPtr();
+    } else {
+        NSLog(@"WARNING: not using Security framework policy");
+        return SecPolicyCreateBasicX509();
+    }
+}
+
+typedef  SecPolicyRef (*smime_policy_create_f)(CFIndex smimeUsage, CFStringRef email);
+SecPolicyRef SecFrameworkPolicyCreateSMIME(CFIndex smimeUsage, CFStringRef email) {
+    static smime_policy_create_f FrameworkPolicyCreateFunctionPtr = NULL;
+    static dispatch_once_t onceToken;
+
+    dispatch_once(&onceToken, ^{
+        void *framework = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY);
+        if (framework) {
+            FrameworkPolicyCreateFunctionPtr  = dlsym(framework, "SecPolicyCreateSMIME");
+        }
+    });
+
+    if (FrameworkPolicyCreateFunctionPtr) {
+        return FrameworkPolicyCreateFunctionPtr(smimeUsage, email);
+    } else {
+        NSLog(@"WARNING: not using Security framework policy");
+        return SecPolicyCreateSMIME(smimeUsage, email);
+    }
+}
+
+typedef  SecPolicyRef (*passbook_policy_create_f)(CFStringRef cardIssuer, CFStringRef teamIdentifier);
+SecPolicyRef SecFrameworkPolicyCreatePassbookCardSigner(CFStringRef cardIssuer, CFStringRef teamIdentifier) {
+    static passbook_policy_create_f FrameworkPolicyCreateFunctionPtr = NULL;
+    static dispatch_once_t onceToken;
+
+    dispatch_once(&onceToken, ^{
+        void *framework = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY);
+        if (framework) {
+            FrameworkPolicyCreateFunctionPtr  = dlsym(framework, "SecPolicyCreatePassbookCardSigner");
+        }
+    });
+
+    if (FrameworkPolicyCreateFunctionPtr) {
+        return FrameworkPolicyCreateFunctionPtr(cardIssuer, teamIdentifier);
+    } else {
+        NSLog(@"WARNING: not using Security framework policy");
+        return SecPolicyCreatePassbookCardSigner(cardIssuer, teamIdentifier);
+    }
 }

@@ -46,8 +46,11 @@
 
 @implementation CKKSLockStateTracker
 
-- (instancetype)init {
+- (instancetype)initWithProvider:(id<CKKSLockStateProviderProtocol>)provider
+{
     if((self = [super init])) {
+        _lockStateProvider = provider;
+
         _queue = dispatch_queue_create("lock-state-tracker", DISPATCH_QUEUE_SERIAL_WITH_AUTORELEASE_POOL);
         _operationQueue = [[NSOperationQueue alloc] init];
 
@@ -113,23 +116,11 @@
 -(void)resetUnlockDependency {
     if(self.unlockDependency == nil || ![self.unlockDependency isPending]) {
         CKKSResultOperation* op = [CKKSResultOperation named:@"keybag-unlocked-dependency" withBlock: ^{
-            secinfo("ckks", "Keybag unlocked");
+            ckksinfo_global("ckks", "Keybag unlocked");
         }];
         op.descriptionErrorCode = CKKSResultDescriptionPendingUnlock;
         self.unlockDependency = op;
     }
-}
-
-+(bool)queryAKSLocked {
-    CFErrorRef aksError = NULL;
-    bool locked = true;
-
-    if(!SecAKSGetIsLocked(&locked, &aksError)) {
-        secerror("ckks: error querying lock state: %@", aksError);
-        CFReleaseNull(aksError);
-    }
-
-    return locked;
 }
 
 -(void)_onqueueRecheck {
@@ -137,7 +128,7 @@
 
     static bool first = true;
     bool wasLocked = self.queueIsLocked;
-    self.queueIsLocked = [CKKSLockStateTracker queryAKSLocked];
+    self.queueIsLocked = [self.lockStateProvider queryAKSLocked];
 
     if(wasLocked != self.queueIsLocked || first) {
         first = false;
@@ -173,9 +164,28 @@
     });
 }
 
--(bool)isLockedError:(NSError *)error {
+- (bool)lockedError:(NSError *)error
+{
     bool isLockedError = error.code == errSecInteractionNotAllowed &&
         ([error.domain isEqualToString:@"securityd"] || [error.domain isEqualToString:(__bridge NSString*)kSecErrorDomain]);
+    return isLockedError;
+}
+
+- (bool)checkErrorChainForLockState:(NSError*)error
+{
+    while(error != nil) {
+        if([self lockedError:error]) {
+            return true;
+        }
+
+        error = error.userInfo[NSUnderlyingErrorKey];
+    }
+
+    return false;
+}
+
+-(bool)isLockedError:(NSError *)error {
+    bool isLockedError = [self checkErrorChainForLockState:error];
 
     /*
      * If we are locked, and the the current lock state track disagree, lets double check
@@ -210,12 +220,32 @@
     static CKKSLockStateTracker* tracker;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        tracker = [[CKKSLockStateTracker alloc] init];
+        tracker = [[CKKSLockStateTracker alloc] initWithProvider:[[CKKSActualLockStateProvider alloc] init]];
     });
     return tracker;
 }
 
 
+@end
+
+@implementation CKKSActualLockStateProvider
+- (instancetype)init {
+    if((self = [super init])) {
+    }
+    return self;
+}
+
+- (BOOL)queryAKSLocked {
+    CFErrorRef aksError = NULL;
+    bool locked = true;
+
+    if(!SecAKSGetIsLocked(&locked, &aksError)) {
+        ckkserror_global("ckks", "error querying lock state: %@", aksError);
+        CFReleaseNull(aksError);
+    }
+
+    return locked ? YES : NO;
+}
 @end
 
 #endif // OCTAGON

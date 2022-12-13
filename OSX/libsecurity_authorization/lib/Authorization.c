@@ -14,14 +14,9 @@
 #include <xpc/xpc.h>
 #include <xpc/private.h>
 #include <mach/mach.h>
-#include <syslog.h>
 #include <AssertMacros.h>
 #include <CoreFoundation/CFXPCBridge.h>
-#ifndef DARLING
 #include <CoreGraphics/CGWindow.h>
-#else
-typedef uint32_t CGWindowID;
-#endif
 #include <dlfcn.h>
 #include <os/log.h>
 
@@ -57,20 +52,24 @@ get_authorization_connection()
             connection = xpc_connection_create(SECURITY_AUTH_NAME, NULL);
 
             if (!connection) {
-                syslog(LOG_ERR, "Authorization, failed to create xpc connection to %s", SECURITY_AUTH_NAME);
+                os_log_error(AUTH_LOG, "Failed to create xpc connection to %s", SECURITY_AUTH_NAME);
                 connection = xpc_connection_create(SECURITY_AUTH_NAME, NULL);
             }
             
+            if (connection == NULL) {
+                os_log_error(AUTH_LOG, "Still failed to create xpc connection to %s", SECURITY_AUTH_NAME);
+                return;
+            }
             xpc_connection_set_event_handler(connection, ^(xpc_object_t event) {
                 if (xpc_get_type(event) == XPC_TYPE_ERROR) {
                     if (event == XPC_ERROR_CONNECTION_INVALID) {
-                        syslog(LOG_ERR, "Authorization, server not available");
+                        os_log_error(AUTH_LOG, "Server not available");
                     }
                     // XPC_ERROR_CONNECTION_INTERRUPTED
                     // XPC_ERROR_TERMINATION_IMMINENT
                 } else {
                     char * desc = xpc_copy_description(event);
-                    syslog(LOG_ERR, "Authorization, we should never get messages on this connection: %s", desc);
+                    os_log_error(AUTH_LOG, "We should never get messages on this connection: %s", desc);
                     free(desc);
                 }
             });
@@ -123,7 +122,9 @@ OSStatus AuthorizationCreate(const AuthorizationRights *rights,
     xpc_dictionary_set_uint64(message, AUTH_XPC_FLAGS, flags | (authorization ? 0 : kAuthorizationFlagNoData));
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action_quiet(reply != NULL, done, status = errAuthorizationInternal);
     require_action_quiet(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal;);
 
@@ -135,7 +136,7 @@ OSStatus AuthorizationCreate(const AuthorizationRights *rights,
         size_t len;
         const void * data = xpc_dictionary_get_data(reply, AUTH_XPC_BLOB, &len);
         require_action(data != NULL, done, status = errAuthorizationInternal);
-        assert(len == sizeof(AuthorizationBlob));
+        require_action(len == sizeof(AuthorizationBlob), done, status = errAuthorizationInternal);
         
         AuthorizationBlob * blob = (AuthorizationBlob*)calloc(1u, sizeof(AuthorizationBlob));
         require_action(blob != NULL, done, status = errAuthorizationInternal);
@@ -171,7 +172,9 @@ OSStatus AuthorizationCreateWithAuditToken(audit_token_t token,
     xpc_dictionary_set_uint64(message, AUTH_XPC_FLAGS, flags);
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
@@ -183,8 +186,8 @@ OSStatus AuthorizationCreateWithAuditToken(audit_token_t token,
         size_t len;
         const void * data = xpc_dictionary_get_data(reply, AUTH_XPC_BLOB, &len);
         require_action(data != NULL, done, status = errAuthorizationInternal);
-        assert(len == sizeof(AuthorizationBlob));
-        
+        require_action(len == sizeof(AuthorizationBlob), done, status = errAuthorizationInternal);
+
         AuthorizationBlob * blob = (AuthorizationBlob*)calloc(1u, sizeof(AuthorizationBlob));
         require_action(blob != NULL, done, status = errAuthorizationInternal);
         *blob = *(AuthorizationBlob*)data;
@@ -217,7 +220,9 @@ OSStatus AuthorizationFree(AuthorizationRef authorization, AuthorizationFlags fl
     xpc_dictionary_set_uint64(message, AUTH_XPC_FLAGS, flags);
 
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
@@ -233,62 +238,40 @@ done:
     return status;
 }
 
-static OSStatus
-_AuthorizationPreauthorizeCredentials_send_message(xpc_object_t message)
+OSStatus AuthorizationCopyRightProperties(const char *rightName, CFDictionaryRef *output)
 {
-	OSStatus status = errAuthorizationInternal;
-	xpc_object_t reply = NULL;
-
-	// Send
-	require_action(message != NULL, done, status = errAuthorizationInternal);
-
-	// Reply
-	reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
-	require_action(reply != NULL, done, status = errAuthorizationInternal);
-	require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
-
-	// Status
-	status = (OSStatus)xpc_dictionary_get_int64(reply, AUTH_XPC_STATUS);
-
-done:
-	xpc_release_safe(reply);
-	return status;
-}
-
-static OSStatus
-_AuthorizationPreauthorizeCredentials_prepare_message(AuthorizationRef authorization, const AuthorizationItemSet *credentials, xpc_object_t *message_out)
-{
-	OSStatus status = errAuthorizationInternal;
-	AuthorizationBlob *blob = NULL;
-	xpc_object_t message = xpc_dictionary_create(NULL, NULL, 0);
-	require_action(message != NULL, done, status = errAuthorizationInternal);
-
-	require_action(authorization != NULL, done, status = errAuthorizationInvalidRef);
-	blob = (AuthorizationBlob *)authorization;
-
-	xpc_dictionary_set_uint64(message, AUTH_XPC_TYPE, AUTHORIZATION_PREAUTHORIZE_CREDENTIALS);
-	xpc_dictionary_set_data(message, AUTH_XPC_BLOB, blob, sizeof(AuthorizationBlob));
-	setItemSet(message, AUTH_XPC_DATA, credentials);
-
-	*message_out = message;
-	message = NULL;
-	status = errAuthorizationSuccess;
-
+    OSStatus status = errAuthorizationInternal;
+    xpc_object_t reply = NULL;
+    CFDataRef data = NULL;
+    xpc_object_t message = NULL;
+    require_action(rightName != NULL, done, status = errAuthorizationInvalidPointer);
+    
+    message = xpc_dictionary_create(NULL, NULL, 0);
+    require_action(message != NULL, done, status = errAuthorizationInternal);
+    
+    xpc_dictionary_set_uint64(message, AUTH_XPC_TYPE, AUTHORIZATION_COPY_RIGHT_PROPERTIES);
+    xpc_dictionary_set_string(message, AUTH_XPC_RIGHT_NAME, rightName);
+    
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
+    require_action(reply != NULL, done, status = errAuthorizationInternal);
+    require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
+    
+    // Status
+    status = (OSStatus)xpc_dictionary_get_int64(reply, AUTH_XPC_STATUS);
+    if (output && status == errAuthorizationSuccess) {
+        size_t len;
+        const void *bytes = xpc_dictionary_get_data(reply, AUTH_XPC_OUT_ITEMS, &len);
+        data = CFDataCreate(kCFAllocatorDefault, bytes, len);
+        require_action(data != NULL, done, status = errAuthorizationInternal);
+        *output = CFPropertyListCreateWithData(kCFAllocatorDefault, data, kCFPropertyListImmutable, NULL, NULL);
+    }
 done:
 	xpc_release_safe(message);
-	return status;
-}
-
-OSStatus AuthorizationPreauthorizeCredentials(AuthorizationRef authorization, const AuthorizationItemSet *credentials)
-{
-	OSStatus status = errAuthorizationInternal;
-	xpc_object_t message = NULL;
-
-	require_noerr(status = _AuthorizationPreauthorizeCredentials_prepare_message(authorization, credentials, &message), done);
-	require_noerr(status = _AuthorizationPreauthorizeCredentials_send_message(message), done);
-
-done:
-	xpc_release_safe(message);
+    xpc_release_safe(reply);
+    CFReleaseSafe(data);
+    
 	return status;
 }
 
@@ -302,7 +285,9 @@ _AuthorizationCopyRights_send_message(xpc_object_t message, AuthorizationRights 
     require_action(message != NULL, done, status = errAuthorizationInternal);
 
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
 
@@ -395,6 +380,7 @@ OSStatus AuthorizationCopyRights(AuthorizationRef authorization,
                 os_log_debug(AUTH_LOG, "Failed to find sheet support in SecurityInterface");
             }
             // fall back to the standard (windowed) version if sheets are not available
+            flags &= ~kAuthorizationFlagSheet;
         }
     }
     
@@ -444,7 +430,9 @@ OSStatus AuthorizationDismiss()
     xpc_dictionary_set_uint64(message, AUTH_XPC_TYPE, AUTHORIZATION_DISMISS);
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
@@ -481,7 +469,9 @@ OSStatus AuthorizationCopyInfo(AuthorizationRef authorization,
     }
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
@@ -523,7 +513,9 @@ OSStatus AuthorizationMakeExternalForm(AuthorizationRef authorization,
     xpc_dictionary_set_data(message, AUTH_XPC_BLOB, blob, sizeof(AuthorizationBlob));
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
@@ -535,8 +527,8 @@ OSStatus AuthorizationMakeExternalForm(AuthorizationRef authorization,
         size_t len;
         const void * data = xpc_dictionary_get_data(reply, AUTH_XPC_EXTERNAL, &len);
         require_action(data != NULL, done, status = errAuthorizationInternal);
-        assert(len == sizeof(AuthorizationExternalForm));
-        
+        require_action(len == sizeof(AuthorizationExternalForm), done, status = errAuthorizationInternal);
+
         *extForm = *(AuthorizationExternalForm*)data;
     }
     
@@ -564,7 +556,9 @@ OSStatus AuthorizationCreateFromExternalForm(const AuthorizationExternalForm *ex
     xpc_dictionary_set_data(message, AUTH_XPC_EXTERNAL, extForm, sizeof(AuthorizationExternalForm));
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
@@ -576,8 +570,8 @@ OSStatus AuthorizationCreateFromExternalForm(const AuthorizationExternalForm *ex
         size_t len;
         const void * data = xpc_dictionary_get_data(reply, AUTH_XPC_BLOB, &len);
         require_action(data != NULL, done, status = errAuthorizationInternal);
-        assert(len == sizeof(AuthorizationBlob));
-        
+        require_action(len == sizeof(AuthorizationBlob), done, status = errAuthorizationInternal);
+
         AuthorizationBlob * blob = (AuthorizationBlob*)calloc(1u, sizeof(AuthorizationBlob));
         require_action(blob != NULL, done, status = errAuthorizationInternal);
         *blob = *(AuthorizationBlob*)data;
@@ -614,7 +608,9 @@ OSStatus AuthorizationEnableSmartCard(AuthorizationRef authRef, Boolean enable)
     xpc_dictionary_set_bool(message, AUTH_XPC_DATA, enable);
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
@@ -644,7 +640,9 @@ OSStatus AuthorizationRightGet(const char *rightName,
     xpc_dictionary_set_string(message, AUTH_XPC_RIGHT_NAME, rightName);
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
@@ -788,7 +786,9 @@ OSStatus AuthorizationRightSet(AuthorizationRef authRef,
     xpc_release_safe(value);
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
@@ -824,13 +824,129 @@ OSStatus AuthorizationRightRemove(AuthorizationRef authorization,
     xpc_dictionary_set_string(message, AUTH_XPC_RIGHT_NAME, rightName);
     
     // Reply
-    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
     require_action(reply != NULL, done, status = errAuthorizationInternal);
     require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
     
     // Status
     status = (OSStatus)xpc_dictionary_get_int64(reply, AUTH_XPC_STATUS);
     
+done:
+    xpc_release_safe(message);
+    xpc_release_safe(reply);
+    return status;
+}
+
+OSStatus AuthorizationCopyPreloginUserDatabase(const char * _Nullable const volumeUuid, const UInt32 flags, CFArrayRef _Nonnull * _Nonnull output)
+{
+    OSStatus status = errAuthorizationInternal;
+    xpc_object_t message = NULL;
+    xpc_object_t reply = NULL;
+
+    require_action(output != NULL, done, status = errAuthorizationInvalidRef);
+    
+    // Send
+    message = xpc_dictionary_create(NULL, NULL, 0);
+    require_action(message != NULL, done, status = errAuthorizationInternal);
+    xpc_dictionary_set_uint64(message, AUTH_XPC_TYPE, AUTHORIZATION_COPY_PRELOGIN_USERDB);
+    if (volumeUuid) {
+        xpc_dictionary_set_string(message, AUTH_XPC_TAG, volumeUuid);
+    }
+    xpc_dictionary_set_uint64(message, AUTH_XPC_FLAGS, flags);
+
+    // Reply
+    xpc_connection_t conn = get_authorization_connection();
+    require_action(conn != NULL, done, status = errAuthorizationInternal);
+    reply = xpc_connection_send_message_with_reply_sync(conn, message);
+    require_action(reply != NULL, done, status = errAuthorizationInternal);
+    require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
+    
+    status = (OSStatus)xpc_dictionary_get_int64(reply, AUTH_XPC_STATUS);
+    
+    // fill the output
+    if (status == errAuthorizationSuccess) {
+        *output = _CFXPCCreateCFObjectFromXPCObject(xpc_dictionary_get_value(reply, AUTH_XPC_DATA));
+    }
+
+done:
+    xpc_release_safe(message);
+    xpc_release_safe(reply);
+    return status;
+}
+
+OSStatus AuthorizationCopyPreloginPreferencesValue(const char * _Nonnull const volumeUuid, const char * _Nullable const username, const char * _Nonnull const domain, const char * _Nullable const item, CFTypeRef _Nonnull * _Nonnull output)
+{
+    OSStatus status = errAuthorizationInternal;
+    xpc_object_t message = NULL;
+    xpc_object_t reply = NULL;
+
+    require_action(output != NULL, done, status = errAuthorizationInvalidRef);
+    
+    // Send
+    message = xpc_dictionary_create(NULL, NULL, 0);
+    require_action(message != NULL, done, status = errAuthorizationInternal);
+    xpc_dictionary_set_uint64(message, AUTH_XPC_TYPE, AUTHORIZATION_COPY_PRELOGIN_PREFS);
+    if (volumeUuid) {
+        xpc_dictionary_set_string(message, AUTH_XPC_TAG, volumeUuid);
+    }
+    if (username) {
+        xpc_dictionary_set_string(message, AUTH_XPC_RIGHT_NAME, username);
+    }
+    if (domain) {
+        xpc_dictionary_set_string(message, AUTH_XPC_HINTS_NAME, domain);
+    }
+    if (item) {
+        xpc_dictionary_set_string(message, AUTH_XPC_ITEM_NAME, item);
+    }
+
+    // Reply
+    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    require_action(reply != NULL, done, status = errAuthorizationInternal);
+    require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
+    
+    status = (OSStatus)xpc_dictionary_get_int64(reply, AUTH_XPC_STATUS);
+    
+    // fill the output
+    if (status == errAuthorizationSuccess) {
+        *output = _CFXPCCreateCFObjectFromXPCObject(xpc_dictionary_get_value(reply, AUTH_XPC_DATA));
+    }
+
+done:
+    xpc_release_safe(message);
+    xpc_release_safe(reply);
+    return status;
+}
+
+OSStatus AuthorizationHandlePreloginOverride(const char * _Nonnull const volumeUuid, const char operation, Boolean * _Nullable result)
+{
+    OSStatus status = errAuthorizationInternal;
+    xpc_object_t message = NULL;
+    xpc_object_t reply = NULL;
+    
+    // Send
+    message = xpc_dictionary_create(NULL, NULL, 0);
+    require_action(message != NULL, done, status = errAuthorizationInternal);
+    xpc_dictionary_set_uint64(message, AUTH_XPC_TYPE, AUTHORIZATION_PRELOGIN_SC_OVERRIDE);
+    if (volumeUuid) {
+        xpc_dictionary_set_string(message, AUTH_XPC_TAG, volumeUuid);
+    }
+    uint64_t op = operation;
+    xpc_dictionary_set_uint64(message, AUTH_XPC_ITEM_NAME, op);
+
+    // Reply
+    reply = xpc_connection_send_message_with_reply_sync(get_authorization_connection(), message);
+    require_action(reply != NULL, done, status = errAuthorizationInternal);
+    require_action(xpc_get_type(reply) != XPC_TYPE_ERROR, done, status = errAuthorizationInternal);
+    
+    status = (OSStatus)xpc_dictionary_get_int64(reply, AUTH_XPC_STATUS);
+    
+    // fill the output only if it is present in the dictionary and caller requested it
+    if (status == errAuthorizationSuccess && result && xpc_dictionary_get_value(reply, AUTH_XPC_ITEM_VALUE)) {
+        *result = xpc_dictionary_get_bool(reply, AUTH_XPC_ITEM_VALUE);
+    }
+
 done:
     xpc_release_safe(message);
     xpc_release_safe(reply);

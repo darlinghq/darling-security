@@ -51,6 +51,7 @@
 #include "SOSAccountTesting.h"
 
 #include "SecdTestKeychainUtilities.h"
+#if SOS_ENABLED
 
 static void tests(void)
 {
@@ -96,6 +97,8 @@ static void tests(void)
     ok(SOSAccountJoinCircles_wTxn(alice_account, &error), "Join circle: %@", error);
     ok(SOSAccountCheckHasBeenInSync_wTxn(alice_account), "Alice account initial sync done");
 
+    is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, NULL), 1, "updates");
+
     ok(SOSAccountAssertUserCredentialsAndUpdate(bob_account, cfaccount, cfpassword, &error), "Credential setting (%@)", error);
     CFReleaseNull(error);
     CFReleaseNull(cfpassword);
@@ -105,7 +108,7 @@ static void tests(void)
     ok(SOSAccountJoinCircles_wTxn(bob_account, &error), "Bob Applies (%@)", error);
     CFReleaseNull(error);
     
-    is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, NULL), 4, "updates");
+    is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, NULL), 2, "updates");
     
     {
         CFArrayRef applicants = SOSAccountCopyApplicants(alice_account, &error);
@@ -148,14 +151,17 @@ static void tests(void)
 
     SOSTestCleanup();
 }
+#endif
 
 int secd_100_initialsync(int argc, char *const *argv)
 {
+#if SOS_ENABLED
     plan_tests(33);
-    
     secd_test_setup_temp_keychain(__FUNCTION__, NULL);
-    
     tests();
-    
+    secd_test_teardown_delete_temp_keychain(__FUNCTION__);
+#else
+    plan_tests(0);
+#endif
     return 0;
 }

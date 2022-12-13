@@ -28,7 +28,6 @@
 #import <Security/SecKeyPriv.h>
 
 #import "keychain/ot/OTCuttlefishContext.h"
-#import "keychain/ot/OTFetchViewsOperation.h"
 #import "keychain/ot/OTOperationDependencies.h"
 #import "keychain/ot/OTPrepareOperation.h"
 
@@ -48,6 +47,7 @@
                        intendedState:(OctagonState*)intendedState
                           errorState:(OctagonState*)errorState
                           deviceInfo:(OTDeviceInformation*)deviceInfo
+                      policyOverride:(TPPolicyVersion* _Nullable)policyOverride
                                epoch:(uint64_t)epoch
 {
     if((self = [super init])) {
@@ -58,6 +58,8 @@
 
         _intendedState = intendedState;
         _nextState = errorState;
+
+        _policyOverride = policyOverride;
     }
     return self;
 }
@@ -133,6 +135,9 @@
         secerror("octagon: failed to save 'attempted join' state: %@", persistError);
     }
 
+    // Note: we pass syncUserControllableViews as FOLLOWING here, with the intention that
+    // it will be set later, when this peer decides who it trusts and accepts their value.
+
     [self.deps.cuttlefishXPCWrapper prepareWithContainer:self.deps.containerName
                                                  context:self.deps.contextID
                                                    epoch:self.epoch
@@ -143,11 +148,18 @@
                                               deviceName:self.deviceInfo.deviceName
                                             serialNumber:self.deviceInfo.serialNumber
                                                osVersion:self.deviceInfo.osVersion
-                                           policyVersion:nil
+                                           policyVersion:self.policyOverride
                                            policySecrets:nil
+                               syncUserControllableViews:TPPBPeerStableInfo_UserControllableViewStatus_FOLLOWING
                              signingPrivKeyPersistentRef:signingKeyPersistRef
                                  encPrivKeyPersistentRef:encryptionKeyPersistRef
-                                                   reply:^(NSString * _Nullable peerID, NSData * _Nullable permanentInfo, NSData * _Nullable permanentInfoSig, NSData * _Nullable stableInfo, NSData * _Nullable stableInfoSig, NSError * _Nullable error) {
+                                                   reply:^(NSString * _Nullable peerID,
+                                                           NSData * _Nullable permanentInfo,
+                                                           NSData * _Nullable permanentInfoSig,
+                                                           NSData * _Nullable stableInfo,
+                                                           NSData * _Nullable stableInfoSig,
+                                                           TPSyncingPolicy* _Nullable syncingPolicy,
+                                                           NSError * _Nullable error) {
             STRONGIFY(self);
             [[CKKSAnalytics logger] logResultForEvent:OctagonEventPrepareIdentity hardFailure:true result:error];
             if(error) {
@@ -163,27 +175,28 @@
                 self.stableInfoSig = stableInfoSig;
 
                 NSError* localError = nil;
-                BOOL persisted = [self.deps.stateHolder persistNewEgoPeerID:peerID error:&localError];
+
+                secnotice("octagon-ckks", "New syncing policy: %@ views: %@", syncingPolicy, syncingPolicy.viewList);
+
+                BOOL persisted = [self.deps.stateHolder persistAccountChanges:^OTAccountMetadataClassC * _Nullable(OTAccountMetadataClassC * _Nonnull metadata) {
+                    metadata.peerID = peerID;
+
+                    [metadata setTPSyncingPolicy:syncingPolicy];
+                    return metadata;
+                } error:&localError];
+
                 if(!persisted || localError) {
-                    secnotice("octagon", "Couldn't persist peer ID: %@", localError);
+                    secnotice("octagon", "Couldn't persist metadata: %@", localError);
                     self.error = localError;
                     [self runBeforeGroupFinished:self.finishedOp];
-                } else {
-                    WEAKIFY(self);
-
-                    CKKSResultOperation *doneOp = [CKKSResultOperation named:@"ot-prepare"
-                                                                   withBlock:^{
-                            STRONGIFY(self);
-                            self.nextState = self.intendedState;
-                        }];
-
-                    OTFetchViewsOperation *fetchViewsOp = [[OTFetchViewsOperation alloc] initWithDependencies:self.deps];
-                    [self runBeforeGroupFinished:fetchViewsOp];
-                    [doneOp addDependency:fetchViewsOp];
-                    [self runBeforeGroupFinished:doneOp];
-                    [self.finishedOp addDependency:doneOp];
-                    [self runBeforeGroupFinished:self.finishedOp];
+                    return;
                 }
+
+                // Let CKKS know of the new policy, so it can spin up
+                [self.deps.viewManager setCurrentSyncingPolicy:syncingPolicy];
+
+                self.nextState = self.intendedState;
+                [self runBeforeGroupFinished:self.finishedOp];
             }
         }];
 }
