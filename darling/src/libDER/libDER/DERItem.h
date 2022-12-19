@@ -35,10 +35,13 @@ __BEGIN_DECLS
 /*
  * Primary representation of a block of memory.
  */
+#ifndef DARLING
+// DERItem is already defined in libDER/oids.h
 typedef struct {
     DERByte        *DER_counted_by(length) data;
     DERSize        length;
 } DERItem;
+#endif
 
 __END_DECLS
 
