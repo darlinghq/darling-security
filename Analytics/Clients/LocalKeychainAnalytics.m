@@ -8,6 +8,10 @@
 #include <utilities/SecFileLocations.h>
 #include <utilities/SecAKSWrappers.h>
 
+#ifdef DARLING
+#import <Foundation/Foundation.h>
+#endif
+
 @interface LKAUpgradeOutcomeReport : NSObject
 @property LKAKeychainUpgradeOutcome outcome;
 @property NSDictionary* attributes;
@@ -24,6 +28,7 @@
 }
 @end
 
+#if !defined(DARLING) || defined(__OBJC2__)
 // Approved event types
 // rdar://problem/41745059 SFAnalytics: collect keychain upgrade outcome information
 LKAnalyticsFailableEvent const LKAEventUpgrade = (LKAnalyticsFailableEvent)@"LKAEventUpgrade";
@@ -174,22 +179,28 @@ NSString* const LKABackupLastSuccessDate = @"backupLastSuccess";
 }
 
 @end
+#endif // !defined(DARLING) || defined(__OBJC2__)
 
 // MARK: C Bridging
 
 void LKAReportKeychainUpgradeOutcome(int fromversion, int toversion, LKAKeychainUpgradeOutcome outcome) {
+    #if !defined(DARLING) || defined(__OBJC2__)
     @autoreleasepool {
         [[LocalKeychainAnalytics logger] reportKeychainUpgradeFrom:fromversion to:toversion outcome:outcome error:NULL];
     }
+    #endif
 }
 
 void LKAReportKeychainUpgradeOutcomeWithError(int fromversion, int toversion, LKAKeychainUpgradeOutcome outcome, CFErrorRef error) {
+    #if !defined(DARLING) || defined(__OBJC2__)
     @autoreleasepool {
         [[LocalKeychainAnalytics logger] reportKeychainUpgradeFrom:fromversion to:toversion outcome:outcome error:(__bridge NSError*)error];
     }
+    #endif
 }
 
 void LKABackupReportStart(bool hasKeybag, bool hasPasscode, bool isEMCS) {
+    #if !defined(DARLING) || defined(__OBJC2__)
     LKAKeychainBackupType type;
     if (isEMCS) {
         type = LKAKeychainBackupTypeEMCS;
@@ -207,12 +218,15 @@ void LKABackupReportStart(bool hasKeybag, bool hasPasscode, bool isEMCS) {
     @autoreleasepool {
         [[LocalKeychainAnalytics logger] reportKeychainBackupStartWithType:type];
     }
+    #endif
 }
 
 void LKABackupReportEnd(bool hasBackup, CFErrorRef error) {
+    #if !defined(DARLING) || defined(__OBJC2__)
     @autoreleasepool {
         [[LocalKeychainAnalytics logger] reportKeychainBackupEnd:hasBackup error:(__bridge NSError*)error];
     }
+    #endif
 }
 
 void LKAForceClose(void)

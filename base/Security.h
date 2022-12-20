@@ -114,7 +114,11 @@
 #endif
 
 /* DER */
+#ifdef DARLING
+#include <libDER/oids.h>
+#else
 #include <Security/oids.h>
+#endif
 
 #endif // SEC_OS_OSX
 

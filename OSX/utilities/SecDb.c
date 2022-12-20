@@ -42,6 +42,9 @@
 #include <os/assumes.h>
 #include <xpc/private.h>    // xpc_transaction_exit_clean()
 
+#ifdef DARLING
+#include <pthread.h>
+#endif
 
 //
 // Architecturally inverted files

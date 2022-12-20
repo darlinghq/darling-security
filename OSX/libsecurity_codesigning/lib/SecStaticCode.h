@@ -39,6 +39,9 @@
 #define _H_SECSTATICCODE
 
 #include <Security/CSCommon.h>
+#ifdef DARLING
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {

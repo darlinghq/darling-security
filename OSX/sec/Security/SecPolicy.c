@@ -46,6 +46,9 @@
 #include <ipc/securityd_client.h>
 #include <os/variant_private.h>
 #include <MobileGestalt.h>
+#ifdef DARLING
+#include <libDER/oidsPriv.h>
+#endif
 
 #include <utilities/SecInternalReleasePriv.h>
 

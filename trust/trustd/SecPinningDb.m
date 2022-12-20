@@ -844,6 +844,9 @@ void SecPinningDbInitialize(void) {
 }
 
 CFDictionaryRef _Nullable SecPinningDbCopyMatching(CFDictionaryRef query) {
+#ifdef DARLING
+    return nil;
+#else
     @autoreleasepool {
         SecPinningDbInitialize();
         NSDictionary *nsQuery = (__bridge NSDictionary*)query;
@@ -860,6 +863,7 @@ CFDictionaryRef _Nullable SecPinningDbCopyMatching(CFDictionaryRef query) {
         results = [pinningDb queryForDomain:hostname];
         return CFBridgingRetain(results);
     }
+#endif
 }
 
 #if !TARGET_OS_BRIDGE

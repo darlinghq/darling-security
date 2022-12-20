@@ -190,7 +190,16 @@ static const size_t kAuthorizationExternalFormLength = 32;
 	potential attackers since it would authorize rights to them.
 */
 typedef struct {
+#if defined(DARLING) && defined(__clang__)
+	// this warning is useless and repeated throughout MANY compilation units if left enabled
+	// it's easier to disable it here than to disable in each and every CMakeLists.txt
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wgnu-folding-constant"
+#endif
 	char bytes[kAuthorizationExternalFormLength];
+#if defined(DARLING) && defined(__clang__)
+	#pragma GCC diagnostic pop
+#endif
 } AuthorizationExternalForm;
 
 

@@ -842,7 +842,12 @@ int main(int argc, char *argv[])
         kill(getpid(), SIGSTOP);
     }
 
+    // fails in Darling because launchd sets the wrong HOME for its tasks
+    // doesn't matter because our libsanbox is a stub anyways (we don't do sandboxing)
+    // TODO: fix that by changing the user's home directory in our `/etc/passwd` (which is where launchd gets its value for HOME from)
+#ifndef DARLING
     trustd_sandbox();
+#endif
     FixTrustdFilePermissions();
     /* set up SQLite before some other component has a chance to create a database connection */
     _SecDbServerSetup();

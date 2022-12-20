@@ -43,6 +43,9 @@
 #include <Security/SecItemPriv.h>
 #include <utilities/array_size.h>
 #include <keychain/ckks/CKKS.h>
+#ifdef DARLING
+#include <string.h>
+#endif
 
 /*
  *
@@ -403,9 +406,19 @@ static bool dsForEachObject(SOSDataSourceRef data_source, SOSTransactionRef txn,
     bool (^use_attr_in_where)(const SecDbAttr *attr) = ^bool (const SecDbAttr * attr) {
         return attr->kind == kSecDbSHA1Attr;
     };
+#ifdef DARLING
+    Query *select_queries[dsSyncedClassesSize];
+    CFStringRef select_sql[dsSyncedClassesSize];
+    sqlite3_stmt *select_stmts[dsSyncedClassesSize];
+
+    memset(select_queries, 0, sizeof(select_queries));
+    memset(select_sql, 0, sizeof(select_sql));
+    memset(select_stmts, 0, sizeof(select_stmts));
+#else
     Query *select_queries[dsSyncedClassesSize] = {};
     CFStringRef select_sql[dsSyncedClassesSize] = {};
     sqlite3_stmt *select_stmts[dsSyncedClassesSize] = {};
+#endif
 
     __block Query **queries = select_queries;
     __block CFStringRef *sqls = select_sql;

@@ -73,6 +73,9 @@
 #include <Security/SecKeyInternal.h>
 #include "AppleExternalRootCertificates.h"
 #include <Security/SecInternalReleasePriv.h>
+#ifdef DARLING
+#include <libDER/oidsPriv.h>
+#endif
 
 #pragma clang diagnostic ignored "-Wformat=2"
 
@@ -1644,7 +1647,11 @@ static bool SecCertificateParse(SecCertificateRef certificate)
 
 	/* sequence we're given: encoded DERSubjPubKeyInfo */
 	DERSubjPubKeyInfo pubKeyInfo;
+#ifdef DARLING
+	drtn = DERParseSequence(&tbsCert.subjectPubKey,
+#else
 	drtn = DERParseSequenceContent(&tbsCert.subjectPubKey,
+#endif
 		DERNumSubjPubKeyInfoItemSpecs, DERSubjPubKeyInfoItemSpecs,
 		&pubKeyInfo, sizeof(pubKeyInfo));
 	require_noerr_quiet(drtn, badCert);
