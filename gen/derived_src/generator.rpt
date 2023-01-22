@@ -1,0 +1,33 @@
+CSSM_CSP_CreateAsymmetricContext not in cssmcspi.h
+CSSM_CSP_CreateDeriveKeyContext not in cssmcspi.h
+CSSM_CSP_CreateDigestContext not in cssmcspi.h
+CSSM_CSP_CreateKeyGenContext not in cssmcspi.h
+CSSM_CSP_CreateMacContext not in cssmcspi.h
+CSSM_CSP_CreatePassThroughContext not in cssmcspi.h
+CSSM_CSP_CreateRandomGenContext not in cssmcspi.h
+CSSM_CSP_CreateSignatureContext not in cssmcspi.h
+CSSM_CSP_CreateSymmetricContext not in cssmcspi.h
+CSSM_DeleteContext not in cssmcspi.h
+CSSM_DeleteContextAttributes not in cssmcspi.h
+CSSM_DigestDataClone has custom implementation
+CSSM_FreeContext has no module type
+CSSM_GenerateAlgorithmParams has custom implementation
+CSSM_GetAPIMemoryFunctions has no module type
+CSSM_GetContext not in cssmcspi.h
+CSSM_GetContextAttribute has no module type
+CSSM_GetModuleGUIDFromHandle has no module type
+CSSM_GetPrivilege has no module type
+CSSM_GetSubserviceUIDFromHandle has no module type
+CSSM_Init has no module type
+CSSM_Introduce has no module type
+CSSM_ListAttachedModuleManagers has no module type
+CSSM_ModuleAttach has no module type
+CSSM_ModuleDetach has no module type
+CSSM_ModuleLoad has no module type
+CSSM_ModuleUnload has no module type
+CSSM_QueryKeySizeInBits has custom implementation
+CSSM_SetContext not in cssmcspi.h
+CSSM_SetPrivilege has no module type
+CSSM_Terminate has no module type
+CSSM_Unintroduce has no module type
+CSSM_UpdateContextAttributes not in cssmcspi.h

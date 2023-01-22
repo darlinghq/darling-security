@@ -1,0 +1,2510 @@
+//
+// This file was automatically generated. Do not edit on penalty of futility!
+//
+CSSM_RETURN CSSMAPI
+CSSM_AC_AuthCompute (CSSM_AC_HANDLE ACHandle,
+                     const CSSM_TUPLEGROUP *BaseAuthorizations,
+                     const CSSM_TUPLEGROUP *Credentials,
+                     uint32 NumberOfRequestors,
+                     const CSSM_LIST *Requestors,
+                     const CSSM_LIST *RequestedAuthorizationPeriod,
+                     const CSSM_LIST *RequestedAuthorization,
+                     CSSM_TUPLEGROUP_PTR AuthorizationResult)
+{
+  BEGIN_API
+  ACAttachment &attachment = enterAttachment<ACAttachment>(ACHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.AuthCompute(ACHandle,
+			BaseAuthorizations,
+			Credentials,
+			NumberOfRequestors,
+			Requestors,
+			RequestedAuthorizationPeriod,
+			RequestedAuthorization,
+			AuthorizationResult);
+  END_API(AC)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_AC_PassThrough (CSSM_AC_HANDLE ACHandle,
+                     CSSM_TP_HANDLE TPHandle,
+                     CSSM_CL_HANDLE CLHandle,
+                     CSSM_CC_HANDLE CCHandle,
+                     const CSSM_DL_DB_LIST *DBList,
+                     uint32 PassThroughId,
+                     const void *InputParams,
+                     void **OutputParams)
+{
+  BEGIN_API
+  ACAttachment &attachment = enterAttachment<ACAttachment>(ACHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.PassThrough(ACHandle,
+			TPHandle,
+			CLHandle,
+			CCHandle,
+			DBList,
+			PassThroughId,
+			InputParams,
+			OutputParams);
+  END_API(AC)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertAbortCache (CSSM_CL_HANDLE CLHandle,
+                        CSSM_HANDLE CertHandle)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertAbortCache(CLHandle,
+			CertHandle);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertAbortQuery (CSSM_CL_HANDLE CLHandle,
+                        CSSM_HANDLE ResultsHandle)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertAbortQuery(CLHandle,
+			ResultsHandle);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertCache (CSSM_CL_HANDLE CLHandle,
+                   const CSSM_DATA *Cert,
+                   CSSM_HANDLE_PTR CertHandle)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertCache(CLHandle,
+			Cert,
+			CertHandle);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertCreateTemplate (CSSM_CL_HANDLE CLHandle,
+                            uint32 NumberOfFields,
+                            const CSSM_FIELD *CertFields,
+                            CSSM_DATA_PTR CertTemplate)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertCreateTemplate(CLHandle,
+			NumberOfFields,
+			CertFields,
+			CertTemplate);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertDescribeFormat (CSSM_CL_HANDLE CLHandle,
+                            uint32 *NumberOfFields,
+                            CSSM_OID_PTR *OidList)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertDescribeFormat(CLHandle,
+			NumberOfFields,
+			OidList);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertGetAllFields (CSSM_CL_HANDLE CLHandle,
+                          const CSSM_DATA *Cert,
+                          uint32 *NumberOfFields,
+                          CSSM_FIELD_PTR *CertFields)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGetAllFields(CLHandle,
+			Cert,
+			NumberOfFields,
+			CertFields);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertGetAllTemplateFields (CSSM_CL_HANDLE CLHandle,
+                                  const CSSM_DATA *CertTemplate,
+                                  uint32 *NumberOfFields,
+                                  CSSM_FIELD_PTR *CertFields)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGetAllTemplateFields(CLHandle,
+			CertTemplate,
+			NumberOfFields,
+			CertFields);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertGetFirstCachedFieldValue (CSSM_CL_HANDLE CLHandle,
+                                      CSSM_HANDLE CertHandle,
+                                      const CSSM_OID *CertField,
+                                      CSSM_HANDLE_PTR ResultsHandle,
+                                      uint32 *NumberOfMatchedFields,
+                                      CSSM_DATA_PTR *Value)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGetFirstCachedFieldValue(CLHandle,
+			CertHandle,
+			CertField,
+			ResultsHandle,
+			NumberOfMatchedFields,
+			Value);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertGetFirstFieldValue (CSSM_CL_HANDLE CLHandle,
+                                const CSSM_DATA *Cert,
+                                const CSSM_OID *CertField,
+                                CSSM_HANDLE_PTR ResultsHandle,
+                                uint32 *NumberOfMatchedFields,
+                                CSSM_DATA_PTR *Value)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGetFirstFieldValue(CLHandle,
+			Cert,
+			CertField,
+			ResultsHandle,
+			NumberOfMatchedFields,
+			Value);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertGetKeyInfo (CSSM_CL_HANDLE CLHandle,
+                        const CSSM_DATA *Cert,
+                        CSSM_KEY_PTR *Key)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGetKeyInfo(CLHandle,
+			Cert,
+			Key);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertGetNextCachedFieldValue (CSSM_CL_HANDLE CLHandle,
+                                     CSSM_HANDLE ResultsHandle,
+                                     CSSM_DATA_PTR *Value)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGetNextCachedFieldValue(CLHandle,
+			ResultsHandle,
+			Value);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertGetNextFieldValue (CSSM_CL_HANDLE CLHandle,
+                               CSSM_HANDLE ResultsHandle,
+                               CSSM_DATA_PTR *Value)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGetNextFieldValue(CLHandle,
+			ResultsHandle,
+			Value);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertGroupFromVerifiedBundle (CSSM_CL_HANDLE CLHandle,
+                                     CSSM_CC_HANDLE CCHandle,
+                                     const CSSM_CERT_BUNDLE *CertBundle,
+                                     const CSSM_DATA *SignerCert,
+                                     CSSM_CERTGROUP_PTR *CertGroup)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGroupFromVerifiedBundle(CLHandle,
+			CCHandle,
+			CertBundle,
+			SignerCert,
+			CertGroup);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertGroupToSignedBundle (CSSM_CL_HANDLE CLHandle,
+                                 CSSM_CC_HANDLE CCHandle,
+                                 const CSSM_CERTGROUP *CertGroupToBundle,
+                                 const CSSM_CERT_BUNDLE_HEADER *BundleInfo,
+                                 CSSM_DATA_PTR SignedBundle)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGroupToSignedBundle(CLHandle,
+			CCHandle,
+			CertGroupToBundle,
+			BundleInfo,
+			SignedBundle);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertSign (CSSM_CL_HANDLE CLHandle,
+                  CSSM_CC_HANDLE CCHandle,
+                  const CSSM_DATA *CertTemplate,
+                  const CSSM_FIELD *SignScope,
+                  uint32 ScopeSize,
+                  CSSM_DATA_PTR SignedCert)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertSign(CLHandle,
+			CCHandle,
+			CertTemplate,
+			SignScope,
+			ScopeSize,
+			SignedCert);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertVerify (CSSM_CL_HANDLE CLHandle,
+                    CSSM_CC_HANDLE CCHandle,
+                    const CSSM_DATA *CertToBeVerified,
+                    const CSSM_DATA *SignerCert,
+                    const CSSM_FIELD *VerifyScope,
+                    uint32 ScopeSize)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertVerify(CLHandle,
+			CCHandle,
+			CertToBeVerified,
+			SignerCert,
+			VerifyScope,
+			ScopeSize);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CertVerifyWithKey (CSSM_CL_HANDLE CLHandle,
+                           CSSM_CC_HANDLE CCHandle,
+                           const CSSM_DATA *CertToBeVerified)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertVerifyWithKey(CLHandle,
+			CCHandle,
+			CertToBeVerified);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlAbortCache (CSSM_CL_HANDLE CLHandle,
+                       CSSM_HANDLE CrlHandle)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlAbortCache(CLHandle,
+			CrlHandle);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlAbortQuery (CSSM_CL_HANDLE CLHandle,
+                       CSSM_HANDLE ResultsHandle)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlAbortQuery(CLHandle,
+			ResultsHandle);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlAddCert (CSSM_CL_HANDLE CLHandle,
+                    CSSM_CC_HANDLE CCHandle,
+                    const CSSM_DATA *Cert,
+                    uint32 NumberOfFields,
+                    const CSSM_FIELD *CrlEntryFields,
+                    const CSSM_DATA *OldCrl,
+                    CSSM_DATA_PTR NewCrl)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlAddCert(CLHandle,
+			CCHandle,
+			Cert,
+			NumberOfFields,
+			CrlEntryFields,
+			OldCrl,
+			NewCrl);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlCache (CSSM_CL_HANDLE CLHandle,
+                  const CSSM_DATA *Crl,
+                  CSSM_HANDLE_PTR CrlHandle)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlCache(CLHandle,
+			Crl,
+			CrlHandle);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlCreateTemplate (CSSM_CL_HANDLE CLHandle,
+                           uint32 NumberOfFields,
+                           const CSSM_FIELD *CrlTemplate,
+                           CSSM_DATA_PTR NewCrl)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlCreateTemplate(CLHandle,
+			NumberOfFields,
+			CrlTemplate,
+			NewCrl);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlDescribeFormat (CSSM_CL_HANDLE CLHandle,
+                           uint32 *NumberOfFields,
+                           CSSM_OID_PTR *OidList)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlDescribeFormat(CLHandle,
+			NumberOfFields,
+			OidList);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlGetAllCachedRecordFields (CSSM_CL_HANDLE CLHandle,
+                                     CSSM_HANDLE CrlHandle,
+                                     const CSSM_DATA *CrlRecordIndex,
+                                     uint32 *NumberOfFields,
+                                     CSSM_FIELD_PTR *CrlFields)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlGetAllCachedRecordFields(CLHandle,
+			CrlHandle,
+			CrlRecordIndex,
+			NumberOfFields,
+			CrlFields);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlGetAllFields (CSSM_CL_HANDLE CLHandle,
+                         const CSSM_DATA *Crl,
+                         uint32 *NumberOfCrlFields,
+                         CSSM_FIELD_PTR *CrlFields)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlGetAllFields(CLHandle,
+			Crl,
+			NumberOfCrlFields,
+			CrlFields);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlGetFirstCachedFieldValue (CSSM_CL_HANDLE CLHandle,
+                                     CSSM_HANDLE CrlHandle,
+                                     const CSSM_DATA *CrlRecordIndex,
+                                     const CSSM_OID *CrlField,
+                                     CSSM_HANDLE_PTR ResultsHandle,
+                                     uint32 *NumberOfMatchedFields,
+                                     CSSM_DATA_PTR *Value)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlGetFirstCachedFieldValue(CLHandle,
+			CrlHandle,
+			CrlRecordIndex,
+			CrlField,
+			ResultsHandle,
+			NumberOfMatchedFields,
+			Value);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlGetFirstFieldValue (CSSM_CL_HANDLE CLHandle,
+                               const CSSM_DATA *Crl,
+                               const CSSM_OID *CrlField,
+                               CSSM_HANDLE_PTR ResultsHandle,
+                               uint32 *NumberOfMatchedFields,
+                               CSSM_DATA_PTR *Value)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlGetFirstFieldValue(CLHandle,
+			Crl,
+			CrlField,
+			ResultsHandle,
+			NumberOfMatchedFields,
+			Value);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlGetNextCachedFieldValue (CSSM_CL_HANDLE CLHandle,
+                                    CSSM_HANDLE ResultsHandle,
+                                    CSSM_DATA_PTR *Value)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlGetNextCachedFieldValue(CLHandle,
+			ResultsHandle,
+			Value);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlGetNextFieldValue (CSSM_CL_HANDLE CLHandle,
+                              CSSM_HANDLE ResultsHandle,
+                              CSSM_DATA_PTR *Value)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlGetNextFieldValue(CLHandle,
+			ResultsHandle,
+			Value);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlRemoveCert (CSSM_CL_HANDLE CLHandle,
+                       const CSSM_DATA *Cert,
+                       const CSSM_DATA *OldCrl,
+                       CSSM_DATA_PTR NewCrl)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlRemoveCert(CLHandle,
+			Cert,
+			OldCrl,
+			NewCrl);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlSetFields (CSSM_CL_HANDLE CLHandle,
+                      uint32 NumberOfFields,
+                      const CSSM_FIELD *CrlTemplate,
+                      const CSSM_DATA *OldCrl,
+                      CSSM_DATA_PTR ModifiedCrl)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlSetFields(CLHandle,
+			NumberOfFields,
+			CrlTemplate,
+			OldCrl,
+			ModifiedCrl);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlSign (CSSM_CL_HANDLE CLHandle,
+                 CSSM_CC_HANDLE CCHandle,
+                 const CSSM_DATA *UnsignedCrl,
+                 const CSSM_FIELD *SignScope,
+                 uint32 ScopeSize,
+                 CSSM_DATA_PTR SignedCrl)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlSign(CLHandle,
+			CCHandle,
+			UnsignedCrl,
+			SignScope,
+			ScopeSize,
+			SignedCrl);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlVerify (CSSM_CL_HANDLE CLHandle,
+                   CSSM_CC_HANDLE CCHandle,
+                   const CSSM_DATA *CrlToBeVerified,
+                   const CSSM_DATA *SignerCert,
+                   const CSSM_FIELD *VerifyScope,
+                   uint32 ScopeSize)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlVerify(CLHandle,
+			CCHandle,
+			CrlToBeVerified,
+			SignerCert,
+			VerifyScope,
+			ScopeSize);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_CrlVerifyWithKey (CSSM_CL_HANDLE CLHandle,
+                          CSSM_CC_HANDLE CCHandle,
+                          const CSSM_DATA *CrlToBeVerified)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlVerifyWithKey(CLHandle,
+			CCHandle,
+			CrlToBeVerified);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_FreeFieldValue (CSSM_CL_HANDLE CLHandle,
+                        const CSSM_OID *CertOrCrlOid,
+                        CSSM_DATA_PTR Value)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.FreeFieldValue(CLHandle,
+			CertOrCrlOid,
+			Value);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_FreeFields (CSSM_CL_HANDLE CLHandle,
+                    uint32 NumberOfFields,
+                    CSSM_FIELD_PTR *Fields)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.FreeFields(CLHandle,
+			NumberOfFields,
+			Fields);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_IsCertInCachedCrl (CSSM_CL_HANDLE CLHandle,
+                           const CSSM_DATA *Cert,
+                           CSSM_HANDLE CrlHandle,
+                           CSSM_BOOL *CertFound,
+                           CSSM_DATA_PTR CrlRecordIndex)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.IsCertInCachedCrl(CLHandle,
+			Cert,
+			CrlHandle,
+			CertFound,
+			CrlRecordIndex);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_IsCertInCrl (CSSM_CL_HANDLE CLHandle,
+                     const CSSM_DATA *Cert,
+                     const CSSM_DATA *Crl,
+                     CSSM_BOOL *CertFound)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.IsCertInCrl(CLHandle,
+			Cert,
+			Crl,
+			CertFound);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CL_PassThrough (CSSM_CL_HANDLE CLHandle,
+                     CSSM_CC_HANDLE CCHandle,
+                     uint32 PassThroughId,
+                     const void *InputParams,
+                     void **OutputParams)
+{
+  BEGIN_API
+  CLAttachment &attachment = enterAttachment<CLAttachment>(CLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.PassThrough(CLHandle,
+			CCHandle,
+			PassThroughId,
+			InputParams,
+			OutputParams);
+  END_API(CL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CSP_ChangeLoginAcl (CSSM_CSP_HANDLE CSPHandle,
+                         const CSSM_ACCESS_CREDENTIALS *AccessCred,
+                         const CSSM_ACL_EDIT *AclEdit)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ChangeLoginAcl(CSPHandle,
+			AccessCred,
+			AclEdit);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CSP_ChangeLoginOwner (CSSM_CSP_HANDLE CSPHandle,
+                           const CSSM_ACCESS_CREDENTIALS *AccessCred,
+                           const CSSM_ACL_OWNER_PROTOTYPE *NewOwner)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ChangeLoginOwner(CSPHandle,
+			AccessCred,
+			NewOwner);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CSP_GetLoginAcl (CSSM_CSP_HANDLE CSPHandle,
+                      const CSSM_STRING *SelectionTag,
+                      uint32 *NumberOfAclInfos,
+                      CSSM_ACL_ENTRY_INFO_PTR *AclInfos)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetLoginAcl(CSPHandle,
+			SelectionTag,
+			NumberOfAclInfos,
+			AclInfos);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CSP_GetLoginOwner (CSSM_CSP_HANDLE CSPHandle,
+                        CSSM_ACL_OWNER_PROTOTYPE_PTR Owner)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetLoginOwner(CSPHandle,
+			Owner);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CSP_GetOperationalStatistics (CSSM_CSP_HANDLE CSPHandle,
+                                   CSSM_CSP_OPERATIONAL_STATISTICS *Statistics)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetOperationalStatistics(CSPHandle,
+			Statistics);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CSP_Login (CSSM_CSP_HANDLE CSPHandle,
+                const CSSM_ACCESS_CREDENTIALS *AccessCred,
+                const CSSM_DATA *LoginName,
+                const void *Reserved)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.Login(CSPHandle,
+			AccessCred,
+			LoginName,
+			Reserved);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CSP_Logout (CSSM_CSP_HANDLE CSPHandle)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.Logout(CSPHandle);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CSP_ObtainPrivateKeyFromPublicKey (CSSM_CSP_HANDLE CSPHandle,
+                                        const CSSM_KEY *PublicKey,
+                                        CSSM_KEY_PTR PrivateKey)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ObtainPrivateKeyFromPublicKey(CSPHandle,
+			PublicKey,
+			PrivateKey);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_CSP_PassThrough (CSSM_CC_HANDLE CCHandle,
+                      uint32 PassThroughId,
+                      const void *InData,
+                      void **OutData)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.PassThrough(context.CSPHandle, CCHandle, &context,
+			PassThroughId,
+			InData,
+			OutData);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_ChangeKeyAcl (CSSM_CSP_HANDLE CSPHandle,
+                   const CSSM_ACCESS_CREDENTIALS *AccessCred,
+                   const CSSM_ACL_EDIT *AclEdit,
+                   const CSSM_KEY *Key)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ChangeKeyAcl(CSPHandle,
+			AccessCred,
+			AclEdit,
+			Key);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_ChangeKeyOwner (CSSM_CSP_HANDLE CSPHandle,
+                     const CSSM_ACCESS_CREDENTIALS *AccessCred,
+                     const CSSM_KEY *Key,
+                     const CSSM_ACL_OWNER_PROTOTYPE *NewOwner)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ChangeKeyOwner(CSPHandle,
+			AccessCred,
+			Key,
+			NewOwner);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_Authenticate (CSSM_DL_DB_HANDLE DLDBHandle,
+                      CSSM_DB_ACCESS_TYPE AccessRequest,
+                      const CSSM_ACCESS_CREDENTIALS *AccessCred)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.Authenticate(DLDBHandle,
+			AccessRequest,
+			AccessCred);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_ChangeDbAcl (CSSM_DL_DB_HANDLE DLDBHandle,
+                     const CSSM_ACCESS_CREDENTIALS *AccessCred,
+                     const CSSM_ACL_EDIT *AclEdit)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ChangeDbAcl(DLDBHandle,
+			AccessCred,
+			AclEdit);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_ChangeDbOwner (CSSM_DL_DB_HANDLE DLDBHandle,
+                       const CSSM_ACCESS_CREDENTIALS *AccessCred,
+                       const CSSM_ACL_OWNER_PROTOTYPE *NewOwner)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ChangeDbOwner(DLDBHandle,
+			AccessCred,
+			NewOwner);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_CreateRelation (CSSM_DL_DB_HANDLE DLDBHandle,
+                        CSSM_DB_RECORDTYPE RelationID,
+                        const char *RelationName,
+                        uint32 NumberOfAttributes,
+                        const CSSM_DB_SCHEMA_ATTRIBUTE_INFO *pAttributeInfo,
+                        uint32 NumberOfIndexes,
+                        const CSSM_DB_SCHEMA_INDEX_INFO *pIndexInfo)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CreateRelation(DLDBHandle,
+			RelationID,
+			RelationName,
+			NumberOfAttributes,
+			pAttributeInfo,
+			NumberOfIndexes,
+			pIndexInfo);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DataAbortQuery (CSSM_DL_DB_HANDLE DLDBHandle,
+                        CSSM_HANDLE ResultsHandle)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DataAbortQuery(DLDBHandle,
+			ResultsHandle);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DataDelete (CSSM_DL_DB_HANDLE DLDBHandle,
+                    const CSSM_DB_UNIQUE_RECORD *UniqueRecordIdentifier)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DataDelete(DLDBHandle,
+			UniqueRecordIdentifier);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DataGetFirst (CSSM_DL_DB_HANDLE DLDBHandle,
+                      const CSSM_QUERY *Query,
+                      CSSM_HANDLE_PTR ResultsHandle,
+                      CSSM_DB_RECORD_ATTRIBUTE_DATA_PTR Attributes,
+                      CSSM_DATA_PTR Data,
+                      CSSM_DB_UNIQUE_RECORD_PTR *UniqueId)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DataGetFirst(DLDBHandle,
+			Query,
+			ResultsHandle,
+			Attributes,
+			Data,
+			UniqueId);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DataGetFromUniqueRecordId (CSSM_DL_DB_HANDLE DLDBHandle,
+                              const CSSM_DB_UNIQUE_RECORD *UniqueRecord,
+                              CSSM_DB_RECORD_ATTRIBUTE_DATA_PTR Attributes,
+                              CSSM_DATA_PTR Data)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DataGetFromUniqueRecordId(DLDBHandle,
+			UniqueRecord,
+			Attributes,
+			Data);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DataGetNext (CSSM_DL_DB_HANDLE DLDBHandle,
+                     CSSM_HANDLE ResultsHandle,
+                     CSSM_DB_RECORD_ATTRIBUTE_DATA_PTR Attributes,
+                     CSSM_DATA_PTR Data,
+                     CSSM_DB_UNIQUE_RECORD_PTR *UniqueId)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DataGetNext(DLDBHandle,
+			ResultsHandle,
+			Attributes,
+			Data,
+			UniqueId);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DataInsert (CSSM_DL_DB_HANDLE DLDBHandle,
+                    CSSM_DB_RECORDTYPE RecordType,
+                    const CSSM_DB_RECORD_ATTRIBUTE_DATA *Attributes,
+                    const CSSM_DATA *Data,
+                    CSSM_DB_UNIQUE_RECORD_PTR *UniqueId)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DataInsert(DLDBHandle,
+			RecordType,
+			Attributes,
+			Data,
+			UniqueId);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DataModify (CSSM_DL_DB_HANDLE DLDBHandle,
+                    CSSM_DB_RECORDTYPE RecordType,
+                    CSSM_DB_UNIQUE_RECORD_PTR UniqueRecordIdentifier,
+                    const CSSM_DB_RECORD_ATTRIBUTE_DATA *AttributesToBeModified,
+                    const CSSM_DATA *DataToBeModified,
+                    CSSM_DB_MODIFY_MODE ModifyMode)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DataModify(DLDBHandle,
+			RecordType,
+			UniqueRecordIdentifier,
+			AttributesToBeModified,
+			DataToBeModified,
+			ModifyMode);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DbClose (CSSM_DL_DB_HANDLE DLDBHandle)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DbClose(DLDBHandle);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DbCreate (CSSM_DL_HANDLE DLHandle,
+                  const char *DbName,
+                  const CSSM_NET_ADDRESS *DbLocation,
+                  const CSSM_DBINFO *DBInfo,
+                  CSSM_DB_ACCESS_TYPE AccessRequest,
+                  const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry,
+                  const void *OpenParameters,
+                  CSSM_DB_HANDLE *DbHandle)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DbCreate(DLHandle,
+			DbName,
+			DbLocation,
+			DBInfo,
+			AccessRequest,
+			CredAndAclEntry,
+			OpenParameters,
+			DbHandle);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DbDelete (CSSM_DL_HANDLE DLHandle,
+                  const char *DbName,
+                  const CSSM_NET_ADDRESS *DbLocation,
+                  const CSSM_ACCESS_CREDENTIALS *AccessCred)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DbDelete(DLHandle,
+			DbName,
+			DbLocation,
+			AccessCred);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DbOpen (CSSM_DL_HANDLE DLHandle,
+                const char *DbName,
+                const CSSM_NET_ADDRESS *DbLocation,
+                CSSM_DB_ACCESS_TYPE AccessRequest,
+                const CSSM_ACCESS_CREDENTIALS *AccessCred,
+                const void *OpenParameters,
+                CSSM_DB_HANDLE *DbHandle)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DbOpen(DLHandle,
+			DbName,
+			DbLocation,
+			AccessRequest,
+			AccessCred,
+			OpenParameters,
+			DbHandle);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_DestroyRelation (CSSM_DL_DB_HANDLE DLDBHandle,
+                         CSSM_DB_RECORDTYPE RelationID)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.DestroyRelation(DLDBHandle,
+			RelationID);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_FreeNameList (CSSM_DL_HANDLE DLHandle,
+                      CSSM_NAME_LIST_PTR NameList)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.FreeNameList(DLHandle,
+			NameList);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_FreeUniqueRecord (CSSM_DL_DB_HANDLE DLDBHandle,
+                          CSSM_DB_UNIQUE_RECORD_PTR UniqueRecord)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.FreeUniqueRecord(DLDBHandle,
+			UniqueRecord);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_GetDbAcl (CSSM_DL_DB_HANDLE DLDBHandle,
+                  const CSSM_STRING *SelectionTag,
+                  uint32 *NumberOfAclInfos,
+                  CSSM_ACL_ENTRY_INFO_PTR *AclInfos)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetDbAcl(DLDBHandle,
+			SelectionTag,
+			NumberOfAclInfos,
+			AclInfos);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_GetDbNameFromHandle (CSSM_DL_DB_HANDLE DLDBHandle,
+                             char **DbName)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetDbNameFromHandle(DLDBHandle,
+			DbName);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_GetDbNames (CSSM_DL_HANDLE DLHandle,
+                    CSSM_NAME_LIST_PTR *NameList)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetDbNames(DLHandle,
+			NameList);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_GetDbOwner (CSSM_DL_DB_HANDLE DLDBHandle,
+                    CSSM_ACL_OWNER_PROTOTYPE_PTR Owner)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetDbOwner(DLDBHandle,
+			Owner);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DL_PassThrough (CSSM_DL_DB_HANDLE DLDBHandle,
+                uint32 PassThroughId,
+                const void *InputParams,
+                void **OutputParams)
+{
+  BEGIN_API
+  DLAttachment &attachment = enterAttachment<DLAttachment>(DLDBHandle.DLHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.PassThrough(DLDBHandle,
+			PassThroughId,
+			InputParams,
+			OutputParams);
+  END_API(DL)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DecryptData (CSSM_CC_HANDLE CCHandle,
+                  const CSSM_DATA *CipherBufs,
+                  uint32 CipherBufCount,
+                  CSSM_DATA_PTR ClearBufs,
+                  uint32 ClearBufCount,
+                  CSSM_SIZE *bytesDecrypted,
+                  CSSM_DATA_PTR RemData)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DecryptData(context.CSPHandle, CCHandle, &context,
+			CipherBufs,
+			CipherBufCount,
+			ClearBufs,
+			ClearBufCount,
+			bytesDecrypted,
+			RemData,
+			attachment.module.cssm.getPrivilege());
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DecryptDataFinal (CSSM_CC_HANDLE CCHandle,
+                       CSSM_DATA_PTR RemData)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DecryptDataFinal(context.CSPHandle, CCHandle,
+			RemData);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DecryptDataInit (CSSM_CC_HANDLE CCHandle)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DecryptDataInit(context.CSPHandle, CCHandle, &context,
+			attachment.module.cssm.getPrivilege());
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DecryptDataInitP (CSSM_CC_HANDLE CCHandle,
+                       CSSM_PRIVILEGE Privilege)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DecryptDataInit(context.CSPHandle, CCHandle, &context,
+			Privilege);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DecryptDataP (CSSM_CC_HANDLE CCHandle,
+                   const CSSM_DATA *CipherBufs,
+                   uint32 CipherBufCount,
+                   CSSM_DATA_PTR ClearBufs,
+                   uint32 ClearBufCount,
+                   CSSM_SIZE *bytesDecrypted,
+                   CSSM_DATA_PTR RemData,
+                   CSSM_PRIVILEGE Privilege)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DecryptData(context.CSPHandle, CCHandle, &context,
+			CipherBufs,
+			CipherBufCount,
+			ClearBufs,
+			ClearBufCount,
+			bytesDecrypted,
+			RemData,
+			Privilege);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DecryptDataUpdate (CSSM_CC_HANDLE CCHandle,
+                        const CSSM_DATA *CipherBufs,
+                        uint32 CipherBufCount,
+                        CSSM_DATA_PTR ClearBufs,
+                        uint32 ClearBufCount,
+                        CSSM_SIZE *bytesDecrypted)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DecryptDataUpdate(context.CSPHandle, CCHandle,
+			CipherBufs,
+			CipherBufCount,
+			ClearBufs,
+			ClearBufCount,
+			bytesDecrypted);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DeriveKey (CSSM_CC_HANDLE CCHandle,
+                CSSM_DATA_PTR Param,
+                uint32 KeyUsage,
+                uint32 KeyAttr,
+                const CSSM_DATA *KeyLabel,
+                const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry,
+                CSSM_KEY_PTR DerivedKey)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DeriveKey(context.CSPHandle, CCHandle, &context,
+			Param,
+			KeyUsage,
+			KeyAttr,
+			KeyLabel,
+			CredAndAclEntry,
+			DerivedKey);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DigestData (CSSM_CC_HANDLE CCHandle,
+                 const CSSM_DATA *DataBufs,
+                 uint32 DataBufCount,
+                 CSSM_DATA_PTR Digest)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DigestData(context.CSPHandle, CCHandle, &context,
+			DataBufs,
+			DataBufCount,
+			Digest);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DigestDataFinal (CSSM_CC_HANDLE CCHandle,
+                      CSSM_DATA_PTR Digest)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DigestDataFinal(context.CSPHandle, CCHandle,
+			Digest);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DigestDataInit (CSSM_CC_HANDLE CCHandle)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DigestDataInit(context.CSPHandle, CCHandle, &context);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_DigestDataUpdate (CSSM_CC_HANDLE CCHandle,
+                       const CSSM_DATA *DataBufs,
+                       uint32 DataBufCount)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.DigestDataUpdate(context.CSPHandle, CCHandle,
+			DataBufs,
+			DataBufCount);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_EncryptData (CSSM_CC_HANDLE CCHandle,
+                  const CSSM_DATA *ClearBufs,
+                  uint32 ClearBufCount,
+                  CSSM_DATA_PTR CipherBufs,
+                  uint32 CipherBufCount,
+                  CSSM_SIZE *bytesEncrypted,
+                  CSSM_DATA_PTR RemData)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.EncryptData(context.CSPHandle, CCHandle, &context,
+			ClearBufs,
+			ClearBufCount,
+			CipherBufs,
+			CipherBufCount,
+			bytesEncrypted,
+			RemData,
+			attachment.module.cssm.getPrivilege());
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_EncryptDataFinal (CSSM_CC_HANDLE CCHandle,
+                       CSSM_DATA_PTR RemData)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.EncryptDataFinal(context.CSPHandle, CCHandle,
+			RemData);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_EncryptDataInit (CSSM_CC_HANDLE CCHandle)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.EncryptDataInit(context.CSPHandle, CCHandle, &context,
+			attachment.module.cssm.getPrivilege());
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_EncryptDataInitP (CSSM_CC_HANDLE CCHandle,
+                       CSSM_PRIVILEGE Privilege)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.EncryptDataInit(context.CSPHandle, CCHandle, &context,
+			Privilege);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_EncryptDataP (CSSM_CC_HANDLE CCHandle,
+                   const CSSM_DATA *ClearBufs,
+                   uint32 ClearBufCount,
+                   CSSM_DATA_PTR CipherBufs,
+                   uint32 CipherBufCount,
+                   CSSM_SIZE *bytesEncrypted,
+                   CSSM_DATA_PTR RemData,
+                   CSSM_PRIVILEGE Privilege)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.EncryptData(context.CSPHandle, CCHandle, &context,
+			ClearBufs,
+			ClearBufCount,
+			CipherBufs,
+			CipherBufCount,
+			bytesEncrypted,
+			RemData,
+			Privilege);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_EncryptDataUpdate (CSSM_CC_HANDLE CCHandle,
+                        const CSSM_DATA *ClearBufs,
+                        uint32 ClearBufCount,
+                        CSSM_DATA_PTR CipherBufs,
+                        uint32 CipherBufCount,
+                        CSSM_SIZE *bytesEncrypted)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.EncryptDataUpdate(context.CSPHandle, CCHandle,
+			ClearBufs,
+			ClearBufCount,
+			CipherBufs,
+			CipherBufCount,
+			bytesEncrypted);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_FreeKey (CSSM_CSP_HANDLE CSPHandle,
+              const CSSM_ACCESS_CREDENTIALS *AccessCred,
+              CSSM_KEY_PTR KeyPtr,
+              CSSM_BOOL Delete)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.FreeKey(CSPHandle,
+			AccessCred,
+			KeyPtr,
+			Delete);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GenerateKey (CSSM_CC_HANDLE CCHandle,
+                  uint32 KeyUsage,
+                  uint32 KeyAttr,
+                  const CSSM_DATA *KeyLabel,
+                  const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry,
+                  CSSM_KEY_PTR Key)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.GenerateKey(context.CSPHandle, CCHandle, &context,
+			KeyUsage,
+			KeyAttr,
+			KeyLabel,
+			CredAndAclEntry,
+			Key,
+			attachment.module.cssm.getPrivilege());
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GenerateKeyP (CSSM_CC_HANDLE CCHandle,
+                   uint32 KeyUsage,
+                   uint32 KeyAttr,
+                   const CSSM_DATA *KeyLabel,
+                   const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry,
+                   CSSM_KEY_PTR Key,
+                   CSSM_PRIVILEGE Privilege)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.GenerateKey(context.CSPHandle, CCHandle, &context,
+			KeyUsage,
+			KeyAttr,
+			KeyLabel,
+			CredAndAclEntry,
+			Key,
+			Privilege);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GenerateKeyPair (CSSM_CC_HANDLE CCHandle,
+                      uint32 PublicKeyUsage,
+                      uint32 PublicKeyAttr,
+                      const CSSM_DATA *PublicKeyLabel,
+                      CSSM_KEY_PTR PublicKey,
+                      uint32 PrivateKeyUsage,
+                      uint32 PrivateKeyAttr,
+                      const CSSM_DATA *PrivateKeyLabel,
+                      const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry,
+                      CSSM_KEY_PTR PrivateKey)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.GenerateKeyPair(context.CSPHandle, CCHandle, &context,
+			PublicKeyUsage,
+			PublicKeyAttr,
+			PublicKeyLabel,
+			PublicKey,
+			PrivateKeyUsage,
+			PrivateKeyAttr,
+			PrivateKeyLabel,
+			CredAndAclEntry,
+			PrivateKey,
+			attachment.module.cssm.getPrivilege());
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GenerateKeyPairP (CSSM_CC_HANDLE CCHandle,
+                       uint32 PublicKeyUsage,
+                       uint32 PublicKeyAttr,
+                       const CSSM_DATA *PublicKeyLabel,
+                       CSSM_KEY_PTR PublicKey,
+                       uint32 PrivateKeyUsage,
+                       uint32 PrivateKeyAttr,
+                       const CSSM_DATA *PrivateKeyLabel,
+                       const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry,
+                       CSSM_KEY_PTR PrivateKey,
+                       CSSM_PRIVILEGE Privilege)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.GenerateKeyPair(context.CSPHandle, CCHandle, &context,
+			PublicKeyUsage,
+			PublicKeyAttr,
+			PublicKeyLabel,
+			PublicKey,
+			PrivateKeyUsage,
+			PrivateKeyAttr,
+			PrivateKeyLabel,
+			CredAndAclEntry,
+			PrivateKey,
+			Privilege);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GenerateMac (CSSM_CC_HANDLE CCHandle,
+                  const CSSM_DATA *DataBufs,
+                  uint32 DataBufCount,
+                  CSSM_DATA_PTR Mac)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.GenerateMac(context.CSPHandle, CCHandle, &context,
+			DataBufs,
+			DataBufCount,
+			Mac);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GenerateMacFinal (CSSM_CC_HANDLE CCHandle,
+                       CSSM_DATA_PTR Mac)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.GenerateMacFinal(context.CSPHandle, CCHandle,
+			Mac);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GenerateMacInit (CSSM_CC_HANDLE CCHandle)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.GenerateMacInit(context.CSPHandle, CCHandle, &context);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GenerateMacUpdate (CSSM_CC_HANDLE CCHandle,
+                        const CSSM_DATA *DataBufs,
+                        uint32 DataBufCount)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.GenerateMacUpdate(context.CSPHandle, CCHandle,
+			DataBufs,
+			DataBufCount);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GenerateRandom (CSSM_CC_HANDLE CCHandle,
+                     CSSM_DATA_PTR RandomNumber)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.GenerateRandom(context.CSPHandle, CCHandle, &context,
+			RandomNumber);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GetKeyAcl (CSSM_CSP_HANDLE CSPHandle,
+                const CSSM_KEY *Key,
+                const CSSM_STRING *SelectionTag,
+                uint32 *NumberOfAclInfos,
+                CSSM_ACL_ENTRY_INFO_PTR *AclInfos)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetKeyAcl(CSPHandle,
+			Key,
+			SelectionTag,
+			NumberOfAclInfos,
+			AclInfos);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GetKeyOwner (CSSM_CSP_HANDLE CSPHandle,
+                  const CSSM_KEY *Key,
+                  CSSM_ACL_OWNER_PROTOTYPE_PTR Owner)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetKeyOwner(CSPHandle,
+			Key,
+			Owner);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_GetTimeValue (CSSM_CSP_HANDLE CSPHandle,
+                   CSSM_ALGORITHMS TimeAlgorithm,
+                   CSSM_DATA *TimeData)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.GetTimeValue(CSPHandle,
+			TimeAlgorithm,
+			TimeData);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_QuerySize (CSSM_CC_HANDLE CCHandle,
+                CSSM_BOOL Encrypt,
+                uint32 QuerySizeCount,
+                CSSM_QUERY_SIZE_DATA_PTR DataBlockSizes)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.QuerySize(context.CSPHandle, CCHandle, &context,
+			Encrypt,
+			QuerySizeCount,
+			DataBlockSizes);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_RetrieveCounter (CSSM_CSP_HANDLE CSPHandle,
+                      CSSM_DATA_PTR Counter)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.RetrieveCounter(CSPHandle,
+			Counter);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_RetrieveUniqueId (CSSM_CSP_HANDLE CSPHandle,
+                       CSSM_DATA_PTR UniqueID)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.RetrieveUniqueId(CSPHandle,
+			UniqueID);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_SignData (CSSM_CC_HANDLE CCHandle,
+               const CSSM_DATA *DataBufs,
+               uint32 DataBufCount,
+               CSSM_ALGORITHMS DigestAlgorithm,
+               CSSM_DATA_PTR Signature)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.SignData(context.CSPHandle, CCHandle, &context,
+			DataBufs,
+			DataBufCount,
+			DigestAlgorithm,
+			Signature);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_SignDataFinal (CSSM_CC_HANDLE CCHandle,
+                    CSSM_DATA_PTR Signature)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.SignDataFinal(context.CSPHandle, CCHandle,
+			Signature);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_SignDataInit (CSSM_CC_HANDLE CCHandle)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.SignDataInit(context.CSPHandle, CCHandle, &context);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_SignDataUpdate (CSSM_CC_HANDLE CCHandle,
+                     const CSSM_DATA *DataBufs,
+                     uint32 DataBufCount)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.SignDataUpdate(context.CSPHandle, CCHandle,
+			DataBufs,
+			DataBufCount);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_ApplyCrlToDb (CSSM_TP_HANDLE TPHandle,
+                      CSSM_CL_HANDLE CLHandle,
+                      CSSM_CSP_HANDLE CSPHandle,
+                      const CSSM_ENCODED_CRL *CrlToBeApplied,
+                      const CSSM_CERTGROUP *SignerCertGroup,
+                      const CSSM_TP_VERIFY_CONTEXT *ApplyCrlVerifyContext,
+                      CSSM_TP_VERIFY_CONTEXT_RESULT_PTR ApplyCrlVerifyResult)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ApplyCrlToDb(TPHandle,
+			CLHandle,
+			CSPHandle,
+			CrlToBeApplied,
+			SignerCertGroup,
+			ApplyCrlVerifyContext,
+			ApplyCrlVerifyResult);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertCreateTemplate (CSSM_TP_HANDLE TPHandle,
+                            CSSM_CL_HANDLE CLHandle,
+                            uint32 NumberOfFields,
+                            const CSSM_FIELD *CertFields,
+                            CSSM_DATA_PTR CertTemplate)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertCreateTemplate(TPHandle,
+			CLHandle,
+			NumberOfFields,
+			CertFields,
+			CertTemplate);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertGetAllTemplateFields (CSSM_TP_HANDLE TPHandle,
+                                  CSSM_CL_HANDLE CLHandle,
+                                  const CSSM_DATA *CertTemplate,
+                                  uint32 *NumberOfFields,
+                                  CSSM_FIELD_PTR *CertFields)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGetAllTemplateFields(TPHandle,
+			CLHandle,
+			CertTemplate,
+			NumberOfFields,
+			CertFields);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertGroupConstruct (CSSM_TP_HANDLE TPHandle,
+                            CSSM_CL_HANDLE CLHandle,
+                            CSSM_CSP_HANDLE CSPHandle,
+                            const CSSM_DL_DB_LIST *DBList,
+                            const void *ConstructParams,
+                            const CSSM_CERTGROUP *CertGroupFrag,
+                            CSSM_CERTGROUP_PTR *CertGroup)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGroupConstruct(TPHandle,
+			CLHandle,
+			CSPHandle,
+			DBList,
+			ConstructParams,
+			CertGroupFrag,
+			CertGroup);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertGroupPrune (CSSM_TP_HANDLE TPHandle,
+                        CSSM_CL_HANDLE CLHandle,
+                        const CSSM_DL_DB_LIST *DBList,
+                        const CSSM_CERTGROUP *OrderedCertGroup,
+                        CSSM_CERTGROUP_PTR *PrunedCertGroup)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGroupPrune(TPHandle,
+			CLHandle,
+			DBList,
+			OrderedCertGroup,
+			PrunedCertGroup);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertGroupToTupleGroup (CSSM_TP_HANDLE TPHandle,
+                               CSSM_CL_HANDLE CLHandle,
+                               const CSSM_CERTGROUP *CertGroup,
+                               CSSM_TUPLEGROUP_PTR *TupleGroup)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGroupToTupleGroup(TPHandle,
+			CLHandle,
+			CertGroup,
+			TupleGroup);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertGroupVerify (CSSM_TP_HANDLE TPHandle,
+                         CSSM_CL_HANDLE CLHandle,
+                         CSSM_CSP_HANDLE CSPHandle,
+                         const CSSM_CERTGROUP *CertGroupToBeVerified,
+                         const CSSM_TP_VERIFY_CONTEXT *VerifyContext,
+                         CSSM_TP_VERIFY_CONTEXT_RESULT_PTR VerifyContextResult)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertGroupVerify(TPHandle,
+			CLHandle,
+			CSPHandle,
+			CertGroupToBeVerified,
+			VerifyContext,
+			VerifyContextResult);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertReclaimAbort (CSSM_TP_HANDLE TPHandle,
+                          CSSM_LONG_HANDLE KeyCacheHandle)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertReclaimAbort(TPHandle,
+			KeyCacheHandle);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertReclaimKey (CSSM_TP_HANDLE TPHandle,
+                        const CSSM_CERTGROUP *CertGroup,
+                        uint32 CertIndex,
+                        CSSM_LONG_HANDLE KeyCacheHandle,
+                        CSSM_CSP_HANDLE CSPHandle,
+                        const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertReclaimKey(TPHandle,
+			CertGroup,
+			CertIndex,
+			KeyCacheHandle,
+			CSPHandle,
+			CredAndAclEntry);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertRemoveFromCrlTemplate (CSSM_TP_HANDLE TPHandle,
+                                   CSSM_CL_HANDLE CLHandle,
+                                   CSSM_CSP_HANDLE CSPHandle,
+                                   const CSSM_DATA *OldCrlTemplate,
+                                   const CSSM_CERTGROUP *CertGroupToBeRemoved,
+                                   const CSSM_CERTGROUP *RevokerCertGroup,
+                                   const CSSM_TP_VERIFY_CONTEXT *RevokerVerifyContext,
+                                   CSSM_TP_VERIFY_CONTEXT_RESULT_PTR RevokerVerifyResult,
+                                   CSSM_DATA_PTR NewCrlTemplate)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertRemoveFromCrlTemplate(TPHandle,
+			CLHandle,
+			CSPHandle,
+			OldCrlTemplate,
+			CertGroupToBeRemoved,
+			RevokerCertGroup,
+			RevokerVerifyContext,
+			RevokerVerifyResult,
+			NewCrlTemplate);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertRevoke (CSSM_TP_HANDLE TPHandle,
+                    CSSM_CL_HANDLE CLHandle,
+                    CSSM_CSP_HANDLE CSPHandle,
+                    const CSSM_DATA *OldCrlTemplate,
+                    const CSSM_CERTGROUP *CertGroupToBeRevoked,
+                    const CSSM_CERTGROUP *RevokerCertGroup,
+                    const CSSM_TP_VERIFY_CONTEXT *RevokerVerifyContext,
+                    CSSM_TP_VERIFY_CONTEXT_RESULT_PTR RevokerVerifyResult,
+                    CSSM_TP_CERTCHANGE_REASON Reason,
+                    CSSM_DATA_PTR NewCrlTemplate)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertRevoke(TPHandle,
+			CLHandle,
+			CSPHandle,
+			OldCrlTemplate,
+			CertGroupToBeRevoked,
+			RevokerCertGroup,
+			RevokerVerifyContext,
+			RevokerVerifyResult,
+			Reason,
+			NewCrlTemplate);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CertSign (CSSM_TP_HANDLE TPHandle,
+                  CSSM_CL_HANDLE CLHandle,
+                  CSSM_CC_HANDLE CCHandle,
+                  const CSSM_DATA *CertTemplateToBeSigned,
+                  const CSSM_CERTGROUP *SignerCertGroup,
+                  const CSSM_TP_VERIFY_CONTEXT *SignerVerifyContext,
+                  CSSM_TP_VERIFY_CONTEXT_RESULT_PTR SignerVerifyResult,
+                  CSSM_DATA_PTR SignedCert)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CertSign(TPHandle,
+			CLHandle,
+			CCHandle,
+			CertTemplateToBeSigned,
+			SignerCertGroup,
+			SignerVerifyContext,
+			SignerVerifyResult,
+			SignedCert);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_ConfirmCredResult (CSSM_TP_HANDLE TPHandle,
+                           const CSSM_DATA *ReferenceIdentifier,
+                           const CSSM_TP_CALLERAUTH_CONTEXT *CallerAuthCredentials,
+                           const CSSM_TP_CONFIRM_RESPONSE *Responses,
+                           const CSSM_TP_AUTHORITY_ID *PreferredAuthority)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ConfirmCredResult(TPHandle,
+			ReferenceIdentifier,
+			CallerAuthCredentials,
+			Responses,
+			PreferredAuthority);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CrlCreateTemplate (CSSM_TP_HANDLE TPHandle,
+                           CSSM_CL_HANDLE CLHandle,
+                           uint32 NumberOfFields,
+                           const CSSM_FIELD *CrlFields,
+                           CSSM_DATA_PTR NewCrlTemplate)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlCreateTemplate(TPHandle,
+			CLHandle,
+			NumberOfFields,
+			CrlFields,
+			NewCrlTemplate);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CrlSign (CSSM_TP_HANDLE TPHandle,
+                 CSSM_CL_HANDLE CLHandle,
+                 CSSM_CC_HANDLE CCHandle,
+                 const CSSM_ENCODED_CRL *CrlToBeSigned,
+                 const CSSM_CERTGROUP *SignerCertGroup,
+                 const CSSM_TP_VERIFY_CONTEXT *SignerVerifyContext,
+                 CSSM_TP_VERIFY_CONTEXT_RESULT_PTR SignerVerifyResult,
+                 CSSM_DATA_PTR SignedCrl)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlSign(TPHandle,
+			CLHandle,
+			CCHandle,
+			CrlToBeSigned,
+			SignerCertGroup,
+			SignerVerifyContext,
+			SignerVerifyResult,
+			SignedCrl);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_CrlVerify (CSSM_TP_HANDLE TPHandle,
+                   CSSM_CL_HANDLE CLHandle,
+                   CSSM_CSP_HANDLE CSPHandle,
+                   const CSSM_ENCODED_CRL *CrlToBeVerified,
+                   const CSSM_CERTGROUP *SignerCertGroup,
+                   const CSSM_TP_VERIFY_CONTEXT *VerifyContext,
+                   CSSM_TP_VERIFY_CONTEXT_RESULT_PTR RevokerVerifyResult)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.CrlVerify(TPHandle,
+			CLHandle,
+			CSPHandle,
+			CrlToBeVerified,
+			SignerCertGroup,
+			VerifyContext,
+			RevokerVerifyResult);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_FormRequest (CSSM_TP_HANDLE TPHandle,
+                     const CSSM_TP_AUTHORITY_ID *PreferredAuthority,
+                     CSSM_TP_FORM_TYPE FormType,
+                     CSSM_DATA_PTR BlankForm)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.FormRequest(TPHandle,
+			PreferredAuthority,
+			FormType,
+			BlankForm);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_FormSubmit (CSSM_TP_HANDLE TPHandle,
+                    CSSM_TP_FORM_TYPE FormType,
+                    const CSSM_DATA *Form,
+                    const CSSM_TP_AUTHORITY_ID *ClearanceAuthority,
+                    const CSSM_TP_AUTHORITY_ID *RepresentedAuthority,
+                    CSSM_ACCESS_CREDENTIALS_PTR Credentials)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.FormSubmit(TPHandle,
+			FormType,
+			Form,
+			ClearanceAuthority,
+			RepresentedAuthority,
+			Credentials);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_PassThrough (CSSM_TP_HANDLE TPHandle,
+                     CSSM_CL_HANDLE CLHandle,
+                     CSSM_CC_HANDLE CCHandle,
+                     const CSSM_DL_DB_LIST *DBList,
+                     uint32 PassThroughId,
+                     const void *InputParams,
+                     void **OutputParams)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.PassThrough(TPHandle,
+			CLHandle,
+			CCHandle,
+			DBList,
+			PassThroughId,
+			InputParams,
+			OutputParams);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_ReceiveConfirmation (CSSM_TP_HANDLE TPHandle,
+                             const CSSM_DATA *ReferenceIdentifier,
+                             CSSM_TP_CONFIRM_RESPONSE_PTR *Responses,
+                             sint32 *ElapsedTime)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.ReceiveConfirmation(TPHandle,
+			ReferenceIdentifier,
+			Responses,
+			ElapsedTime);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_RetrieveCredResult (CSSM_TP_HANDLE TPHandle,
+                            const CSSM_DATA *ReferenceIdentifier,
+                            const CSSM_TP_CALLERAUTH_CONTEXT *CallerAuthCredentials,
+                            sint32 *EstimatedTime,
+                            CSSM_BOOL *ConfirmationRequired,
+                            CSSM_TP_RESULT_SET_PTR *RetrieveOutput)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.RetrieveCredResult(TPHandle,
+			ReferenceIdentifier,
+			CallerAuthCredentials,
+			EstimatedTime,
+			ConfirmationRequired,
+			RetrieveOutput);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_SubmitCredRequest (CSSM_TP_HANDLE TPHandle,
+                           const CSSM_TP_AUTHORITY_ID *PreferredAuthority,
+                           CSSM_TP_AUTHORITY_REQUEST_TYPE RequestType,
+                           const CSSM_TP_REQUEST_SET *RequestInput,
+                           const CSSM_TP_CALLERAUTH_CONTEXT *CallerAuthContext,
+                           sint32 *EstimatedTime,
+                           CSSM_DATA_PTR ReferenceIdentifier)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.SubmitCredRequest(TPHandle,
+			PreferredAuthority,
+			RequestType,
+			RequestInput,
+			CallerAuthContext,
+			EstimatedTime,
+			ReferenceIdentifier);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_TP_TupleGroupToCertGroup (CSSM_TP_HANDLE TPHandle,
+                               CSSM_CL_HANDLE CLHandle,
+                               const CSSM_TUPLEGROUP *TupleGroup,
+                               CSSM_CERTGROUP_PTR *CertTemplates)
+{
+  BEGIN_API
+  TPAttachment &attachment = enterAttachment<TPAttachment>(TPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.TupleGroupToCertGroup(TPHandle,
+			CLHandle,
+			TupleGroup,
+			CertTemplates);
+  END_API(TP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_UnwrapKey (CSSM_CC_HANDLE CCHandle,
+                const CSSM_KEY *PublicKey,
+                const CSSM_WRAP_KEY *WrappedKey,
+                uint32 KeyUsage,
+                uint32 KeyAttr,
+                const CSSM_DATA *KeyLabel,
+                const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry,
+                CSSM_KEY_PTR UnwrappedKey,
+                CSSM_DATA_PTR DescriptiveData)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.UnwrapKey(context.CSPHandle, CCHandle, &context,
+			PublicKey,
+			WrappedKey,
+			KeyUsage,
+			KeyAttr,
+			KeyLabel,
+			CredAndAclEntry,
+			UnwrappedKey,
+			DescriptiveData,
+			attachment.module.cssm.getPrivilege());
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_UnwrapKeyP (CSSM_CC_HANDLE CCHandle,
+                 const CSSM_KEY *PublicKey,
+                 const CSSM_WRAP_KEY *WrappedKey,
+                 uint32 KeyUsage,
+                 uint32 KeyAttr,
+                 const CSSM_DATA *KeyLabel,
+                 const CSSM_RESOURCE_CONTROL_CONTEXT *CredAndAclEntry,
+                 CSSM_KEY_PTR UnwrappedKey,
+                 CSSM_DATA_PTR DescriptiveData,
+                 CSSM_PRIVILEGE Privilege)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.UnwrapKey(context.CSPHandle, CCHandle, &context,
+			PublicKey,
+			WrappedKey,
+			KeyUsage,
+			KeyAttr,
+			KeyLabel,
+			CredAndAclEntry,
+			UnwrappedKey,
+			DescriptiveData,
+			Privilege);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_VerifyData (CSSM_CC_HANDLE CCHandle,
+                 const CSSM_DATA *DataBufs,
+                 uint32 DataBufCount,
+                 CSSM_ALGORITHMS DigestAlgorithm,
+                 const CSSM_DATA *Signature)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.VerifyData(context.CSPHandle, CCHandle, &context,
+			DataBufs,
+			DataBufCount,
+			DigestAlgorithm,
+			Signature);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_VerifyDataFinal (CSSM_CC_HANDLE CCHandle,
+                      const CSSM_DATA *Signature)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.VerifyDataFinal(context.CSPHandle, CCHandle,
+			Signature);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_VerifyDataInit (CSSM_CC_HANDLE CCHandle)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.VerifyDataInit(context.CSPHandle, CCHandle, &context);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_VerifyDataUpdate (CSSM_CC_HANDLE CCHandle,
+                       const CSSM_DATA *DataBufs,
+                       uint32 DataBufCount)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.VerifyDataUpdate(context.CSPHandle, CCHandle,
+			DataBufs,
+			DataBufCount);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_VerifyDevice (CSSM_CSP_HANDLE CSPHandle,
+                   const CSSM_DATA *DeviceCert)
+{
+  BEGIN_API
+  CSPAttachment &attachment = enterAttachment<CSPAttachment>(CSPHandle);
+  TransitLock _(attachment);
+  return attachment.downcalls.VerifyDevice(CSPHandle,
+			DeviceCert);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_VerifyMac (CSSM_CC_HANDLE CCHandle,
+                const CSSM_DATA *DataBufs,
+                uint32 DataBufCount,
+                const CSSM_DATA *Mac)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.VerifyMac(context.CSPHandle, CCHandle, &context,
+			DataBufs,
+			DataBufCount,
+			Mac);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_VerifyMacFinal (CSSM_CC_HANDLE CCHandle,
+                     const CSSM_DATA *Mac)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.VerifyMacFinal(context.CSPHandle, CCHandle,
+			Mac);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_VerifyMacInit (CSSM_CC_HANDLE CCHandle)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.VerifyMacInit(context.CSPHandle, CCHandle, &context);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_VerifyMacUpdate (CSSM_CC_HANDLE CCHandle,
+                      const CSSM_DATA *DataBufs,
+                      uint32 DataBufCount)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.VerifyMacUpdate(context.CSPHandle, CCHandle,
+			DataBufs,
+			DataBufCount);
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_WrapKey (CSSM_CC_HANDLE CCHandle,
+              const CSSM_ACCESS_CREDENTIALS *AccessCred,
+              const CSSM_KEY *Key,
+              const CSSM_DATA *DescriptiveData,
+              CSSM_WRAP_KEY_PTR WrappedKey)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.WrapKey(context.CSPHandle, CCHandle, &context,
+			AccessCred,
+			Key,
+			DescriptiveData,
+			WrappedKey,
+			attachment.module.cssm.getPrivilege());
+  END_API(CSP)
+}
+
+CSSM_RETURN CSSMAPI
+CSSM_WrapKeyP (CSSM_CC_HANDLE CCHandle,
+               const CSSM_ACCESS_CREDENTIALS *AccessCred,
+               const CSSM_KEY *Key,
+               const CSSM_DATA *DescriptiveData,
+               CSSM_WRAP_KEY_PTR WrappedKey,
+               CSSM_PRIVILEGE Privilege)
+{
+  BEGIN_API
+  HandleContext &context = enterContext(CCHandle);
+  CSPAttachment &attachment = context.attachment;
+  TransitLock _(attachment);
+  return attachment.downcalls.WrapKey(context.CSPHandle, CCHandle, &context,
+			AccessCred,
+			Key,
+			DescriptiveData,
+			WrappedKey,
+			Privilege);
+  END_API(CSP)
+}
