@@ -137,7 +137,13 @@ extern const DERItem
     oidDescription,
     oidEmailAddress,
     oidFriendlyName,
-    oidLocalKeyId;
+    oidLocalKeyId,
+    oidCollectiveOrganizationName,
+    oidCollectiveOrganizationalUnitName,
+    oidCollectiveStateOrProvinceName,
+    oidStreetAddress,
+    oidCollectiveStreetAddress,
+    oidUserId;
 
 /* X.509 Extended Key Usages */
 extern const DERItem
