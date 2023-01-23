@@ -31,7 +31,11 @@
 */
 
 #include <security_utilities/debugging.h>
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
 #include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 
 #include <Security/SecCmsDecoder.h>
 #include <Security/SecCmsMessage.h>

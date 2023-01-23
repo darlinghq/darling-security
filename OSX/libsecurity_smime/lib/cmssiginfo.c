@@ -55,7 +55,11 @@
 #include <utilities/SecCFWrappers.h>
 #include <utilities/debugging.h>
 #include <AssertMacros.h>
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
 #include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 #include <Security/SecPolicyPriv.h>
 #include <Security/SecItem.h>
 #include <libDER/asn1Types.h>

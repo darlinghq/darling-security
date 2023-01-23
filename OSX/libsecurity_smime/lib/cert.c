@@ -43,7 +43,11 @@
 #include <syslog.h>
 
 /* for errKCDuplicateItem */
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
 #include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 
 #define CERT_DEBUG	0
 #if	CERT_DEBUG

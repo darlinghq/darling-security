@@ -45,7 +45,11 @@
 
 #include "srCdsaUtils.h"
 
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
 #include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 
 const char * const _masterKeychainName = "FileVaultMaster.keychain";
 const char * const _masterKeychainPath = "./FileVaultMaster";

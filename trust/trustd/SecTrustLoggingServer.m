@@ -27,3 +27,29 @@
 #include <AssertMacros.h>
 #include "SecTrustLoggingServer.h"
 
+
+#ifdef DARLING
+
+void TrustdHealthAnalyticsLogErrorCodeForDatabase(int location, int operation, int error_type, int error_code) {
+	// a stub
+};
+
+bool SecNetworkingAnalyticsReport(CFStringRef event_name, xpc_object_t tls_analytics_attributes, CFErrorRef *error) {
+	// another stub
+	return true;
+};
+
+void TrustdHealthAnalyticsLogErrorCode(int event, int error_type, int error_code) {
+	// yet another stub
+};
+
+void TrustdHealthAnalyticsLogEvaluationCompleted() {
+	// YAYAS
+	// (yet another "yet another stub")
+};
+
+void TrustdHealthAnalyticsLogSuccess(int event) {
+	// man, Apple really likes to log and analyze stuff, huh?
+};
+
+#endif

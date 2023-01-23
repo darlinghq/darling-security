@@ -47,7 +47,11 @@
 #include <security_asn1/secerr.h>
 #include <Security/cssmapi.h>
 #include <Security/cssmapple.h>
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
 #include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 #include <CommonCrypto/CommonDigest.h>
 
 

@@ -1,8 +1,8 @@
 add_subdirectory(securityd_service)
 
 include_directories(
+	../keychain/KeychainStasher/
 	../OSX/libsecurityd/lib
-	../OSX/include
 	${CMAKE_CURRENT_BINARY_DIR}/../OSX/libsecurityd/mig
 	${CMAKE_CURRENT_SOURCE_DIR}/src
 )
@@ -32,11 +32,11 @@ add_darling_executable(securityd_exe
 	src/kcdatabase.cpp
 	src/kckey.cpp
 	src/key.cpp
+	src/keychainstasherinterface.m
 	src/localdatabase.cpp
 	src/localkey.cpp
 	src/main.cpp
 	src/notifications.cpp
-	src/pcscmonitor.cpp
 	src/process.cpp
 	src/reader.cpp
 	src/server.cpp
@@ -58,7 +58,7 @@ add_darling_executable(securityd_exe
 	${CMAKE_CURRENT_BINARY_DIR}/mig/selfUser.cpp
 )
 target_include_directories(securityd_exe PRIVATE
-	${SECURITY_PROJECT_DIR}/header_symlinks/macOS
+	${SECURITY_PROJECT_DIR}/darling/include/macOS
 	${SECURITY_PROJECT_DIR}/securityd
 	${SECURITY_PROJECT_DIR}/OSX/include
 
@@ -91,6 +91,7 @@ target_link_libraries(securityd_exe
 	PCSC
 	Security
 	system
+	DER
 	CoreFoundation
 	IOKit
 )

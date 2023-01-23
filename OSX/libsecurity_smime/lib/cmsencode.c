@@ -47,7 +47,11 @@
 
 #include <security_asn1/secasn1.h>
 #include <security_asn1/secerr.h>
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
 #include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 
 struct nss_cms_encoder_output {
     SecCmsContentCallback outputfn;

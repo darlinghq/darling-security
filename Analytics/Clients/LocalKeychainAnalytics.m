@@ -231,7 +231,9 @@ void LKABackupReportEnd(bool hasBackup, CFErrorRef error) {
 
 void LKAForceClose(void)
 {
+    #if !defined(DARLING) || defined(__OBJC2__)
     @autoreleasepool {
         [[LocalKeychainAnalytics logger] removeState];
     }
+    #endif
 }

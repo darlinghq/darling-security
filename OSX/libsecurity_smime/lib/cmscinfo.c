@@ -50,7 +50,11 @@
 #include "secitem.h"
 
 #include <security_asn1/secerr.h>
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
 #include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 
 /*
  * SecCmsContentInfoCreate - create a content info

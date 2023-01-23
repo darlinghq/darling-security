@@ -2,6 +2,9 @@
 #import <Foundation/Foundation.h>
 #import "SecKnownFilePaths.h"
 #import "OSX/utilities/SecCFRelease.h"
+#ifdef DARLING
+#import <CoreFoundation/CFPriv.h>
+#endif
 
 // This file is separate from SecFileLocation.c because it has a global variable.
 // We need exactly one of those per address space, so it needs to live in the Security framework.

@@ -2,6 +2,7 @@ project(libsecurity_codesigning)
 
 add_macos_legacy_lib(security_codesigning
 	SOURCES
+		../../OSX/utilities/entitlements.c
 		../../sectask/SecTask.c
 		antlr2/src/ANTLRUtil.cpp
 		antlr2/src/ASTFactory.cpp
@@ -86,6 +87,7 @@ add_macos_legacy_lib(security_codesigning
 		lib/xpcengine.cpp
 	INCLUDES
 		${SECURITY_PROJECT_DIR}/OSX/libsecurity_codesigning/antlr2
-		${SECURITY_PROJECT_DIR}/derived_src
-		${SECURITY_PROJECT_DIR}/cstemp
+		${SECURITY_PROJECT_DIR}/gen/derived_src
+		${SECURITY_PROJECT_DIR}/gen/cstemp
+		${SECURITY_PROJECT_DIR}/darling/submodules/xnu
 )

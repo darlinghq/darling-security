@@ -25,15 +25,8 @@
 #ifndef OTClique_h
 #define OTClique_h
 
-#if __OBJC2__
-
-#import <Foundation/Foundation.h>
-#import <Security/SecureObjectSync/SOSCloudCircleInternal.h>
-#import <Security/SecureObjectSync/SOSPeerInfo.h>
-#import <Security/SecureObjectSync/SOSTypes.h>
-#import <Security/OTConstants.h>
-#import <Security/SecRecoveryKey.h>
-
+#if defined(DARLING)
+// Relocate CliqueStatus and OTCDPStatus
 typedef NS_ENUM(NSInteger, CliqueStatus) {
     CliqueStatusIn         = 0, /*There is a clique and I am in it*/
     CliqueStatusNotIn      = 1, /*There is a clique and I am not in it - you should get a voucher to join or tell another peer to trust us*/
@@ -48,6 +41,33 @@ typedef NS_ENUM(NSInteger, OTCDPStatus) {
     OTCDPStatusDisabled = 1,
     OTCDPStatusEnabled = 2,
 };
+#endif
+
+#if __OBJC2__
+
+#import <Foundation/Foundation.h>
+#import <Security/SecureObjectSync/SOSCloudCircleInternal.h>
+#import <Security/SecureObjectSync/SOSPeerInfo.h>
+#import <Security/SecureObjectSync/SOSTypes.h>
+#import <Security/OTConstants.h>
+#import <Security/SecRecoveryKey.h>
+
+#ifndef DARLING
+typedef NS_ENUM(NSInteger, CliqueStatus) {
+    CliqueStatusIn         = 0, /*There is a clique and I am in it*/
+    CliqueStatusNotIn      = 1, /*There is a clique and I am not in it - you should get a voucher to join or tell another peer to trust us*/
+    CliqueStatusPending    = 2, /*For compatibility, keeping the pending state */
+    CliqueStatusAbsent     = 3, /*There is no clique - you can establish one */
+    CliqueStatusNoCloudKitAccount = 4, /* no cloudkit account present */
+    CliqueStatusError      = -1 /*unable to determine circle status, inspect CFError to find out why */
+};
+
+typedef NS_ENUM(NSInteger, OTCDPStatus) {
+    OTCDPStatusUnknown = 0,
+    OTCDPStatusDisabled = 1,
+    OTCDPStatusEnabled = 2,
+};
+#endif
 
 NS_ASSUME_NONNULL_BEGIN
 

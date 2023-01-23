@@ -77,6 +77,7 @@ if (BUILD_TARGET_64BIT)
 	add_darling_object_library(Security_x86_64_only_stuff
 		64BIT_ONLY
 
+		sec/Security/SecSharedCredential.m
 		../Analytics/Clients/SOSAnalytics.m
 		../Analytics/NSDate+SFAnalytics.m
 		../Analytics/SFAnalytics.m
@@ -125,6 +126,7 @@ add_custom_target(generate-security-exp
 
 
 set_source_files_properties(
+	sec/Security/SecSharedCredential.m
 	../Analytics/SFAnalytics.m
 	../Analytics/SFAnalyticsMultiSampler.m
 	../Analytics/SFAnalyticsSampler.m
@@ -136,7 +138,7 @@ set_source_files_properties(
 
 generate_sdk_framework(Security
     VERSION ${FRAMEWORK_VERSION}
-    HEADER "../darling-framework/include/Security"
+    HEADER "../darling/include/macOS/Security"
 )
 
 add_separated_framework(Security
@@ -144,16 +146,28 @@ add_separated_framework(Security
 	VERSION ${FRAMEWORK_VERSION}
 
 	SOURCES
-		Breadcrumb/SecBreadcrumb.c
 		lib/dummy.cpp
-		sec/ipc/client_endpoint.m
-		sec/ipc/client.c
 		sec/Security/SecFramework.c
+		sec/Security/SecSharedCredential.c
+		# sec/Security/SecSharedCredential.m
+		sec/ipc/client.c
+		sec/ipc/client_endpoint.m
 		utilities/SecCoreAnalytics.m
+		utilities/SecKnownFilePaths.m
 		utilities/SecPaddingConfigurations.c
 		../Analytics/Clients/LocalKeychainAnalytics.m
+		# ../Analytics/Clients/SOSAnalytics.m
+		# ../Analytics/NSDate+SFAnalytics.m
+		# ../Analytics/SFAnalytics.m
+		# ../Analytics/SFAnalyticsActivityTracker.m
+		# ../Analytics/SFAnalyticsMultiSampler.m
+		# ../Analytics/SFAnalyticsSQLiteStore.m
+		# ../Analytics/SFAnalyticsSampler.m
+		# ../Analytics/SQLite/SFObjCType.m
+		# ../Analytics/SQLite/SFSQLite.m
+		# ../Analytics/SQLite/SFSQLiteStatement.m
 		../experiment/SecExperiment.m
-		../keychain/behavior/SFBehavior.m
+		../keychain/SigninMetrics/OctagonSignPosts.m
 		../keychain/ckks/CKKSControl.m
 		../keychain/ckks/CKKSControlProtocol.m
 		../keychain/escrowrequest/EscrowRequestXPCProtocol.m
@@ -164,14 +178,12 @@ add_separated_framework(Security
 		../keychain/ot/OTControlProtocol.m
 		../keychain/ot/OTDefines.m
 		../keychain/ot/OTJoiningConfiguration.m
-		../keychain/SigninMetrics/OctagonSignPosts.m
-		../keychain/SigninMetrics/SFSignInAnalytics.m
 		../protocol/SecProtocol.c
 		../protocol/SecProtocolConfiguration.m
 		../protocol/SecProtocolHelper.m
 		../protocol/SecProtocolTypes.m
 
-		../darling/version.c
+		../darling/src/version.c
 
 	OBJECTS
 		${security_objects}
@@ -220,6 +232,8 @@ add_separated_framework(Security
 		#
 		# kind of difficult because there is a mix of libraries added
 		# through target "Frameworks" and some added as plain flags
+		MobileGestalt
+
 		AppleFSCompression
 
 		# static Security libraries moved to STRONG_DEPENDENCIES
@@ -326,6 +340,7 @@ if (BUILD_TARGET_32BIT)
 endif ()
 
 target_include_directories(Security_obj PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/include
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 

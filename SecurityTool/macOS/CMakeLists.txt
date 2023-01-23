@@ -51,7 +51,7 @@ target_compile_options(securitytool_macos PRIVATE
 	-fobjc-arc
 )
 target_include_directories(securitytool_macos PRIVATE
-	${SECURITY_PROJECT_DIR}/header_symlinks/macOS
+	${SECURITY_PROJECT_DIR}/darling/include/macOS
 )
 
 set_target_properties(securitytool_macos PROPERTIES OUTPUT_NAME "security")

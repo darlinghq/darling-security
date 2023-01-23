@@ -33,6 +33,9 @@
 
 #import <Foundation/Foundation.h>
 #import <AuthenticationServices/AuthenticationServices.h>
+#ifdef DARLING
+#import <AppKit/NSApplication.h>
+#endif
 
 // Forward declaration of the primary function implemented in this file
 OSStatus SecCopySharedWebCredentialSyncUsingAuthSvcs(CFStringRef fqdn, CFStringRef account, CFArrayRef *credentials, CFErrorRef *error);

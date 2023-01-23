@@ -1716,13 +1716,17 @@ out:
 }
 
 static void countReadOnlyAPICall() {
+    #if !defined(DARLING) || defined(__OBJC2__)
     if (!isReadOnlyAPIRateWithinLimits()) {
     }
+    #endif
 }
 
 static void countModifyingAPICall() {
+    #if !defined(DARLING) || defined(__OBJC2__)
     if (!isModifyingAPIRateWithinLimits()) {
     }
+    #endif
 }
 
 OSStatus SecItemAdd(CFDictionaryRef attributes, CFTypeRef *result) {
