@@ -16,16 +16,10 @@ darling/scripts/generate_d_files.sh
 Most of the `security` folders (inside the `darling/include` folder) are set up as symbolic links (for example, the folder `security_asn1` point to `OSX/libsecurity_asn1/lib`). A consequence of this approach is that some of the files will need to be symbol-linked.
 
 ```bash
-cd $DARLING_SECURITY/OSX/libsecurity_codesigning/lib/
-ln -s ../../../cstemp/codesigning_dtrace.h
-cd $DARLING_SECURITY/OSX/libsecurity_smime/lib/
-ln -s ../../../libsecurity_smime/lib/SecAsn1Item.h
-cd $DARLING_SECURITY/OSX/libsecurity_utilities/lib/
-ln -s ../../utilities/debugging.h
-cd $DARLING_SECURITY/OSX/libsecurity_utilities/lib/
-ln -s ../../utilities/simulatecrash_assert.h
-cd $DARLING_SECURITY/OSX/libsecurity_utilities/lib/
-ln -s ../../../derived_src/security_utilities/utilities_dtrace.h
-cd $DARLING_SECURITY/OSX/libsecurityd/lib/
-ln -s ../mig/ss_types.defs
+ln -s ../../../gen/cstemp/codesigning_dtrace.h --target-directory="OSX/libsecurity_codesigning/lib/"
+ln -s ../../../libsecurity_smime/lib/SecAsn1Item.h --target-directory="OSX/libsecurity_smime/lib/"
+ln -s ../../utilities/debugging.h --target-directory="OSX/libsecurity_utilities/lib/"
+ln -s ../../utilities/simulatecrash_assert.h --target-directory="OSX/libsecurity_utilities/lib/"
+ln -s ../../../gen/derived_src/security_utilities/utilities_dtrace.h --target-directory="OSX/libsecurity_utilities/lib/"
+ln -s ../mig/ss_types.defs --target-directory="OSX/libsecurityd/lib/"
 ```
