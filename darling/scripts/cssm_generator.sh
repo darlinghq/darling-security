@@ -1,6 +1,7 @@
-BUILT_PRODUCTS_DIR=$(realpath `dirname "$0"`/../..)
-PROJECT_DIR=$BUILT_PRODUCTS_DIR
-SRCROOT=$BUILT_PRODUCTS_DIR
+PROJECT_DIR="$(cd ../.. && pwd)"
+BUILT_PRODUCTS_DIR="$PROJECT_DIR/gen"
+
+SRCROOT=$PROJECT_DIR
 
 TARGET="${BUILT_PRODUCTS_DIR}/derived_src"
 CONFIG="${PROJECT_DIR}/OSX/libsecurity_cssm/lib/generator.cfg"

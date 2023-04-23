@@ -1,5 +1,5 @@
-BUILT_PRODUCTS_DIR=$(realpath `dirname "$0"`/../..)
-PROJECT_DIR=$BUILT_PRODUCTS_DIR
+PROJECT_DIR=$(cd ../.. && pwd)
+BUILT_PRODUCTS_DIR="$PROJECT_DIR/gen"
 mkdir -p $BUILT_PRODUCTS_DIR/derived_src
 
 TARGET=$BUILT_PRODUCTS_DIR/derived_src/KeySchema.cpp
