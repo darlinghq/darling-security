@@ -39,6 +39,9 @@
 #define _H_SECSTATICCODE
 
 #include <Security/CSCommon.h>
+#ifdef DARLING
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -155,7 +158,13 @@ OSStatus SecStaticCodeCreateWithPathAndAttributes(CFURLRef path, SecCSFlags flag
 	For code in bundle form, perform additional checks to verify that the bundle
 	is not structured in a way that would allow tampering, and reject any resource
 	envelope that introduces weaknesses into the signature.
-	
+	@constant kSecCSSingleThreaded
+	Perform all resource validation serially on a single thread instead of dispatching
+	work in parallel.
+	@constant kSecCSAllowNetworkAccess
+	Enables network access for certificate trust evaluation performed while validating the
+	bundle or its contents.
+
 	@param requirement On optional code requirement specifying additional conditions
 	the staticCode object must satisfy to be considered valid. If NULL, no additional
 	requirements are imposed.
@@ -178,9 +187,12 @@ CF_ENUM(uint32_t) {
 	kSecCSRestrictSymlinks = 1 << 7,
 	kSecCSRestrictToAppLike = 1 << 8,
 	kSecCSRestrictSidebandData = 1 << 9,
-    kSecCSUseSoftwareSigningCert = 1 << 10,
+	kSecCSUseSoftwareSigningCert = 1 << 10,
 	kSecCSValidatePEH = 1 << 11,
 	kSecCSSingleThreaded = 1 << 12,
+	// NOTE: These values have gaps for internal usage.
+	kSecCSAllowNetworkAccess CF_ENUM_AVAILABLE(11_3, 14_5) = 1 << 16,
+	kSecCSFastExecutableValidation CF_ENUM_AVAILABLE(11_3, 14_5) = 1 << 17,
 };
 
 OSStatus SecStaticCodeCheckValidity(SecStaticCodeRef staticCode, SecCSFlags flags,

@@ -57,9 +57,9 @@ add_macos_legacy_lib(security_utilities
 		${CMAKE_CURRENT_BINARY_DIR}/lib/mach_notifyServer.c
 	INCLUDES
 		${SECURITY_PROJECT_DIR}/OSX/libsecurity_cssm/lib
-		${SECURITY_PROJECT_DIR}/header_symlinks/iOS
-		${SECURITY_PROJECT_DIR}/header_symlinks/macOS
-		${SECURITY_PROJECT_DIR}/header_symlinks/Security
+		${SECURITY_PROJECT_DIR}/darling/include/iOS
+		${SECURITY_PROJECT_DIR}/darling/include/macOS
+		${SECURITY_PROJECT_DIR}/darling/include/Security
 		${SECURITY_PROJECT_DIR}/OSX/include
 		${SECURITY_PROJECT_DIR}
 		${SECURITY_PROJECT_DIR}/OSX/libsecurity_apple_csp/open_ssl

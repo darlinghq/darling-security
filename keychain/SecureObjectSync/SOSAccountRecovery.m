@@ -36,7 +36,6 @@
 #include "keychain/SecureObjectSync/SOSAccountTrustClassic+Expansion.h"
 
 #include "keychain/SecureObjectSync/SOSInternal.h"
-#include "SecADWrapper.h"
 
 #include "keychain/SecureObjectSync/SOSRecoveryKeyBag.h"
 #include "keychain/SecureObjectSync/SOSRingRecovery.h"
@@ -139,7 +138,7 @@ bool SOSAccountSetRecoveryKey(SOSAccount* account, CFDataRef pubData, CFErrorRef
     CFReleaseNull(rkbg);
 
     if(SOSPeerInfoHasBackupKey(account.trust.peerInfo)) {
-        SOSAccountProcessBackupRings(account, error);
+        SOSAccountProcessBackupRings(account);
     }
     account.circle_rings_retirements_need_attention = true;
     result = true;

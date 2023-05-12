@@ -8,6 +8,8 @@ add_lib_ios_shim(libtrustd
 	OUTPUT_NAME "trustd"
 	MODERN_OBJC
 	SOURCES
+		CertificateTransparency.m
+		md.m
 		nameconstraints.c
 		OTATrustUtilities.m
 		personalization.c
@@ -16,22 +18,24 @@ add_lib_ios_shim(libtrustd
 		SecCAIssuerRequest.m
 		SecCertificateServer.c
 		SecCertificateSource.c
-		SecTrustExceptionResetCount.m
 		SecOCSPCache.c
 		SecOCSPRequest.c
-		trustd_spi.c
-		SecRevocationNetworking.m
-		SecTrustStoreServer.m
 		SecOCSPResponse.c
 		SecPinningDb.m
 		SecPolicyServer.c
 		SecRevocationDb.c
+		SecRevocationNetworking.m
 		SecRevocationServer.c
-		md.m
+		SecTrustExceptionResetCount.m
 		SecTrustLoggingServer.m
-		TrustURLSessionDelegate.m
 		SecTrustServer.c
 		SecTrustStoreServer.c
+		SecTrustStoreServer.m
+		trustd_spi.c
+		trustdFileLocations.m
+		TrustURLSessionCache.m
+		TrustURLSessionDelegate.m
+
 		../../OSX/sec/Security/SecuritydXPC.c
 	DEFINITIONS
 		LIBTRUSTD=1

@@ -1,6 +1,6 @@
 project(Security)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/darling/cmake")
 
 include(security_lib)
 include(security_xcconfigs)
@@ -32,19 +32,22 @@ add_compile_definitions(
 )
 
 include_directories(
-	${SECURITY_PROJECT_DIR}/header_symlinks
-	${SECURITY_PROJECT_DIR}/header_symlinks/macOS
+	${SECURITY_PROJECT_DIR}/darling/include
+	${SECURITY_PROJECT_DIR}/darling/include/macOS
 	${SECURITY_PROJECT_DIR}
-	${SECURITY_PROJECT_DIR}/libDER
+	${SECURITY_PROJECT_DIR}/gen
 	${SECURITY_PROJECT_DIR}/OSX/libsecurity_asn1
+	${SECURITY_PROJECT_DIR}/OSX/libsecurity_keychain/lib/
 	${SECURITY_PROJECT_DIR}/OSX/sec
+	${SECURITY_PROJECT_DIR}/OSX/sec/Security
 	${SECURITY_PROJECT_DIR}/OSX/utilities
 	${SECURITY_PROJECT_DIR}/OSX
-	${SECURITY_PROJECT_DIR}/header_symlinks/Security
-	${SECURITY_PROJECT_DIR}/header_symlinks/macOS/Security
+	${SECURITY_PROJECT_DIR}/darling/src/libDER
+	${SECURITY_PROJECT_DIR}/darling/include/Security
+	${SECURITY_PROJECT_DIR}/darling/include/macOS/Security
 )
 
-add_subdirectory(libDER)
+add_subdirectory(darling/src/libDER)
 add_subdirectory(keychain)
 add_subdirectory(keychain/SecureObjectSync)
 

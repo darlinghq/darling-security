@@ -36,6 +36,11 @@
 #import <CloudKit/CloudKit.h>
 #import <CloudKit/CloudKit_Private.h>
 
+#import "keychain/categories/NSError+UsefulConstructors.h"
+#import "keychain/ckks/CKKSMirrorEntry.h"
+#import "keychain/ckks/CKKSIncomingQueueEntry.h"
+#import "keychain/ckks/CKKSOutgoingQueueEntry.h"
+
 @implementation CKKSItem
 
 - (instancetype) initWithCKRecord: (CKRecord*) record {
@@ -178,7 +183,17 @@ plaintextPCSServiceIdentifier: (NSNumber*) pcsServiceIdentifier
     _uuid = [[record recordID] recordName];
     self.parentKeyUUID = [record[SecCKRecordParentKeyRefKey] recordID].recordName;
     self.encitem = record[SecCKRecordDataKey];
-    self.wrappedkey = [[CKKSWrappedAESSIVKey alloc] initWithBase64: record[SecCKRecordWrappedKeyKey]];
+
+    // If wrapped key is nil, this is a bad record. We've seen this at least once, though, and so need to be resilient to it.
+    // Passing nil here will cause a crash, so pass all zeroes.
+    NSString* wrappedKey = record[SecCKRecordWrappedKeyKey];
+    if(wrappedKey) {
+        self.wrappedkey = [[CKKSWrappedAESSIVKey alloc] initWithBase64:wrappedKey];
+    } else {
+        ckkserror("ckksitem", record.recordID.zoneID, "Corrupt item recieved with no wrapped key");
+        self.wrappedkey = [CKKSWrappedAESSIVKey zeroedKey];
+    }
+
     self.generationCount = [record[SecCKRecordGenerationCountKey] unsignedIntegerValue];
     self.encver = [record[SecCKRecordEncryptionVersionKey] unsignedIntegerValue];
 
@@ -228,27 +243,27 @@ plaintextPCSServiceIdentifier: (NSNumber*) pcsServiceIdentifier
     // Note that since all of those things are included as authenticated data into the AES-SIV ciphertext, we could just
     // compare that. However, check 'em all.
     if(![record.recordID.recordName isEqualToString: self.uuid]) {
-        secinfo("ckksitem", "UUID does not match");
+        ckksinfo_global("ckksitem", "UUID does not match");
         return false;
     }
 
     if(![[record[SecCKRecordParentKeyRefKey] recordID].recordName isEqualToString: self.parentKeyUUID]) {
-        secinfo("ckksitem", "wrapping key reference does not match");
+        ckksinfo_global("ckksitem", "wrapping key reference does not match");
         return false;
     }
 
     if(![record[SecCKRecordGenerationCountKey] isEqual: [NSNumber numberWithInteger:self.generationCount]]) {
-        secinfo("ckksitem", "SecCKRecordGenerationCountKey does not match");
+        ckksinfo_global("ckksitem", "SecCKRecordGenerationCountKey does not match");
         return false;
     }
 
     if(![record[SecCKRecordWrappedKeyKey] isEqual: [self.wrappedkey base64WrappedKey]]) {
-        secinfo("ckksitem", "SecCKRecordWrappedKeyKey does not match");
+        ckksinfo_global("ckksitem", "SecCKRecordWrappedKeyKey does not match");
         return false;
     }
 
     if(![record[SecCKRecordDataKey] isEqual: self.encitem]) {
-        secinfo("ckksitem", "SecCKRecordDataKey does not match");
+        ckksinfo_global("ckksitem", "SecCKRecordDataKey does not match");
         return false;
     }
 
@@ -256,19 +271,19 @@ plaintextPCSServiceIdentifier: (NSNumber*) pcsServiceIdentifier
     // Why is obj-c nullable equality so difficult?
     if(!((record[SecCKRecordPCSServiceIdentifier] == nil && self.plaintextPCSServiceIdentifier == nil) ||
           [record[SecCKRecordPCSServiceIdentifier] isEqual: self.plaintextPCSServiceIdentifier])) {
-        secinfo("ckksitem", "SecCKRecordPCSServiceIdentifier does not match");
+        ckksinfo_global("ckksitem", "SecCKRecordPCSServiceIdentifier does not match");
         return false;
     }
 
     if(!((record[SecCKRecordPCSPublicKey] == nil && self.plaintextPCSPublicKey == nil) ||
           [record[SecCKRecordPCSPublicKey] isEqual: self.plaintextPCSPublicKey])) {
-        secinfo("ckksitem", "SecCKRecordPCSPublicKey does not match");
+        ckksinfo_global("ckksitem", "SecCKRecordPCSPublicKey does not match");
         return false;
     }
 
     if(!((record[SecCKRecordPCSPublicIdentity] == nil && self.plaintextPCSPublicIdentity == nil) ||
           [record[SecCKRecordPCSPublicIdentity] isEqual: self.plaintextPCSPublicIdentity])) {
-        secinfo("ckksitem", "SecCKRecordPCSPublicIdentity does not match");
+        ckksinfo_global("ckksitem", "SecCKRecordPCSPublicIdentity does not match");
         return false;
     }
 
@@ -456,6 +471,181 @@ plaintextPCSServiceIdentifier: (NSNumber*) pcsServiceIdentifier
                plaintextPCSPublicIdentity:row[@"pcsi"].asBase64DecodedData
             ];
 }
+
++ (BOOL)intransactionRecordChanged:(CKRecord*)record resync:(BOOL)resync error:(NSError**)error
+{
+    NSError* localerror = nil;
+    // Find if we knew about this record in the past
+    bool update = false;
+    CKKSMirrorEntry* ckme = [CKKSMirrorEntry tryFromDatabase:[[record recordID] recordName]
+                                                      zoneID:record.recordID.zoneID
+                                                       error:&localerror];
+
+    if(localerror) {
+        ckkserror("ckks", record.recordID.zoneID, "error loading a CKKSMirrorEntry from database: %@", localerror);
+        if(error) {
+            *error = localerror;
+        }
+        return NO;
+    }
+
+    if(resync) {
+        if(!ckme) {
+            ckkserror("ckksresync", record.recordID.zoneID, "BUG: No local item matching resynced CloudKit record: %@", record);
+        } else if(![ckme matchesCKRecord:record]) {
+            ckkserror("ckksresync", record.recordID.zoneID, "BUG: Local item doesn't match resynced CloudKit record: %@ %@", ckme, record);
+        } else {
+            ckksnotice("ckksresync", record.recordID.zoneID, "Already know about this item record, updating anyway: %@", record.recordID);
+        }
+    }
+
+    if(ckme && ckme.item && ckme.item.generationCount > [record[SecCKRecordGenerationCountKey] unsignedLongLongValue]) {
+        ckkserror("ckks", record.recordID.zoneID, "received a record from CloudKit with a bad generation count: %@ (%ld > %@)", ckme.uuid,
+                 (long) ckme.item.generationCount,
+                 record[SecCKRecordGenerationCountKey]);
+
+        if(error) {
+            *error = [NSError errorWithDomain:CKKSErrorDomain
+                                         code:CKKSErrorGenerationCountMismatch
+                                  description:[NSString stringWithFormat:@"Received a record(%@) with a bad generation count (%ld > %@)",
+                                               ckme.uuid,
+                                               (long) ckme.item.generationCount,
+                                               record[SecCKRecordGenerationCountKey]]];
+        }
+        // Abort processing this record.
+        return NO;
+    }
+
+    // If we found an old version in the database; this might be an update
+    if(ckme) {
+        if([ckme matchesCKRecord:record] && !resync) {
+            // This is almost certainly a record we uploaded; CKFetchChanges sends them back as new records
+            ckksnotice("ckks", record.recordID.zoneID, "CloudKit has told us of record we already know about for %@; skipping update", ckme.uuid);
+            return YES;
+        }
+
+        update = true;
+        // Set the CKKSMirrorEntry's fields to be whatever this record holds
+        [ckme setFromCKRecord: record];
+    } else {
+        // Have to make a new CKKSMirrorEntry
+        ckme = [[CKKSMirrorEntry alloc] initWithCKRecord:record];
+    }
+
+    bool mirrorsaved = [ckme saveToDatabase:&localerror];
+
+    if(!mirrorsaved || localerror) {
+        ckkserror("ckks", record.recordID.zoneID, "couldn't save new CKRecord to database: %@ %@", record, localerror);
+        if(error) {
+            *error = localerror;
+        }
+        return NO;
+    } else {
+        ckksinfo("ckks", record.recordID.zoneID, "CKKSMirrorEntry was created: %@", ckme);
+    }
+
+    NSError* iqeerror = nil;
+    CKKSIncomingQueueEntry* iqe = [[CKKSIncomingQueueEntry alloc] initWithCKKSItem:ckme.item
+                                                                            action:(update ? SecCKKSActionModify : SecCKKSActionAdd)
+                                                                             state:SecCKKSStateNew];
+    bool iqesaved = [iqe saveToDatabase:&iqeerror];
+    if(!iqesaved || iqeerror) {
+        ckkserror("ckks", record.recordID.zoneID, "Couldn't save modified incoming queue entry: %@", iqeerror);
+        if(error) {
+            *error = iqeerror;
+        }
+        return NO;
+    } else {
+        ckksinfo("ckks", record.recordID.zoneID, "CKKSIncomingQueueEntry was created: %@", iqe);
+    }
+
+    // A remote change has occured for this record. Delete any pending local changes; they will be overwritten.
+    NSArray<CKKSOutgoingQueueEntry*>* siblings = [CKKSOutgoingQueueEntry allWithUUID:iqe.uuid
+                                                                              states:@[SecCKKSStateNew,
+                                                                                       SecCKKSStateReencrypt,
+                                                                                       SecCKKSStateError]
+                                                                              zoneID:record.recordID.zoneID
+                                                                               error:&localerror];
+    if(!siblings || localerror) {
+        ckkserror("ckks", record.recordID.zoneID, "Couldn't load OQE sibling for %@: %@", iqe.uuid, localerror);
+    }
+
+    for(CKKSOutgoingQueueEntry* oqe in siblings) {
+        NSError* deletionError = nil;
+        [oqe deleteFromDatabase:&deletionError];
+        if(deletionError) {
+            ckkserror("ckks", record.recordID.zoneID, "Couldn't delete OQE sibling(%@) for %@: %@", oqe, iqe.uuid, deletionError);
+            if(error) {
+                *error = deletionError;
+            }
+            return NO;
+        }
+    }
+
+    return YES;
+}
+
+
++ (BOOL)intransactionRecordDeleted:(CKRecordID*)recordID resync:(BOOL)resync error:(NSError**)error
+{
+    ckksnotice("ckks", recordID.zoneID, "CloudKit notification: deleted record(%@): %@", SecCKRecordItemType, recordID);
+    NSError* iqeerror = nil;
+    CKKSMirrorEntry* ckme = [CKKSMirrorEntry tryFromDatabase:recordID.recordName
+                                                      zoneID:recordID.zoneID
+                                                       error:error];
+
+    // Deletes always succeed, not matter the generation count
+    if(ckme) {
+        NSError* localerror = nil;
+        if(![ckme deleteFromDatabase:&localerror]) {
+            if(error) {
+                *error = localerror;
+            }
+            return NO;
+        }
+
+        CKKSIncomingQueueEntry* iqe = [[CKKSIncomingQueueEntry alloc] initWithCKKSItem:ckme.item action:SecCKKSActionDelete state:SecCKKSStateNew];
+        [iqe saveToDatabase:&iqeerror];
+        if(iqeerror) {
+            ckkserror("ckks", recordID.zoneID, "Couldn't save incoming queue entry: %@", iqeerror);
+            if(error) {
+                *error = iqeerror;
+            }
+            return NO;
+        }
+
+        // Delete any pending local changes; this delete wins
+        NSError* deleteError = nil;
+        NSArray<CKKSOutgoingQueueEntry*>* siblings = [CKKSOutgoingQueueEntry allWithUUID:iqe.uuid
+                                                                                  states:@[SecCKKSStateNew,
+                                                                                           SecCKKSStateReencrypt,
+                                                                                           SecCKKSStateError]
+                                                                                  zoneID:recordID.zoneID
+                                                                                   error:&deleteError];
+        if(deleteError) {
+            ckkserror("ckks", recordID.zoneID, "Couldn't load OQE sibling for %@: %@", iqe.uuid, deleteError);
+            if(error) {
+                *error = deleteError;
+            }
+            return NO;
+        }
+
+        for(CKKSOutgoingQueueEntry* oqe in siblings) {
+            NSError* deletionError = nil;
+            [oqe deleteFromDatabase:&deletionError];
+            if(deletionError) {
+                ckkserror("ckks", recordID.zoneID, "Couldn't delete OQE sibling(%@) for %@: %@", oqe, iqe.uuid, deletionError);
+                if(error) {
+                    *error = deletionError;
+                }
+                return NO;
+            }
+        }
+    }
+    ckksinfo("ckks", recordID.zoneID, "CKKSMirrorEntry was deleted: %@ %@", recordID, ckme);
+    return YES;
+}
+
 
 @end
 

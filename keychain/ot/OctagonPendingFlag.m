@@ -21,6 +21,7 @@ NSString* OctagonPendingConditionsToString(OctagonPendingConditions cond)
     if ((self = [super init])) {
         _flag = flag;
         _fireTime = [NSDate dateWithTimeIntervalSinceNow:delay];
+        _afterOperation = nil;
         _conditions = 0;
     }
     return self;
@@ -29,10 +30,29 @@ NSString* OctagonPendingConditionsToString(OctagonPendingConditions cond)
 - (instancetype)initWithFlag:(OctagonFlag*)flag
                   conditions:(OctagonPendingConditions)conditions
 {
+    return [self initWithFlag:flag conditions:conditions delayInSeconds:0];
+}
+
+- (instancetype)initWithFlag:(OctagonFlag*)flag
+                  conditions:(OctagonPendingConditions)conditions
+              delayInSeconds:(NSTimeInterval)delay
+{
+    if ((self = [super init])) {
+        _flag = flag;
+        _fireTime = delay > 0 ? [NSDate dateWithTimeIntervalSinceNow:delay] : nil;
+        _afterOperation = nil;
+        _conditions = conditions;
+    }
+    return self;
+}
+
+- (instancetype)initWithFlag:(OctagonFlag*)flag after:(NSOperation*)op
+{
     if ((self = [super init])) {
         _flag = flag;
         _fireTime = nil;
-        _conditions = conditions;
+        _afterOperation = op;
+        _conditions = 0;
     }
     return self;
 }
@@ -40,6 +60,8 @@ NSString* OctagonPendingConditionsToString(OctagonPendingConditions cond)
 - (NSString*)description {
     if(self.fireTime) {
         return [NSString stringWithFormat:@"<OctagonPendingFlag: %@: %@>", self.flag, self.fireTime];
+    } else if(self.afterOperation) {
+        return [NSString stringWithFormat:@"<OctagonPendingFlag: %@: %@>", self.flag, self.afterOperation];
     } else {
         return [NSString stringWithFormat:@"<OctagonPendingFlag: %@: %@>", self.flag, OctagonPendingConditionsToString(self.conditions)];
     }

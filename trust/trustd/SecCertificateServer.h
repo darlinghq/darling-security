@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Apple Inc. All Rights Reserved.
+ * Copyright (c) 2017-2020 Apple Inc. All Rights Reserved.
  *
  * @APPLE_LICENSE_HEADER_START@
  *
@@ -116,6 +116,9 @@ bool SecCertificatePathVCHasWeakHash(SecCertificatePathVCRef certificatePath);
 
 bool SecCertificatePathVCHasWeakKeySize(SecCertificatePathVCRef certificatePath);
 
+CFAbsoluteTime SecCertificatePathVCGetMaximumNotBefore(SecCertificatePathVCRef certificatePath);
+CFAbsoluteTime SecCertificatePathVCGetMinimumNotAfter(SecCertificatePathVCRef certificatePath);
+
 /* Score */
 CFIndex SecCertificatePathVCScore(SecCertificatePathVCRef certificatePath,
                                 CFAbsoluteTime verifyTime);
@@ -128,7 +131,9 @@ void SecCertificatePathVCDeleteRVCs(SecCertificatePathVCRef path);
 bool SecCertificatePathVCIsRevocationDone(SecCertificatePathVCRef certificatePath);
 void SecCertificatePathVCAllocateRVCs(SecCertificatePathVCRef certificatePath, CFIndex certCount);
 CFAbsoluteTime SecCertificatePathVCGetEarliestNextUpdate(SecCertificatePathVCRef path);
+CFAbsoluteTime SecCertificatePathVCGetLatestThisUpdate(SecCertificatePathVCRef path);
 void *SecCertificatePathVCGetRVCAtIndex(SecCertificatePathVCRef certificatePath, CFIndex ix); // Returns a SecRVCRef
+bool SecCertificatePathVCRevocationCheckedAllCerts(SecCertificatePathVCRef path);
 bool SecCertificatePathVCIsRevocationRequiredForCertificateAtIndex(SecCertificatePathVCRef certificatePath,
                                                                    CFIndex ix);
 void SecCertificatePathVCSetRevocationRequiredForCertificateAtIndex(SecCertificatePathVCRef certificatePath,
@@ -164,6 +169,12 @@ SecPathCTPolicy SecCertificatePathVCRequiresCT(SecCertificatePathVCRef certifica
 void SecCertificatePathVCSetRequiresCT(SecCertificatePathVCRef certificatePath, SecPathCTPolicy requiresCT);
 CFAbsoluteTime SecCertificatePathVCIssuanceTime(SecCertificatePathVCRef certificatePath);
 void SecCertificatePathVCSetIssuanceTime(SecCertificatePathVCRef certificatePath, CFAbsoluteTime issuanceTime);
+
+/* CA Revocation Additions */
+/* Returns the index of the highest issuing CA which has matching key-based
+ * revocation additions in the given path, or kCFNotFound if none is found.
+ */
+CFIndex SecCertificatePathVCIndexOfCAWithRevocationAdditions(SecCertificatePathVCRef certificatePath);
 
 /* Allowlist */
 bool SecCertificatePathVCIsAllowlisted(SecCertificatePathVCRef certificatePath);

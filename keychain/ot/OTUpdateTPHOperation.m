@@ -18,6 +18,8 @@
 @interface OTUpdateTPHOperation ()
 @property OTOperationDependencies* deps;
 
+@property OctagonState* peerUnknownState;
+
 @property NSOperation* finishedOp;
 
 @property (nullable) OctagonFlag* retryFlag;
@@ -29,6 +31,7 @@
 
 - (instancetype)initWithDependencies:(OTOperationDependencies*)dependencies
                        intendedState:(OctagonState*)intendedState
+                    peerUnknownState:(OctagonState*)peerUnknownState
                           errorState:(OctagonState*)errorState
                            retryFlag:(OctagonFlag* _Nullable)retryFlag
 {
@@ -37,6 +40,7 @@
 
         _intendedState = intendedState;
         _nextState = errorState;
+        _peerUnknownState = peerUnknownState;
 
         _retryFlag = retryFlag;
     }
@@ -74,13 +78,7 @@
 
             if(!fatal) {
                 if(!pendingFlag) {
-                    NSTimeInterval baseDelay = SecCKKSTestsEnabled() ? 2 : 30;
-                    NSTimeInterval ckDelay = CKRetryAfterSecondsForError(self.error);
-                    NSTimeInterval cuttlefishDelay = [self.error cuttlefishRetryAfter];
-                    NSTimeInterval delay = MAX(ckDelay, cuttlefishDelay);
-                    if (delay == 0) {
-                        delay = baseDelay;
-                    }
+                    NSTimeInterval delay = [self.error overallCuttlefishRetry];
 
                     pendingFlag = [[OctagonPendingFlag alloc] initWithFlag:self.retryFlag
                                                             delayInSeconds:delay];
@@ -101,20 +99,42 @@
                                               osVersion:self.deps.deviceInformationAdapter.osVersion
                                           policyVersion:nil
                                           policySecrets:nil
-                                                  reply:^(TrustedPeersHelperPeerState* peerState, NSError* error) {
+                              syncUserControllableViews:nil
+                                                  reply:^(TrustedPeersHelperPeerState* peerState, TPSyncingPolicy* syncingPolicy, NSError* error) {
             STRONGIFY(self);
             if(error || !peerState) {
                 secerror("octagon: update errored: %@", error);
                 self.error = error;
 
-                // On an error, for now, go back to the intended state
-                // <rdar://problem/50190005> Octagon: handle lock state errors in update()
-                self.nextState = self.intendedState;
+                if ([error isCuttlefishError:CuttlefishErrorUpdateTrustPeerNotFound]) {
+                    secnotice("octagon-ckks", "Cuttlefish reports we no longer exist.");
+                    self.nextState = self.peerUnknownState;
+                } else {
+                    // On an error, for now, go back to the intended state
+                    // <rdar://problem/50190005> Octagon: handle lock state errors in update()
+                    self.nextState = self.intendedState;
+                }
                 [self runBeforeGroupFinished:self.finishedOp];
                 return;
             }
 
-            secnotice("octagon", "update complete: %@", peerState);
+            secnotice("octagon", "update complete: %@, %@", peerState, syncingPolicy);
+
+            NSError* localError = nil;
+            BOOL persisted = [self.deps.stateHolder persistAccountChanges:^OTAccountMetadataClassC * _Nonnull(OTAccountMetadataClassC * _Nonnull metadata) {
+                [metadata setTPSyncingPolicy:syncingPolicy];
+                return metadata;
+            } error:&localError];
+            if(!persisted || localError) {
+                secerror("octagon: Unable to save new syncing state: %@", localError);
+
+            } else {
+                // After an update(), we're sure that we have a fresh policy
+                BOOL viewSetChanged = [self.deps.viewManager setCurrentSyncingPolicy:syncingPolicy policyIsFresh:YES];
+                if(viewSetChanged) {
+                    [self.deps.flagHandler handleFlag:OctagonFlagCKKSViewSetChanged];
+                }
+            }
 
             if(peerState.identityIsPreapproved) {
                 secnotice("octagon-sos", "Self peer is now preapproved!");
@@ -130,14 +150,17 @@
                 [self.deps.flagHandler handleFlag:OctagonFlagFetchAuthKitMachineIDList];
             }
 
-            if(peerState.peerStatus & TPPeerStatusExcluded) {
+            if (peerState.peerStatus & TPPeerStatusExcluded) {
                 secnotice("octagon", "Self peer (%@) is excluded; moving to untrusted", peerState.peerID);
                 self.nextState = OctagonStateBecomeUntrusted;
-
             } else if(peerState.peerStatus & TPPeerStatusUnknown) {
-                secnotice("octagon", "Self peer (%@) is unknown; moving to untrusted", peerState.peerID);
-                self.nextState = OctagonStateBecomeUntrusted;
-
+                if (peerState.identityIsPreapproved) {
+                    secnotice("octagon", "Self peer (%@) is excluded but is preapproved, moving to sosuprade", peerState.peerID);
+                    self.nextState = OctagonStateAttemptSOSUpgrade;
+                } else {
+                    secnotice("octagon", "Self peer (%@) is unknown; moving to '%@''", peerState.peerID, self.peerUnknownState);
+                    self.nextState = self.peerUnknownState;
+                }
             } else {
                 self.nextState = self.intendedState;
             }

@@ -180,6 +180,10 @@
     [self.account ghostBustInfo:complete];
 }
 
+- (void)iCloudIdentityStatus: (void (^)(NSData *json, NSError *error))complete {
+    [self.account iCloudIdentityStatus: complete];
+}
+
 - (void)rpcTriggerBackup:(NSArray<NSString *>* _Nullable)backupPeers complete:(void (^)(NSError *error))complete
 {
     [self.account rpcTriggerBackup:backupPeers complete:complete];
@@ -189,14 +193,23 @@
     [self.account rpcTriggerRingUpdate:complete];
 }
 
+- (void)iCloudIdentityStatus_internal:(void (^)(NSDictionary *, NSError *))complete {
+    [self.account iCloudIdentityStatus_internal:complete];
+}
+
+- (void)removeV0Peers:(void (^)(bool, NSError *))reply { 
+    [self.account removeV0Peers:reply];
+}
+
+
+
 @end
 
 @implementation SOSClientRemote
 
 - (instancetype)initSOSConnectionWithConnection:(NSXPCConnection *)connection account:(SOSAccount *)account
 {
-    self = [super initSOSClientWithAccount:account];
-    if (self) {
+    if ((self = [super initSOSClientWithAccount:account])) {
         self.connection = connection;
     }
     return self;

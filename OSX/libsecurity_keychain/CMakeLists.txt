@@ -25,6 +25,7 @@ add_macos_legacy_lib(security_keychain
 		lib/KCUtilities.cpp
 		lib/Keychains.cpp
 		lib/KeyItem.cpp
+		lib/LegacyAPICounts.m
 		lib/Password.cpp
 		lib/Policies.cpp
 		lib/PolicyCursor.cpp
@@ -33,7 +34,6 @@ add_macos_legacy_lib(security_keychain
 		lib/SecACL.cpp
 		lib/SecBase.cpp
 		lib/SecCertificate.cpp
-		lib/SecCertificateBundle.cpp
 		lib/SecCFTypes.cpp
 		lib/SecExport.cpp
 		lib/SecExternalRep.cpp
@@ -52,7 +52,6 @@ add_macos_legacy_lib(security_keychain
 		lib/SecItemConstants.c
 		lib/SecKey.cpp
 		lib/SecKeychain.cpp
-		lib/SecKeychainAddIToolsPassword.cpp
 		lib/SecKeychainItem.cpp
 		lib/SecKeychainItemExtendedAttributes.cpp
 		lib/SecKeychainSearch.cpp

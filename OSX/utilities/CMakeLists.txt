@@ -18,8 +18,8 @@ add_security_library(utilities
 		der_dictionary.c
 		der_null.c
 		der_number.c
-		der_plist_internal.c
 		der_plist.c
+		der_plist_internal.c
 		der_set.c
 		der_string.c
 		fileIo.c
@@ -27,9 +27,7 @@ add_security_library(utilities
 		iOSforOSX-SecAttr.c
 		iOSforOSX-SecRandom.c
 		NSURL+SOSPlistStore.m
-		sec_action.c
 		SecABC.m
-		SecADWrapper.c
 		SecAKSWrappers.c
 		SecAppleAnchor.c
 		SecAutorelease.m
@@ -43,9 +41,12 @@ add_security_library(utilities
 		SecNSAdditions.m
 		SecPLWrappers.m
 		SecSCTUtils.c
+		# SecTapToRadar.m
 		SecTrace.c
 		SecXPCError.c
 		SecXPCHelper.m
+		SecXPCUtils.m
+		sec_action.c
 		simulate_crash.m
 
 		$<TARGET_OBJECTS:utilities_x86_64>

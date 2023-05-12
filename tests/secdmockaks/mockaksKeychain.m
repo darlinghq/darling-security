@@ -31,6 +31,7 @@
 #include "OSX/sec/Security/SecItemShim.h"
 #import "server_security_helpers.h"
 #import "spi.h"
+#import "utilities/SecAKSWrappers.h"
 #import <utilities/SecCFWrappers.h>
 #import <utilities/SecFileLocations.h>
 #import "utilities/der_plist.h"
@@ -44,6 +45,10 @@
 #endif
 #import <sqlite3.h>
 #import "mockaks.h"
+
+#import <TargetConditionals.h>
+
+#import <LocalAuthentication/LocalAuthentication.h>
 
 #import "secdmock_db_version_10_5.h"
 #import "secdmock_db_version_11_1.h"
@@ -363,7 +368,8 @@
 
 - (void)testCreateSampleDatabase
 {
-#if USE_KEYSTORE
+    // The keychain code only does the right thing with generation count if TARGET_HAS_KEYSTORE
+#if TARGET_HAS_KEYSTORE
     id mock = OCMClassMock([SecMockAKS class]);
     OCMStub([mock useGenerationCount]).andReturn(true);
 #endif
@@ -383,16 +389,22 @@
     */
 
     [self findManyItems:50];
+
+#if TARGET_HAS_KEYSTORE
+    [mock stopMocking];
+#endif
 }
 
 - (void)testTestAKSGenerationCount
 {
-#if USE_KEYSTORE
+#if TARGET_HAS_KEYSTORE
     id mock = OCMClassMock([SecMockAKS class]);
     OCMStub([mock useGenerationCount]).andReturn(true);
 
     [self createManyItems];
     [self findManyItems:50];
+
+    [mock stopMocking];
 #endif
 }
 
@@ -403,7 +415,7 @@
     unsigned n = 0;
 
     // We need a fresh directory to plop down our SQLite data
-    SetCustomHomeURLString((__bridge CFStringRef)[self createKeychainDirectoryWithSubPath:@"loadManualDB"]);
+    SecSetCustomHomeURLString((__bridge CFStringRef)[self createKeychainDirectoryWithSubPath:@"loadManualDB"]);
     NSString* path = CFBridgingRelease(__SecKeychainCopyPath());
     // On macOS the full path gets created, on iOS not (yet?)
     [self createKeychainDirectoryWithSubPath:@"loadManualDB/Library/Keychains"];
@@ -694,7 +706,7 @@
     XCTAssertEqual(SecItemCopyMatching((__bridge CFDictionaryRef)query, &output), errSecSuccess, "Found key in keychain");
     XCTAssertNotNil((__bridge id)output, "got output from SICM");
     XCTAssertEqual(CFGetTypeID(output), CFDictionaryGetTypeID(), "output is a dictionary");
-    XCTAssertEqual(CFDictionaryGetValue(output, (id)kSecAttrKeyType), (__bridge CFNumberRef)[NSNumber numberWithUnsignedInt:0x80000001L], "keytype is unchanged");
+    XCTAssertEqualObjects((__bridge NSNumber*)CFDictionaryGetValue(output, (id)kSecAttrKeyType), [NSNumber numberWithUnsignedInt:0x80000001L], "keytype is unchanged");
 }
 
 - (NSData *)objectToDER:(NSDictionary *)dict
@@ -717,7 +729,7 @@
 }
 
 #if !TARGET_OS_WATCH
-/* this should be enabled for watch too, but that cause a crash in the mock aks layer */
+/* this should be enabled for watch too, but that causes a crash in the mock aks layer */
 
 - (void)testUpgradeWithBadACLKey
 {
@@ -782,6 +794,7 @@
             CFReleaseNull(localError);
             return true;
         });
+        SecKeychainDbForceClose();
         SecKeychainDbReset(NULL);
 
         XCTAssertEqual(SecItemCopyMatching((__bridge CFDictionaryRef)query, NULL), errSecItemNotFound, "should successfully get item");
@@ -835,21 +848,30 @@
 
             NSMutableData *mutatedData = [data mutableCopy];
 
-            if (counter < mutatedData.length) {
+            // This used to loop over all (~850!) bytes of the data but that's too slow. We now do first 50, last 50 and 20 random bytes
+            if (counter < 50) {
                 mutatedDatabase = true;
                 ((uint8_t *)[mutatedData mutableBytes])[counter] = 'X';
-                counter++;
+                ++counter;
+            } else if (counter < 70) {
+                mutatedDatabase = true;
+                size_t idx = 50 + arc4random_uniform((uint32_t)(mutatedData.length - 100));
+                ((uint8_t *)[mutatedData mutableBytes])[idx] = 'X';
+                ++counter;
+            } else if (counter < 120) {
+                mutatedDatabase = true;
+                size_t idx = mutatedData.length - (counter - 70 - 1);
+                ((uint8_t *)[mutatedData mutableBytes])[idx] = 'X';
+                ++counter;
             } else {
                 counter = 0;
             }
-
 
             NSString *mutateString = [NSString stringWithFormat:@"UPDATE genp SET data=x'%@'",
                                       [mutatedData hexString]];
 
             ok &= SecDbPrepare(dbt, (__bridge CFStringRef)mutateString, &localError2, ^(sqlite3_stmt *stmt) {
-                ok = SecDbStep(dbt, stmt, NULL, ^(bool *stop) {
-                });
+                ok = SecDbStep(dbt, stmt, NULL, NULL);
             });
             XCTAssertTrue(ok, "corruption should be successful: %@", localError2);
             CFReleaseNull(localError2);
@@ -858,6 +880,7 @@
         });
 
         // force it to reload
+        SecKeychainDbForceClose();
         SecKeychainDbReset(NULL);
 
         //dont care about result, we might have done a good number on this item
@@ -907,7 +930,99 @@
     XCTAssertEqual(SecItemCopyMatching((__bridge CFDictionaryRef)query, NULL), errSecSuccess, "should successfully get item");
 }
 
+// This test fails before rdar://problem/60028419 because the keystore fails to check for errSecInteractionNotAllowed,
+// tries to recreate the "broken" metadata key and if the keychain unlocks at the exact right moment succeeds and causes
+// data loss.
+- (void)testMetadataKeyRaceConditionFixed
+{
+    NSMutableDictionary* query = [@{
+        (id)kSecClass : (id)kSecClassGenericPassword,
+        (id)kSecAttrAccount : @"TestAccount-0",
+        (id)kSecAttrService : @"TestService",
+        (id)kSecValueData : [@"data" dataUsingEncoding:NSUTF8StringEncoding],
+        (id)kSecUseDataProtectionKeychain : @(YES),
+        (id)kSecAttrAccessible : (id)kSecAttrAccessibleWhenUnlocked,
+    } mutableCopy];
 
+    // Create item 1
+    XCTAssertEqual(SecItemAdd((__bridge CFDictionaryRef)query, NULL), errSecSuccess);
+
+    // Drop metadata keys
+    SecKeychainDbForceClose();
+    SecKeychainDbReset(NULL);
+    [SecMockAKS setOperationsUntilUnlock:1];    // The first call is the metadata key unwrap to allow encrypting the item
+    [SecMockAKS lockClassA];
+
+    query[(id)kSecAttrAccount] = @"TestAcount-1";
+    XCTAssertEqual(SecItemAdd((__bridge CFDictionaryRef)query, NULL), errSecInteractionNotAllowed);
+
+    query[(id)kSecAttrAccount] = @"TestAccount-0";
+    query[(id)kSecValueData] = nil;
+    XCTAssertEqual(SecItemCopyMatching((__bridge CFDictionaryRef)query, NULL), errSecSuccess);
+
+    [SecMockAKS setOperationsUntilUnlock:-1];
+}
+
+// A test for if LAContext can reasonably be used
+// Note that this test can currently _only_ run on iOS in the simulator; on the actual platforms it tries to access
+// real AKS/biometrics, which fails in automation environments.
+#if TARGET_OS_OSX || TARGET_OS_SIMULATOR
+ - (void)testLAContext
+{
+    NSMutableDictionary* simplequery = [@{
+        (id)kSecClass : (id)kSecClassGenericPassword,
+        (id)kSecAttrAccount : @"TestAccount-0",
+        (id)kSecAttrService : @"TestService",
+        (id)kSecValueData : [@"data" dataUsingEncoding:NSUTF8StringEncoding],
+        (id)kSecUseDataProtectionKeychain : @(YES),
+        (id)kSecAttrAccessible : (id)kSecAttrAccessibleWhenUnlocked,
+    } mutableCopy];
+    XCTAssertEqual(SecItemAdd((__bridge CFDictionaryRef)simplequery, NULL), errSecSuccess, "Succeeded in adding simple item to keychain");
+
+    CFErrorRef cferror = NULL;
+    SecAccessControlRef access = SecAccessControlCreateWithFlags(nil,
+                                                                 kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+                                                                 kSecAccessControlUserPresence,
+                                                                 &cferror);
+
+    XCTAssertNil((__bridge NSError*)cferror, "Should be no error creating an access control");
+
+    LAContext* context = [[LAContext alloc] init];
+
+#if TARGET_OS_IOS || TARGET_OS_OSX
+    // This field is only usable on iPhone/macOS. It isn't stricly necessary for this test, though.
+    context.touchIDAuthenticationAllowableReuseDuration = 10;
+#endif
+
+    NSMutableDictionary* query = [@{
+        (id)kSecClass : (id)kSecClassGenericPassword,
+        (id)kSecAttrAccount : @"TestAccount-LAContext",
+        (id)kSecAttrService : @"TestService",
+        (id)kSecValueData : [@"data" dataUsingEncoding:NSUTF8StringEncoding],
+        (id)kSecUseDataProtectionKeychain : @(YES),
+        (id)kSecAttrAccessControl : (__bridge id)access,
+        (id)kSecUseAuthenticationContext : context,
+    } mutableCopy];
+
+    XCTAssertEqual(SecItemAdd((__bridge CFDictionaryRef)query, NULL), errSecSuccess, "Succeeded in adding LA-protected item to keychain");
+
+    NSMutableDictionary* findquery = [@{
+        (id)kSecClass : (id)kSecClassGenericPassword,
+        (id)kSecAttrAccount : @"TestAccount-LAContext",
+        (id)kSecAttrService : @"TestService",
+        (id)kSecUseDataProtectionKeychain : @(YES),
+        (id)kSecUseAuthenticationContext : context,
+        (id)kSecReturnAttributes: @YES,
+        (id)kSecReturnData: @YES,
+    } mutableCopy];
+
+    CFTypeRef output = NULL;
+    XCTAssertEqual(SecItemCopyMatching((__bridge CFDictionaryRef)findquery, &output), errSecSuccess, "Found key in keychain");
+
+    XCTAssertNotNil((__bridge id)output, "Should have received something back from keychain");
+    CFReleaseNull(output);
+}
+#endif // TARGET_OS_OSX || TARGET_OS_SIMULATOR
 
 #endif /* USE_KEYSTORE */
 

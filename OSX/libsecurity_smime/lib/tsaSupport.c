@@ -31,7 +31,11 @@
 */
 
 #include <security_utilities/debugging.h>
-#include <CoreServices/MacErrors.h>
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
+#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 
 #include <Security/SecCmsDecoder.h>
 #include <Security/SecCmsMessage.h>
@@ -1158,9 +1162,10 @@ static OSStatus impExpImportCertUnCommon(
 	}
 
 xit:
-    if (certRef)
+    if (certRef) {
         CFRelease(certRef);
-	return status;
+    }
+    return status;
 }
 
 static void saveTSACertificates(CSSM_DATA **signingCerts, CFMutableArrayRef	outArray)

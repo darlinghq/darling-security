@@ -37,7 +37,6 @@
 #include <mach/mach_error.h>
 #include <security_utilities/ccaudit.h>
 #include <security_utilities/casts.h>
-#include "pcscmonitor.h"
 
 #include "agentquery.h"
 
@@ -301,13 +300,12 @@ void Server::notifyNoSenders(Port port, mach_port_mscount_t)
 // the signal handler environment.
 //
 kern_return_t self_server_handleSignal(mach_port_t sport,
-	mach_port_t taskPort, int sig)
+	audit_token_t auditToken, int sig)
 {
     try {
         secnotice("SecServer", "signal handled %d", sig);
-        if (taskPort != mach_task_self()) {
+        if (audit_token_to_pid(auditToken) != getpid()) {
             Syslog::error("handleSignal: received from someone other than myself");
-            mach_port_deallocate(mach_task_self(), taskPort);
 			return KERN_SUCCESS;
 		}
 		switch (sig) {
@@ -332,11 +330,8 @@ kern_return_t self_server_handleSignal(mach_port_t sport,
 #endif //DEBUGDUMP
 
 		case SIGUSR2:
-			{
-				extern PCSCMonitor *gPCSC;
-				gPCSC->startSoftTokens();
-				break;
-			}
+            fprintf(stderr, "securityd ignoring SIGUSR2 received");
+            break;
 
 		default:
 			assert(false);
@@ -344,18 +339,16 @@ kern_return_t self_server_handleSignal(mach_port_t sport,
     } catch(...) {
 		secnotice("SecServer", "exception handling a signal (ignored)");
 	}
-    mach_port_deallocate(mach_task_self(), taskPort);
     return KERN_SUCCESS;
 }
 
 
 kern_return_t self_server_handleSession(mach_port_t sport,
-	mach_port_t taskPort, uint32_t event, uint64_t ident)
+	audit_token_t auditToken, uint32_t event, uint64_t ident)
 {
     try {
-        if (taskPort != mach_task_self()) {
+        if (audit_token_to_pid(auditToken) != getpid()) {
             Syslog::error("handleSession: received from someone other than myself");
-            mach_port_deallocate(mach_task_self(), taskPort);
 			return KERN_SUCCESS;
 		}
 		if (event == AUE_SESSION_END)
@@ -363,7 +356,6 @@ kern_return_t self_server_handleSession(mach_port_t sport,
     } catch(...) {
 		secnotice("SecServer", "exception handling a signal (ignored)");
 	}
-    mach_port_deallocate(mach_task_self(), taskPort);
     return KERN_SUCCESS;
 }
 
@@ -511,6 +503,8 @@ bool Server::inDarkWake()
 //
 void Server::loadCssm(bool mdsIsInstalled)
 {
+    try {
+
 	if (!mCssm->isActive()) {
 		StLock<Mutex> _(*this);
         xpc_transaction_begin();
@@ -527,6 +521,23 @@ void Server::loadCssm(bool mdsIsInstalled)
 		}
         xpc_transaction_end();
 	}
+    } catch (const UnixError& err) {
+        secerror("load cssm failed: %s", err.what());
+        if (err.unixError() == ENOSPC) {
+            _exit(1);
+        } else {
+            abort();
+        }
+    } catch (const MacOSError& err) {
+        secerror("load cssm failed: %s", err.what());
+        abort();
+    } catch (const CommonError& err) {
+        secerror("load cssm failed: %d/%d", (int)err.osStatus(), err.unixError());
+        abort();
+    } catch (const std::exception& err) {
+        secerror("load cssm failed: %s", err.what());
+        abort();
+    }
 }
 
 

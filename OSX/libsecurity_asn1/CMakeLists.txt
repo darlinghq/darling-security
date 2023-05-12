@@ -27,8 +27,6 @@ add_security_library(security_asn1
 		lib/secport.c
 		lib/X509Templates.c
 	INCLUDES
-		${SECURITY_PROJECT_DIR}/header_symlinks/iOS
-
 		# not listed in xcode builds files, but necessary
 		${CMAKE_CURRENT_SOURCE_DIR}/../include
 )

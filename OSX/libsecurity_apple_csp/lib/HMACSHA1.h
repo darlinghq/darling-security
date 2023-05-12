@@ -38,9 +38,15 @@ extern "C" {
 /* This function create an HMACSHA1 digest of kHMACSHA1DigestSizestSize bytes
  * and outputs it to resultPtr.  See RFC 2104 for details.  */
 void
+#ifdef DARLING
+hmacsha1 (const uint8_t *keyPtr, size_t keyLen,
+		  const uint8_t *textPtr, size_t textLen,
+		  uint8_t *resultPtr);
+#else
 hmacsha1 (const void *keyPtr, uint32 keyLen,
 		  const void *textPtr, uint32 textLen,
 		  void *resultPtr);
+#endif
 		  
 #ifdef	__cplusplus
 }

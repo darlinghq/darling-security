@@ -34,6 +34,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+@class CKKSPeerProviderState;
+
 @interface CKKSKey : CKKSCKRecordHolder
 @property CKKSKeychainBackedKey* keycore;
 
@@ -46,6 +48,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (copy) CKKSProcessedState* state;
 @property bool currentkey;
+
+@property (readonly) NSString* zoneName;
 
 // Fetches and attempts to unwrap this key for use
 + (instancetype _Nullable)loadKeyWithUUID:(NSString*)uuid zoneID:(CKRecordZoneID*)zoneID error:(NSError* __autoreleasing*)error;
@@ -78,7 +82,19 @@ NS_ASSUME_NONNULL_BEGIN
                                     error:(NSError* __autoreleasing*)error;
 
 
+// Returns false if this key is not a valid TLK for any reason.
+- (BOOL)validTLK:(NSError**)error;
+
+// First, attempts to load the key from the keychain. If it isn't present, this will
+// load the TLKShares for this key from the database, then attempts to use them to unwrap this key.
+// If no TLKShares are trusted, returns an error.
+- (BOOL)tlkMaterialPresentOrRecoverableViaTLKShare:(NSArray<CKKSPeerProviderState*>*)trustStates
+                                             error:(NSError**)error;
+
 + (instancetype _Nullable)fromDatabase:(NSString*)uuid zoneID:(CKRecordZoneID*)zoneID error:(NSError* __autoreleasing*)error;
++ (instancetype _Nullable)fromDatabaseAnyState:(NSString*)uuid
+                                        zoneID:(CKRecordZoneID*)zoneID
+                                         error:(NSError* __autoreleasing*)error;
 + (instancetype _Nullable)tryFromDatabase:(NSString*)uuid zoneID:(CKRecordZoneID*)zoneID error:(NSError* __autoreleasing*)error;
 + (instancetype _Nullable)tryFromDatabaseAnyState:(NSString*)uuid zoneID:(CKRecordZoneID*)zoneID error:(NSError* __autoreleasing*)error;
 
@@ -132,10 +148,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (CKKSKey* _Nullable)topKeyInAnyState:(NSError* __autoreleasing*)error;
 
 // Attempts checks if the AES key is already loaded, or attempts to load it from the keychain. Returns false if it fails.
-- (CKKSAESSIVKey*)ensureKeyLoaded:(NSError* __autoreleasing*)error;
+- (CKKSAESSIVKey* _Nullable)ensureKeyLoaded:(NSError* __autoreleasing*)error;
 
 // Attempts to unwrap this key via unwrapping its wrapping keys via the key hierarchy.
-- (CKKSAESSIVKey*)unwrapViaKeyHierarchy:(NSError* __autoreleasing*)error;
+- (CKKSAESSIVKey* _Nullable)unwrapViaKeyHierarchy:(NSError* __autoreleasing*)error;
 
 // On a self-wrapped key, determine if this AES-SIV key is the self-wrapped key.
 // If it is, save the key as this CKKSKey's unwrapped key.
@@ -156,7 +172,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSData* _Nullable)serializeAsProtobuf:(NSError* __autoreleasing*)error;
 + (CKKSKey* _Nullable)loadFromProtobuf:(NSData*)data error:(NSError* __autoreleasing*)error;
 
++ (NSNumber* _Nullable)counts:(CKRecordZoneID*)zoneID error:(NSError* __autoreleasing*)error;
 + (NSDictionary<NSString*, NSNumber*>*)countsByClass:(CKRecordZoneID*)zoneID error:(NSError* __autoreleasing*)error;
+
++ (BOOL)intransactionRecordChanged:(CKRecord*)record
+                            resync:(BOOL)resync
+                       flagHandler:(id<OctagonStateFlagHandler>)flagHandler
+                             error:(NSError**)error;
 @end
 
 NS_ASSUME_NONNULL_END

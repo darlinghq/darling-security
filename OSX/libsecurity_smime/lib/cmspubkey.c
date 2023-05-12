@@ -47,7 +47,11 @@
 #include <Security/SecKeyPriv.h>
 #include <Security/SecItemPriv.h>
 #include <Security/Security.h>
-#include <CoreServices/MacErrors.h>
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
+#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 #include <Security/SecCmsBase.h>
 #include <Security/secasn1t.h>
 #include <security_asn1/plarenas.h>

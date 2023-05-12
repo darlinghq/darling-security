@@ -26,9 +26,9 @@
 #define SFAnalytics_h
 
 #import <Foundation/Foundation.h>
-#import "SFAnalyticsSampler.h"
-#import "SFAnalyticsMultiSampler.h"
-#import "SFAnalyticsActivityTracker.h"
+#import <Security/SFAnalyticsSampler.h>
+#import <Security/SFAnalyticsMultiSampler.h>
+#import <Security/SFAnalyticsActivityTracker.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -66,9 +66,17 @@ typedef NS_ENUM(uint32_t, SFAnalyticsTimestampBucket) {
 + (instancetype _Nullable)logger;
 
 + (NSInteger)fuzzyDaysSinceDate:(NSDate*)date;
+
+// Rounds to the nearest 5 (unless 1 or 2, that rounds to 5 as well)
++ (NSInteger)fuzzyInteger:(NSInteger)num;
++ (NSNumber*)fuzzyNumber:(NSNumber*)num;
+
 + (void)addOSVersionToEvent:(NSMutableDictionary*)event;
 // Help for the subclass to pick a prefered location
 + (NSString *)defaultAnalyticsDatabasePath:(NSString *)basename;
+
++ (NSString *)defaultProtectedAnalyticsDatabasePath:(NSString *)basename uuid:(NSUUID * __nullable)userUuid;
++ (NSString *)defaultProtectedAnalyticsDatabasePath:(NSString *)basename; // uses current user UUID for path
 
 - (void)dailyCoreAnalyticsMetrics:(NSString *)eventName;
 

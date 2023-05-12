@@ -38,8 +38,16 @@ typedef struct octagon_signpost_s {
 } OctagonSignpost;
 
 #define OctagonSignpostNamePerformEscrowRecovery                        "OctagonSignpostNamePerformEscrowRecovery"
+#define OctagonSignpostNamePerformSilentEscrowRecovery                  "OctagonSignpostNamePerformSilentEscrowRecovery"
 #define OctagonSignpostNamePerformRecoveryFromSBD                       "OctagonSignpostNamePerformRecoveryFromSBD"
-#define OctagonSignpostNamePerformBottleRecovery                        "OctagonSignpostNamePerformBottleRecovery"
+
+#define OctagonSignpostNameRecoverWithCDPContext                        "OctagonSignpostNameRecoverWithCDPContext"
+#define OctagonSignpostNameRecoverSilentWithCDPContext                  "OctagonSignpostNameRecoverSilentWithCDPContext"
+#define OctagonSignpostNamePerformOctagonJoinForSilent                  "OctagonSignpostNamePerformOctagonJoinForSilent"
+#define OctagonSignpostNamePerformOctagonJoinForNonSilent               "OctagonSignpostNamePerformOctagonJoinForNonSilent"
+
+
+#define OctagonSignpostNamePerformOctagonJoin                           "OctagonSignpostNamePerformOctagonJoin"
 #define OctagonSignpostNamePerformResetAndEstablishAfterFailedBottle    "OctagonSignpostNamePerformResetAndEstablishAfterFailedBottle"
 #define OctagonSignpostNameFetchEgoPeer                                 "OctagonSignpostNameFetchEgoPeer"
 #define OctagonSignpostNameEstablish                                    "OctagonSignpostNameEstablish"
@@ -61,11 +69,13 @@ typedef struct octagon_signpost_s {
 #define OctagonSignpostNameRequestToJoinCircle                          "OctagonSignpostNameRequestToJoinCircle"
 #define OctagonSignpostNameAccountUserKeyAvailable                      "OctagonSignpostNameAccountUserKeyAvailable"
 #define OctagonSignpostNameFindOptimalBottleIDsWithContextData          "OctagonSignpostNameFindOptimalBottleIDsWithContextData"
+#define OctagonSignpostNameFetchEscrowRecords                           "OctagonSignpostNameFetchEscrowRecords"
 #define OctagonSignpostNameFetchEscrowContents                          "OctagonSignpostNameFetchEscrowContents"
 #define OctagonSignpostNameSetNewRecoveryKeyWithData                    "OctagonSignpostNameSetNewRecoveryKeyWithData"
 #define OctagonSignpostNameRecoverOctagonUsingData                      "OctagonSignpostNameRecoverOctagonUsingData"
 #define OctagonSignpostNamePerformedCDPStateMachineRun                  "OctagonSignpostNamePerformedCDPStateMachineRun"
 #define OctagonSignpostNameWaitForOctagonUpgrade                        "OctagonSignpostNameWaitForOctagonUpgrade"
+#define OctagonSignpostNameGetAccountInfo                               "OctagonSignpostNameGetAccountInfo"
 
 #define SOSSignpostNameAssertUserCredentialsAndOptionalDSID     "SOSSignpostNameAssertUserCredentialsAndOptionalDSID"
 #define SOSSignpostNameSOSCCTryUserCredentials                  "SOSSignpostNameSOSCCTryUserCredentials"
@@ -171,7 +181,7 @@ extern uint64_t _OctagonSignpostGetNanoseconds(OctagonSignpost signpost);
 
 #define _OctagonSwizzle1(x, a, ...) a, x, ##__VA_ARGS__
 #define _OctagonSwizzle2(x, y, a, ...) a, x, y, ##__VA_ARGS__
-#endif
+#endif // DARLING
 
 NS_ASSUME_NONNULL_END
 

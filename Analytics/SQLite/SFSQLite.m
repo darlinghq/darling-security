@@ -28,6 +28,7 @@
 #include <sqlite3.h>
 #include <CommonCrypto/CommonDigest.h>
 #import "utilities/debugging.h"
+#import "utilities/simulatecrash_assert.h"
 #include <os/transaction_private.h>
 
 #define kSFSQLiteBusyTimeout       (5*60*1000)
@@ -300,7 +301,6 @@ allDone:
 */
 - (void)attemptProperDatabasePermissions
 {
-#if TARGET_OS_IPHONE
     NSFileManager* fm = [NSFileManager defaultManager];
     [fm setAttributes:@{NSFilePosixPermissions : [NSNumber numberWithShort:0666]}
          ofItemAtPath:_path
@@ -311,7 +311,6 @@ allDone:
     [fm setAttributes:@{NSFilePosixPermissions : [NSNumber numberWithShort:0666]}
          ofItemAtPath:[NSString stringWithFormat:@"%@-shm",_path]
                 error:nil];
-#endif
 }
 
 - (BOOL)openWithError:(NSError **)error {
@@ -340,7 +339,12 @@ allDone:
 #endif
     int rc = sqlite3_open_v2([arcSafePath fileSystemRepresentation], &_db, flags, NULL);
     if (rc != SQLITE_OK) {
-        localError = [NSError errorWithDomain:NSCocoaErrorDomain code:rc userInfo:@{NSLocalizedDescriptionKey : [NSString stringWithFormat:@"Error opening db at %@, rc=%d(0x%x)", _path, rc, rc]}];
+        int reportedErrno = sqlite3_system_errno(_db);
+
+        localError = [NSError errorWithDomain:NSCocoaErrorDomain code:rc userInfo:@{
+            NSLocalizedDescriptionKey : [NSString stringWithFormat:@"Error opening db at %@, rc=%d(0x%x), errno=%d(0x%x)",
+                                         _path, rc, rc, reportedErrno, reportedErrno],
+        }];
         goto done;
     }
     
@@ -911,7 +915,7 @@ done:
 - (NSString *)_tableNameForClass:(Class)objectClass {
     NSString *className = [objectClass SFSQLiteClassName];
     if (![className hasPrefix:_objectClassPrefix]) {
-        secerror("sfsqlite: %@", [NSString stringWithFormat:@"Object class \"%@\" does not have prefix \"%@\"", className, _objectClassPrefix]);
+        secerror("sfsqlite: Object class \"%@\" does not have prefix \"%@\"", className, _objectClassPrefix);
         return nil;
     }
     return [className substringFromIndex:_objectClassPrefix.length];

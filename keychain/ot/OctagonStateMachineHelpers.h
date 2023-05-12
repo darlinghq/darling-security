@@ -25,6 +25,7 @@
 
 #import <Foundation/Foundation.h>
 #import "keychain/ckks/CKKSResultOperation.h"
+#import "keychain/ckks/CKKSGroupOperation.h"
 #import "keychain/ckks/CKKSAnalytics.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -66,6 +67,17 @@ extern OctagonState* const OctagonStateMachineHalted;
              entering:(OctagonState*)intendedState NS_SWIFT_NAME(init(name:entering:));
 @end
 
+// Just like OctagonStateTransitionOperation, but as a Group Operation
+@interface OctagonStateTransitionGroupOperation : CKKSGroupOperation <OctagonStateTransitionOperationProtocol>
+@property OctagonState* nextState;
+@property (readonly) OctagonState* intendedState;
+
++ (instancetype)named:(NSString*)name
+            intending:(OctagonState*)intendedState
+           errorState:(OctagonState*)errorState
+  withBlockTakingSelf:(void(^)(OctagonStateTransitionGroupOperation* op))block;
+@end
+
 
 @interface OctagonStateTransitionRequest<__covariant OperationType : CKKSResultOperation<OctagonStateTransitionOperationProtocol>*> : NSObject
 @property (readonly) NSString* name;
@@ -80,6 +92,11 @@ extern OctagonState* const OctagonStateMachineHalted;
          serialQueue:(dispatch_queue_t)queue
              timeout:(dispatch_time_t)timeout
         transitionOp:(OperationType)transitionOp;
+@end
+
+@interface NSError (Octagon)
+- (NSTimeInterval)overallCuttlefishRetry;
+- (bool)retryableCuttlefishError;
 @end
 
 NS_ASSUME_NONNULL_END

@@ -2,8 +2,8 @@ project(libsecurity_cdsa_utilities)
 
 add_macos_legacy_lib(security_cdsa_utilities
 	SOURCES
-		../../derived_src/KeySchema.cpp
-		../../derived_src/Schema.cpp
+		../../gen/derived_src/KeySchema.cpp
+		../../gen/derived_src/Schema.cpp
 		lib/acl_any.cpp
 		lib/acl_codesigning.cpp
 		lib/acl_comment.cpp

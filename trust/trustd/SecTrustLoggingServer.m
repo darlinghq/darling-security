@@ -27,6 +27,9 @@
 #include <AssertMacros.h>
 #include "SecTrustLoggingServer.h"
 
+
+#ifdef DARLING
+
 void TrustdHealthAnalyticsLogErrorCodeForDatabase(int location, int operation, int error_type, int error_code) {
 	// a stub
 };
@@ -48,3 +51,5 @@ void TrustdHealthAnalyticsLogEvaluationCompleted() {
 void TrustdHealthAnalyticsLogSuccess(int event) {
 	// man, Apple really likes to log and analyze stuff, huh?
 };
+
+#endif

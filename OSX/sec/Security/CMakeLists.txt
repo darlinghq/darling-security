@@ -92,6 +92,11 @@ add_lib_ios_shim(SecTrustOSX
 		SecTrustStore.c
 )
 
+add_darling_object_library(SecItemShimOSX_64bit_only
+	64BIT_ONLY
+	SecItemRateLimit.m
+)
+
 add_lib_ios_shim(SecItemShimOSX
 	SOURCES
 		../../../keychain/SecureObjectSync/SOSCloudCircle.m
@@ -107,12 +112,15 @@ add_lib_ios_shim(SecItemShimOSX
 		SecItem.m
 		SecItemBackup.c
 		SecItemConstants.c
+		# SecItemRateLimit.m
 		SecKey.m
 		SecKeyAdaptors.m
 		SecKeyProxy.m
 		SecPasswordGenerate.c
 		SecRSAKey.c
 		SecuritydXPC.c
+
+		$<TARGET_OBJECTS:SecItemShimOSX_64bit_only>
 )
 
 add_lib_ios(logging

@@ -22,6 +22,8 @@
 
 @property OctagonState* stateIfListUpdates;
 
+@property OctagonState* stateIfAuthenticationError;
+
 @property (nullable) OctagonFlag* retryFlag;
 
 // Since we're making callback based async calls, use this operation trick to hold off the ending of this operation
@@ -35,6 +37,7 @@
 - (instancetype)initWithDependencies:(OTOperationDependencies*)dependencies
                        intendedState:(OctagonState*)intendedState
                     listUpdatesState:(OctagonState*)stateIfListUpdates
+            authenticationErrorState:(OctagonState*)stateIfNotAuthenticated
                           errorState:(OctagonState*)errorState
                            retryFlag:(OctagonFlag*)retryFlag
 
@@ -45,6 +48,7 @@
         _intendedState = intendedState;
         _nextState = errorState;
         _stateIfListUpdates = stateIfListUpdates;
+        _stateIfAuthenticationError = stateIfNotAuthenticated;
 
         _retryFlag = retryFlag;
     }
@@ -87,10 +91,33 @@
     }];
     [self dependOnBeforeGroupFinished:self.finishedOp];
 
+    NSError* localError = nil;
+    BOOL isAccountDemo = [self.deps.authKitAdapter accountIsDemoAccount:&localError];
+    if(localError) {
+        secerror("octagon-authkit: failed to fetch demo account flag: %@", localError);
+    }
+
     [self.deps.authKitAdapter fetchCurrentDeviceList:^(NSSet<NSString *> * _Nullable machineIDs, NSError * _Nullable error) {
         STRONGIFY(self);
-        if(!machineIDs || error) {
+
+        if (error) {
             secerror("octagon-authkit: Unable to fetch machine ID list: %@", error);
+
+            if (self.logForUpgrade) {
+                [[CKKSAnalytics logger] logRecoverableError:error
+                                                   forEvent:OctagonEventUpgradeFetchDeviceIDs
+                                             withAttributes:NULL];
+            }
+            self.error = error;
+
+            if([AKAppleIDAuthenticationErrorDomain isEqualToString:error.domain] && error.code == AKAuthenticationErrorNotPermitted) {
+                self.nextState = self.stateIfAuthenticationError;
+            }
+
+            [self runBeforeGroupFinished:self.finishedOp];
+
+        } else if (!machineIDs) {
+            secerror("octagon-authkit: empty machine id list");
             if (self.logForUpgrade) {
                 [[CKKSAnalytics logger] logRecoverableError:error
                                                    forEvent:OctagonEventUpgradeFetchDeviceIDs
@@ -103,17 +130,20 @@
             if (self.logForUpgrade) {
                 [[CKKSAnalytics logger] logSuccessForEventNamed:OctagonEventUpgradeFetchDeviceIDs];
             }
-            [self afterAuthKitFetch:machineIDs];
+            [self afterAuthKitFetch:machineIDs accountIsDemo:isAccountDemo];
         }
     }];
 }
 
-- (void)afterAuthKitFetch:(NSSet<NSString *>*)allowedMachineIDs
+- (void)afterAuthKitFetch:(NSSet<NSString *>*)allowedMachineIDs accountIsDemo:(BOOL)accountIsDemo
 {
     WEAKIFY(self);
+    BOOL honorIDMSListChanges = accountIsDemo ? NO : YES;
+
     [self.deps.cuttlefishXPCWrapper setAllowedMachineIDsWithContainer:self.deps.containerName
                                                               context:self.deps.contextID
                                                     allowedMachineIDs:allowedMachineIDs
+                                                        honorIDMSListChanges:honorIDMSListChanges
                                                                 reply:^(BOOL listDifferences, NSError * _Nullable error) {
             STRONGIFY(self);
 

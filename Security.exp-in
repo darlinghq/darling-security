@@ -332,7 +332,6 @@ SEC_EXP_CLASS(CKKSControl)
 SEC_EXP_CLASS(SecuritydXPCClient)
 
 #if __OBJC2__
-SEC_EXP_CLASS(SFSignInAnalytics)
 SEC_EXP_CLASS(SecXPCHelper)
 SEC_EXP_CLASS(OTClique)
 SEC_EXP_CLASS(OTConfigurationContext)
@@ -347,6 +346,7 @@ __OctagonSignpostLogSystem
 
 _OTCliqueStatusToString
 _OTCliqueStatusFromString
+_OTCDPStatusToString
 
 _OTCliqueCDPContextTypeNone
 _OTCliqueCDPContextTypeSignIn
@@ -355,6 +355,7 @@ _OTCliqueCDPContextTypeFinishPasscodeChange
 _OTCliqueCDPContextTypeRecoveryKeyGenerate
 _OTCliqueCDPContextTypeRecoveryKeyNew
 _OTCliqueCDPContextTypeUpdatePasscode
+_OTCliqueCDPContextTypeConfirmPasscodeCyrus
 
 _OTSetupControlProtocol
 _OTDefaultContext
@@ -364,19 +365,13 @@ _OTProtocolPiggybacking
 _OTDefaultsDomain
 _OTDefaultsOctagonEnable
 _OTTrustStatusChangeNotification
-
-_OctagonEventAttributeZoneName
-_OctagonEventAttributeFailureReason
-_OctagonEventAttributeTimeSinceLastPostedFollowUp
+_OTEscrowRecordPrefix
 
 _SecEscrowRequestHavePrecord
 _SecEscrowRequestPendingPasscode
 _SecEscrowRequestPendingCertificate
 
-_OTCKContainerName
-_CuttlefishTrustZone
 _CuttlefishErrorDomain
-_TrustedPeersHelperErrorDomain
 _CuttlefishErrorRetryAfterKey
 
 _OctagonPlatformSupportsSOS
@@ -391,6 +386,14 @@ _OctagonAuthoritativeTrustIsEnabled
 _OctagonAuthoritativeTrustSetIsEnabled
 _OctagonIsSOSFeatureEnabled
 _OctagonSetSOSFeatureEnabled
+_OctagonIsOptimizationEnabled
+_OctagonSetOptimizationEnabled
+_OctagonSetEscrowRecordFetchEnabled
+_OctagonIsEscrowRecordFetchEnabled
+_SecKVSOnCloudKitIsEnabled
+_SecKVSOnCloudKitSetOverrideIsEnabled
+_SecErrorIsNestedErrorCappingEnabled
+_SecErrorSetOverrideNestedErrorCappingIsEnabled
 
 SEC_EXP_CLASS(OTJoiningConfiguration)
 SEC_EXP_CLASS(OTControl)
@@ -399,6 +402,9 @@ SEC_EXP_CLASS(SecuritydXPCClient)
 _SecAccessGroupsGetCurrent
 _SecAccessGroupsSetCurrent
 _SecSecurityClientGet
+_SecSecurityClientRegularToAppClip
+_SecSecurityClientAppClipToRegular
+_SecSecurityClientSetApplicationIdentifier
 _securityd_create_message
 _securityd_message_with_reply_sync
 _securityd_message_no_error
@@ -414,7 +420,6 @@ __SecSetSecuritydTargetUID
 
 _SecDERItemCopyOIDDecimalRepresentation
 _SecDigestCreate
-_SecFrameworkCopyResourceURL
 _SecCopyErrorMessageString
 
 _SecFrameworkCopyIPAddressData
@@ -535,11 +540,14 @@ _AuthorizationExecuteWithPrivilegesExternalFormInternal
 _AuthorizationFree
 _AuthorizationFreeItemSet
 _AuthorizationMakeExternalForm
-_AuthorizationPreauthorizeCredentials
 _AuthorizationRightGet
 _AuthorizationRightRemove
 _AuthorizationRightSet
 _AuthorizationEnableSmartCard
+_AuthorizationCopyPreloginUserDatabase
+_AuthorizationCopyPreloginPreferencesValue
+_AuthorizationCopyRightProperties
+_AuthorizationHandlePreloginOverride
 _SessionCreate
 _SessionGetInfo
 _SessionSetDistinguishedUser
@@ -912,14 +920,10 @@ _SecDigestGetData
 _SecFDERecoveryUnwrapCRSKWithPrivKey
 _SecFDERecoveryWrapCRSKWithPubKey
 _SecGenericPasswordCreate
-_SecIdentityAddPreferenceItem
-_SecIdentityCompare
-_SecIdentityCopyFromPreferenceItem
 _SecIdentityCopyPreference
 _SecIdentityCopyPreferred
 _SecIdentityCopySystemIdentity
 _SecIdentityCreateWithCertificate
-_SecIdentityFindPreferenceItem
 _SecIdentitySearchCopyNext
 _SecIdentitySearchCreate
 _SecIdentitySearchCreateWithAttributes
@@ -928,11 +932,10 @@ _SecIdentitySearchGetTypeID
 _SecIdentitySetPreference
 _SecIdentitySetPreferred
 _SecIdentitySetSystemIdentity
-_SecIdentityUpdatePreferenceItem
 _SecInferLabelFromX509Name
 _SecItemAdd_ios
 _SecItemCopyMatching_ios
-_SecItemUpdateTokenItems_ios
+_SecItemUpdateTokenItemsForAccessGroups
 
 _SecKeyGeneratePair_ios
 
@@ -941,7 +944,6 @@ _SecItemParentCachePurge
 
 _SecItemCopyStoredCertificate
 _SecItemCreateFromAttributeDictionary_osx
-_SecItemDeleteAll
 _SecItemDelete_ios
 _SecItemExport
 _SecItemImport
@@ -949,7 +951,6 @@ _SecItemUpdate_ios
 _SecKeychainAddCallback
 _SecKeychainAddDBToKeychainList
 _SecKeychainAddGenericPassword
-_SecKeychainAddIToolsPassword
 _SecKeychainAddInternetPassword
 _SecKeychainAttemptMigrationWithMasterKey
 _SecKeychainAttributeInfoForItemID
@@ -1033,7 +1034,6 @@ _SecKeychainLogout
 _SecKeychainMDSInstall
 _SecKeychainMakeFromFullPath
 _SecKeychainOpen
-_SecKeychainOpenWithGuid
 _SecKeychainRecodeKeychain
 _SecKeychainRemoveCallback
 _SecKeychainRemoveDBFromKeychainList
@@ -1588,6 +1588,7 @@ _SecCodeCopyHost
 _SecCodeCopyGuestWithAttributes
 _SecCodeCreateWithAuditToken
 _SecCodeCreateWithPID
+_SecCodeCreateWithXPCMessage
 _SecCodeCheckValidity
 _SecCodeCheckValidityWithErrors
 _SecCodeCopyPath
@@ -1609,6 +1610,8 @@ _SecStaticCodeCheckValidityWithErrors
 _SecStaticCodeSetCallback
 _SecStaticCodeSetValidationConditions
 _SecStaticCodeCancelValidation
+_SecStaticCodeEnableOnlineNotarizationCheck
+_SecStaticCodeValidateResourceWithErrors
 _SecRequirementGetTypeID
 _SecRequirementCreateWithData
 _SecRequirementCreateWithResource
@@ -1698,6 +1701,7 @@ _kSecCodeInfoDiskRepVersionMin
 _kSecCodeInfoDiskRepVersionSDK
 _kSecCodeInfoResourceDirectory
 _kSecCodeInfoNotarizationDate
+_kSecCodeInfoSignatureVersion
 _kSecGuestAttributeCanonical
 _kSecGuestAttributeDynamicCode
 _kSecGuestAttributeDynamicCodeInfoPlist
@@ -1818,6 +1822,11 @@ _SecRequirementGetTypeID
 _SecStaticCodeCheckValidity
 _SecStaticCodeCreateWithPath
 _SecStaticCodeGetTypeID
+_SecStaticCodeSetCallback
+_SecStaticCodeSetValidationConditions
+_SecStaticCodeCancelValidation
+_SecStaticCodeEnableOnlineNotarizationCheck
+_SecStaticCodeValidateResourceWithErrors
 _kSecCFErrorArchitecture
 _kSecCFErrorGuestAttributes
 _kSecCFErrorInfoPlist
@@ -1829,6 +1838,7 @@ _kSecCFErrorResourceSideband
 _kSecCodeAttributeArchitecture
 _kSecCodeAttributeBundleVersion
 _kSecCodeAttributeSubarchitecture
+_kSecCodeDirectoryFlagTable
 _kSecCodeInfoCMS
 _kSecCodeInfoCMSDigest
 _kSecCodeInfoCMSDigestHashType
@@ -1855,6 +1865,7 @@ _kSecCodeInfoPlatformIdentifier
 _kSecCodeInfoRequirementData
 _kSecCodeInfoRequirements
 _kSecCodeInfoResourceDirectory
+_kSecCodeInfoSignatureVersion
 _kSecCodeInfoSource
 _kSecCodeInfoStatus
 _kSecCodeInfoTimestamp
@@ -1870,13 +1881,6 @@ _kSecGuestAttributePid
 _kSecGuestAttributeSubarchitecture
 
 #endif // TARGET_OS_IPHONE
-
-#if TARGET_OS_OSX
-//breadcrumb
-_SecBreadcrumbCreateFromPassword
-_SecBreadcrumbCopyPassword
-_SecBreadcrumbCreateNewEncryptedKey
-#endif // TARGET_OS_OSX
 
 //
 // libDER OIDs
@@ -2008,6 +2012,7 @@ _SecTranslocateAppLaunchCheckin
 _SecTranslocateURLShouldRunTranslocated
 _SecTranslocateIsTranslocatedURL
 _SecTranslocateCreateOriginalPathForURL
+_SecTranslocateCreateGeneric
 #endif // TARGET_OS_OSX
 
 #if TARGET_OS_OSX
@@ -2086,7 +2091,9 @@ _OBJC_CLASS_$_SFAnalyticsMultiSampler
 _OBJC_CLASS_$_SFAnalyticsSampler
 _OBJC_CLASS_$_SFAnalyticsSQLiteStore
 _OBJC_CLASS_$_SecCoreAnalytics
-_OBJC_METACLASS_$_SFSignInAnalytics
+_SecCoreAnalyticsValue
+_SecCoreAnalyticsSendValue
+_SecCoreAnalyticsSendKernEntropyHealth
 _SFAnalyticsMaxEventsToReport
 _SFSQLiteJournalSuffixes
 _SFAnalyticsSamplerIntervalOncePerReport
@@ -2100,6 +2107,7 @@ _SFAnalyticsColumnHardFailureCount
 _SFAnalyticsColumnSoftFailureCount
 _SFAnalyticsColumnSampleValue
 _SFAnalyticsColumnSampleName
+_SFAnalyticsPostTime
 _SFAnalyticsEventTime
 _SFAnalyticsEventType
 _SFAnalyticsEventTypeErrorEvent
@@ -2114,6 +2122,7 @@ _SFAnalyticsAttributeErrorUnderlyingChain
 _SFAnalyticsAttributeLastUploadTime
 _SFAnalyticsTopicCloudServices
 _SFAnalyticsTopicKeySync
+_SFAnalyticsTopicNetworking
 _SFAnalyticsTopicTransparency
 _SFAnalyticsTopicTrust
 _SFAnalyticsErrorDomain
@@ -2130,12 +2139,15 @@ _CKDKVSPerfCounterSynchronizeFailures
 
 _OBJC_CLASS_$_LocalKeychainAnalytics
 _LKAEventUpgrade
+_LKAEventStash
+_LKAEventStashLoad
 #endif // __OBJC2__
 
 _LKAReportKeychainUpgradeOutcome
 _LKAReportKeychainUpgradeOutcomeWithError
 _LKABackupReportStart
 _LKABackupReportEnd
+_LKAForceClose
 
 //
 // Padding
@@ -2165,6 +2177,17 @@ _SecCreateCFErrorWithXPCObject
 _SecCreateXPCObjectWithCFError
 
 _SecItemVerifyBackupIntegrity
+
+_SecItemDeleteKeychainItemsForAppClip
+
+//
+// File URL Overriding support
+//
+_SecCopyHomeURL
+_SecCopyBaseFilesURL
+
+_SecSetCustomHomeURL
+_SecSetCustomHomeURLString
 
 #ifdef DARLING
 // Apple stopped exporting these (I guess they replaced them in their updated CFNetwork source),

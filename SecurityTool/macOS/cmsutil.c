@@ -63,7 +63,11 @@
 #include <Security/SecIdentity.h>
 #include <Security/SecIdentitySearch.h>
 #include <CoreFoundation/CFString.h>
-#include <CoreServices/MacErrors.h>
+#ifdef DARLING
+#include <CarbonCore/MacErrors.h>
+#else
+#include <CoreServices/../Frameworks/CarbonCore.framework/Headers/MacErrors.h>
+#endif
 #include <utilities/SecCFRelease.h>
 
 #include <stdio.h>

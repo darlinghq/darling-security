@@ -37,11 +37,13 @@
 #include <sys/param.h>
 #include <dirent.h>
 #include <fcntl.h>
-#include <assert.h>
+#include <security_utilities/simulatecrash_assert.h>
 #include <time.h>
 #include <string>
 #include <unistd.h>
 #include <syslog.h>
+
+#include "LegacyAPICounts.h"
 
 using namespace CssmClient;
 
@@ -1560,6 +1562,18 @@ void MDSSession::DbFilesInfo::removeOutdatedPlugins()
 	CSSM_DB_ATTRIBUTE_DATA			theAttrs[2];
 	CSSM_DB_ATTRIBUTE_INFO_PTR		attrInfo;
 	TbdVector						tbdRecords;
+
+    __block bool countPlugins = false;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // We will set this to true exactly once
+        countPlugins = true;
+    });
+
+    // The clang analyzer does not understand that DataGetNext fills in theAttrs with malloc'ed pointers,
+    // through a chain of structs, pointers, and confusing names. Then, it has false-positive use-after-free
+    // warnings. So, disable the analyzer for this function.
+#ifndef __clang_analyzer__
 	
 	/* 
 	 * First, scan object directory. All we need are the path and GUID attributes. 
@@ -1608,6 +1622,13 @@ void MDSSession::DbFilesInfo::removeOutdatedPlugins()
 	}
 	if(resultHand) {
 		if(theAttrs[0].NumberOfValues && theAttrs[1].NumberOfValues) {
+            if(countPlugins) {
+                string path = CssmData::overlay(*theAttrs[1].Value).toString();
+                string guid = CssmData::overlay(*theAttrs[0].Value).toString();
+
+                countLegacyMDSPlugin(path.c_str(), guid.c_str());
+            }
+
 			checkOutdatedPlugin(*theAttrs[1].Value, *theAttrs[0].Value, 
 				tbdRecords);
 		}
@@ -1647,6 +1668,13 @@ void MDSSession::DbFilesInfo::removeOutdatedPlugins()
 			mSession.FreeUniqueRecord(mObjDbHand, *record);
 		}
 		if(theAttrs[0].NumberOfValues && theAttrs[1].NumberOfValues) {
+            if(countPlugins) {
+                string path = CssmData::overlay(*theAttrs[1].Value).toString();
+                string guid = CssmData::overlay(*theAttrs[0].Value).toString();
+
+                countLegacyMDSPlugin(path.c_str(), guid.c_str());
+            }
+
 			checkOutdatedPlugin(*theAttrs[1].Value, 
 				*theAttrs[0].Value, 
 				tbdRecords);
@@ -1681,6 +1709,10 @@ void MDSSession::DbFilesInfo::removeOutdatedPlugins()
 	for(size_t i=0; i<numRecords; i++) {
 		delete tbdRecords[i];
 	}
+#endif
+
+    // don't count plugins again for the lifetime of this program
+    countPlugins = false;
 }
 
 

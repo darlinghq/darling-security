@@ -96,6 +96,8 @@ public:
     FileDesc() : mFd(invalidFd), mAtEnd(false) { }
     FileDesc(int fd) : mFd(fd), mAtEnd(false) { }
 
+    FileDesc(const FileDesc& fd) : mFd(fd.mFd), mAtEnd(fd.mAtEnd) { }
+
 	static const mode_t modeMissingOk = S_IFIFO;		// in mode means "do not throw on ENOENT"
     
     // implicit file system open() construction
@@ -224,6 +226,8 @@ public:
     void fstat(UnixStat &st) const;
     size_t fileSize() const;
 	bool isA(int type) const;
+
+    string realPath() const;
 	
 	// change various permissions-related features on the open file
 	void chown(uid_t uid);
@@ -273,7 +277,10 @@ public:
 	AutoFileDesc(const std::string &path, int flag = O_RDONLY, mode_t mode = 0666)
 		: FileDesc(path, flag, mode) { }
 	AutoFileDesc(const AutoFileDesc& rhs);
+    AutoFileDesc(AutoFileDesc&& rhs);
 	~AutoFileDesc()		{ closeAndLog(); }
+
+    AutoFileDesc& operator=(AutoFileDesc&& rhs);
 };
 
 

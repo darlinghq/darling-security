@@ -24,6 +24,7 @@
 #if OCTAGON
 
 #import "keychain/ckks/CloudKitCategories.h"
+#import "keychain/ckks/CKKS.h"
 
 @implementation CKOperationGroup (CKKS)
 +(instancetype) CKKSGroupWithName:(NSString*)name {
@@ -83,7 +84,7 @@
 
             if([cuttlefishError.domain isEqualToString:CuttlefishErrorDomain]) {
                 NSNumber* val = cuttlefishError.userInfo[CuttlefishErrorRetryAfterKey];
-                if (val) {
+                if (val != nil) {
                     return (NSTimeInterval)val.doubleValue;
                 }
             }
@@ -91,7 +92,6 @@
     }
     return 0;
 }
-
 
 - (BOOL)isCKKSServerPluginError:(NSInteger)code
 {
@@ -106,6 +106,16 @@
             thirdLevelError &&
             [thirdLevelError.domain isEqualToString:@"CloudkitKeychainService"] &&
             thirdLevelError.code == code);
+}
+
+- (BOOL)isCKServerInternalError {
+    NSError* underlyingError = self.userInfo[NSUnderlyingErrorKey];
+
+    return [self.domain isEqualToString:CKErrorDomain] &&
+        self.code == CKErrorServerRejectedRequest &&
+        underlyingError &&
+        [underlyingError.domain isEqualToString:CKInternalErrorDomain] &&
+        underlyingError.code == CKErrorInternalServerInternalError;
 }
 
 @end

@@ -27,10 +27,12 @@
 #ifndef _SECURITY_SECTRUSTLOGGINGSERVER_H_
 #define _SECURITY_SECTRUSTLOGGINGSERVER_H_
 
-#include <xpc/xpc.h>
-#include <CoreFoundation/CoreFoundation.h>
 
 void DisableLocalization(void);
+
+#ifdef DARLING
+#include <xpc/xpc.h>
+#include <CoreFoundation/CoreFoundation.h>
 
 // i have a sneaking suspicion that Apple neutered this file and that this is where
 // `TrustdHealthAnalyticsLogErrorCodeForDatabase` *should* be defined,
@@ -75,5 +77,6 @@ void TrustdHealthAnalyticsLogEvaluationCompleted();
 
 // and you guessed it, same here:
 void TrustdHealthAnalyticsLogSuccess(int event);
+#endif // DARLING
 
 #endif /* _SECURITY_SECTRUSTLOGGINGSERVER_H_ */

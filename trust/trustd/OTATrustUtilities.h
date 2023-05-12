@@ -36,9 +36,6 @@ __BEGIN_DECLS
 // Opaque type that holds the data for a specific version of the OTA PKI assets
 typedef struct _OpaqueSecOTAPKI *SecOTAPKIRef;
 
-// Returns a boolean for whether the current instance is the system trustd
-bool SecOTAPKIIsSystemTrustd(void);
-
 // Returns the trust server workloop
 dispatch_queue_t SecTrustServerGetWorkloop(void);
 
@@ -154,15 +151,20 @@ NSNumber *SecOTAPKIGetSamplingRateForEvent(SecOTAPKIRef otapkiRef, NSString *eve
 CFArrayRef SecOTAPKICopyAppleCertificateAuthorities(SecOTAPKIRef otapkiRef);
 
 extern const CFStringRef kOTAPKIKillSwitchCT;
+extern const CFStringRef kOTAPKIKillSwitchNonTLSCT;
 bool SecOTAPKIKillSwitchEnabled(SecOTAPKIRef otapkiRef, CFStringRef switchKey);
 
 // SPI to return the array of currently trusted Escrow certificates
 CF_EXPORT
 CFArrayRef SecOTAPKICopyCurrentEscrowCertificates(uint32_t escrowRootType, CFErrorRef* error);
 
-// SPI to return the array of currently trusted CT logs
+// SPI to return the array of currently (TLS) trusted CT logs
 CF_EXPORT
 CFDictionaryRef SecOTAPKICopyCurrentTrustedCTLogs(CFErrorRef* error);
+
+// SPI to return the array of currently non-TLS trusted CT logs
+CF_EXPORT
+CFDictionaryRef SecOTAPKICopyNonTlsTrustedCTLogs(SecOTAPKIRef otapkiRef);
 
 // SPI to return dictionary of CT log matching specified key id */
 CF_EXPORT

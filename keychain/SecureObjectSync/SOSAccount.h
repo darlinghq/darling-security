@@ -44,6 +44,10 @@
 #import "keychain/SecureObjectSync/SOSAccountTransaction.h"
 #include <dispatch/dispatch.h>
 
+extern NSString* const kSOSIdentityStatusCompleteIdentity;
+extern NSString* const kSOSIdentityStatusKeyOnly;
+extern NSString* const kSOSIdentityStatusPeerOnly;
+
 @class SOSAccount;
 
 __BEGIN_DECLS
@@ -106,11 +110,8 @@ void SOSTransportEachMessage(SOSAccount*  account, CFDictionaryRef updates, CFEr
 CFStringRef SOSAccountGetSOSCCStatusString(SOSCCStatus status);
 SOSCCStatus SOSAccountGetSOSCCStatusFromString(CFStringRef status);
 bool SOSAccountJoinCircles(SOSAccountTransaction* aTxn, CFErrorRef* error);
-bool SOSAccountJoinCirclesWithAnalytics(SOSAccountTransaction* aTxn, NSData* parentEvent, CFErrorRef* error);
 bool SOSAccountJoinCirclesAfterRestore(SOSAccountTransaction* aTxn, CFErrorRef* error);
-bool SOSAccountJoinCirclesAfterRestoreWithAnalytics(SOSAccountTransaction* aTxn, NSData* parentEvent, CFErrorRef* error);
 bool SOSAccountRemovePeersFromCircle(SOSAccount*  account, CFArrayRef peers, CFErrorRef* error);
-bool SOSAccountRemovePeersFromCircleWithAnalytics(SOSAccount*  account, CFArrayRef peers, NSData* parentEvent, CFErrorRef* error);
 bool SOSAccountBail(SOSAccount*  account, uint64_t limit_in_seconds, CFErrorRef* error);
 bool SOSAccountAcceptApplicants(SOSAccount*  account, CFArrayRef applicants, CFErrorRef* error);
 bool SOSAccountRejectApplicants(SOSAccount*  account, CFArrayRef applicants, CFErrorRef* error);
@@ -162,6 +163,12 @@ void SOSAccountPeerGotInSync(SOSAccountTransaction* aTxn, CFStringRef peerID, CF
 bool SOSAccountHandleParametersChange(SOSAccount*  account, CFDataRef updates, CFErrorRef *error);
 
 //
+// MARK: Local device key access from account object - can call without lock without endangering peerinfo.
+//
+SecKeyRef SOSAccountCopyDevicePrivateKey(SOSAccount* account, CFErrorRef *error);
+SecKeyRef SOSAccountCopyDevicePublicKey(SOSAccount* account, CFErrorRef *error);
+
+//
 // MARK: Requests for syncing later
 //
 bool SOSAccountRequestSyncWithAllPeers(SOSAccountTransaction* txn, CFErrorRef *error);
@@ -189,28 +196,21 @@ bool SOSAccountScanForRetired(SOSAccount*  account, SOSCircleRef circle, CFError
 CF_RETURNS_RETAINED SOSCircleRef SOSAccountCloneCircleWithRetirement(SOSAccount*  account, SOSCircleRef starting_circle, CFErrorRef *error);
 
 //
-// MARK: Version incompatibility Functions
-//
-CFStringRef SOSAccountCopyIncompatibilityInfo(SOSAccount*  account, CFErrorRef* error);
-
-//
 // MARK: Backup functions
 //
 
 bool SOSAccountIsBackupRingEmpty(SOSAccount*  account, CFStringRef viewName);
 bool SOSAccountNewBKSBForView(SOSAccount*  account, CFStringRef viewName, CFErrorRef *error);
 
-void SOSAccountProcessBackupRings(SOSAccount*  account, CFErrorRef *error);
+void SOSAccountProcessBackupRings(SOSAccount*  account);
 bool SOSAccountValidateBackupRingForView(SOSAccount*  account, CFStringRef viewName, CFErrorRef *error);
 bool SOSAccountSetBackupPublicKey(SOSAccountTransaction* aTxn, CFDataRef backupKey, CFErrorRef *error);
+bool SOSAccountEnsurePeerInfoHasCurrentBackupKey(SOSAccountTransaction *aTxn, CFErrorRef *error);
 bool SOSAccountRemoveBackupPublickey(SOSAccountTransaction* aTxn, CFErrorRef *error);
 bool SOSAccountBackupUpdateBackupPublicKey(SOSAccount *account, CFDataRef backupKey);
 bool SOSAccountSetBSKBagForAllSlices(SOSAccount*  account, CFDataRef backupSlice, bool setupV0Only, CFErrorRef *error);
 
 CF_RETURNS_RETAINED SOSBackupSliceKeyBagRef SOSAccountBackupSliceKeyBagForView(SOSAccount*  account, CFStringRef viewName, CFErrorRef* error);
-
-bool SOSAccountIsLastBackupPeer(SOSAccount*  account, CFErrorRef *error);
-
 
 //
 // MARK: Recovery Public Key Functions
@@ -292,7 +292,16 @@ void SOSAccountResetOTRNegotiationCoder(SOSAccount* account, CFStringRef peerid)
 void SOSAccountTimerFiredSendNextMessage(SOSAccountTransaction* txn, NSString* peerid, NSString* accessGroup);
 
 NSArray<NSDictionary *>* SOSAccountGetAllTLKs(void);
+NSArray<NSDictionary *>* SOSAccountGetSelectedTLKs(void);
+
 CF_RETURNS_RETAINED CFMutableArrayRef SOSAccountCopyiCloudIdentities(SOSAccount* account);
+
+bool SOSAccountEvaluateKeysAndCircle(SOSAccountTransaction *txn, CFErrorRef *block_error);
+
+//
+// MARK: Remove V0 Peers
+bool SOSAccountRemoveV0Clients(SOSAccount *account, CFErrorRef *error);
+
 
 __END_DECLS
 

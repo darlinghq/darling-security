@@ -36,7 +36,7 @@ typedef NS_ENUM(uint8_t, OTFollowupContextType) {
     OTFollowupContextTypeNone,
     OTFollowupContextTypeRecoveryKeyRepair,
     OTFollowupContextTypeStateRepair,
-    OTFollowupContextTypeOfflinePasscodeChange,
+    OTFollowupContextTypeConfirmExistingSecret,
 };
 NSString* OTFollowupContextTypeToString(OTFollowupContextType contextType);
 
@@ -55,9 +55,14 @@ NSString* OTFollowupContextTypeToString(OTFollowupContextType contextType);
 - (BOOL)clearFollowUp:(OTFollowupContextType)contextType
                 error:(NSError **)error;
 
-- (NSDictionary *)sysdiagnoseStatus;
+- (NSDictionary *_Nullable)sysdiagnoseStatus;
 - (NSDictionary<NSString*,NSNumber*> *)sfaStatus;
+@end
 
+@interface OTFollowup (Testing)
+// Reports on whether this individual OTFollowUp object has posted a CFU of this type.
+- (BOOL)hasPosted:(OTFollowupContextType)contextType;
+- (void)clearAllPostedFlags;
 @end
 
 NS_ASSUME_NONNULL_END

@@ -53,12 +53,10 @@
 
 #include "keychain/securityd/SOSCloudCircleServer.h"
 
-#if !TARGET_OS_SIMULATOR
-#include "SOSAccountTesting.h"
-#endif
-#include "SecdTestKeychainUtilities.h"
 
-#if !TARGET_OS_SIMULATOR
+#include "SOSAccountTesting.h"
+#include "SecdTestKeychainUtilities.h"
+#if SOS_ENABLED
 
 static CFDataRef CopyBackupKeyForString(CFStringRef string, CFErrorRef *error)
 {
@@ -68,12 +66,9 @@ static CFDataRef CopyBackupKeyForString(CFStringRef string, CFErrorRef *error)
     });
     return result;
 }
-#endif
 
 static void tests(void)
 {
-#if !TARGET_OS_SIMULATOR
-        
     __block CFErrorRef error = NULL;
     CFDataRef cfpassword = CFDataCreate(NULL, (uint8_t *) "FooFooFoo", 10);
     CFStringRef cfaccount = CFSTR("test@test.org");
@@ -156,7 +151,7 @@ static void tests(void)
     ok([bob_account.trust checkForRings:&error], "Alice_account is good");
     CFReleaseNull(error);
 
-    is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, NULL), 5, "updates");
+    is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, NULL), 4, "updates");
 
 
     ok([alice_account.trust checkForRings:&error], "Alice_account is good");
@@ -165,9 +160,6 @@ static void tests(void)
     ok(SOSAccountIsMyPeerInBackupAndCurrentInView(alice_account, kTestView1), "Is alice in backup after sync?");
     
     ok(SOSAccountIsMyPeerInBackupAndCurrentInView(bob_account, kTestView1), "IS bob in the backup after sync");
-    
-    ok(!SOSAccountIsLastBackupPeer(alice_account, &error), "Alice is not last backup peer");
-    CFReleaseNull(error);
 
     //
     //Bob leaves the circle
@@ -179,11 +171,6 @@ static void tests(void)
     is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, NULL), 2, "updates");
     
     ok(SOSAccountIsMyPeerInBackupAndCurrentInView(alice_account, kTestView1), "Bob left the circle, Alice is not in the backup");
-    
-    ok(SOSAccountIsLastBackupPeer(alice_account, &error), "Alice is last backup peer");
-    CFReleaseNull(error);
-    ok(!SOSAccountIsLastBackupPeer(bob_account, &error), "Bob is not last backup peer");
-    CFReleaseNull(error);
 
     ok(testAccountPersistence(alice_account), "Test Account->DER->Account Equivalence");
 
@@ -211,15 +198,9 @@ static void tests(void)
 
     ok(!SOSAccountIsMyPeerInBackupAndCurrentInView(bob_account, kTestView1), "Bob isn't in the backup yet");
 
-    ok(!SOSAccountIsLastBackupPeer(alice_account, &error), "Alice is the not the last backup peer - Bob still registers as one");
-    CFReleaseNull(error);
-
     ok(SOSAccountSetBackupPublicKey_wTxn(bob_account, bob_backup_key, &error), "Set backup public key, bob (%@)", error);
 
     is(ProcessChangesUntilNoChange(changes, alice_account, bob_account, NULL), 3, "updates");
-
-    ok(!SOSAccountIsLastBackupPeer(alice_account, &error), "Alice is not last backup peer");
-    CFReleaseNull(error);
 
     //
     //removing backup key for bob account
@@ -262,22 +243,19 @@ static void tests(void)
     alice_account = nil;
     bob_account = nil;
     SOSTestCleanup();
-#endif
-
 }
+#endif
 
 int secd_62_account_backup(int argc, char *const *argv)
 {
-#if !TARGET_OS_SIMULATOR
+#if SOS_ENABLED
     plan_tests(98);
-#else
-    plan_tests(1);
-#endif
-
     secd_test_setup_temp_keychain(__FUNCTION__, NULL);
     secd_test_setup_testviews(); // for running this test solo
-
     tests();
-    
+    secd_test_teardown_delete_temp_keychain(__FUNCTION__);
+#else
+    plan_tests(0);
+#endif
     return 0;
 }

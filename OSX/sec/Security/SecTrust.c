@@ -73,15 +73,17 @@
 
 SEC_CONST_DECL (kSecCertificateDetailSHA1Digest, "SHA1Digest");
 SEC_CONST_DECL (kSecCertificateDetailStatusCodes, "StatusCodes");
-#if TARGET_OS_IPHONE
 SEC_CONST_DECL (kSecCertificateExceptionResetCount, "ExceptionResetCount");
-#endif
 
 SEC_CONST_DECL (kSecTrustInfoExtendedValidationKey, "ExtendedValidation");
 SEC_CONST_DECL (kSecTrustInfoCompanyNameKey, "CompanyName");
 SEC_CONST_DECL (kSecTrustInfoRevocationKey, "Revocation");
 SEC_CONST_DECL (kSecTrustInfoRevocationValidUntilKey, "RevocationValidUntil");
 SEC_CONST_DECL (kSecTrustInfoCertificateTransparencyKey, "CertificateTransparency");
+
+/* This is the "real" trust validity date which includes all inputs. */
+SEC_CONST_DECL (kSecTrustInfoResultNotBefore, "TrustResultNotBefore");
+SEC_CONST_DECL (kSecTrustInfoResultNotAfter, "TrustResultNotAfter");
 
 /* Public trust result constants */
 SEC_CONST_DECL (kSecTrustEvaluationDate, "TrustEvaluationDate");
@@ -90,10 +92,13 @@ SEC_CONST_DECL (kSecTrustOrganizationName, "Organization");
 SEC_CONST_DECL (kSecTrustResultValue, "TrustResultValue");
 SEC_CONST_DECL (kSecTrustRevocationChecked, "TrustRevocationChecked");
 SEC_CONST_DECL (kSecTrustRevocationReason, "TrustRevocationReason");
-SEC_CONST_DECL (kSecTrustRevocationValidUntilDate, "TrustExpirationDate");
 SEC_CONST_DECL (kSecTrustResultDetails, "TrustResultDetails");
 SEC_CONST_DECL (kSecTrustCertificateTransparency, "TrustCertificateTransparency");
 SEC_CONST_DECL (kSecTrustCertificateTransparencyWhiteList, "TrustCertificateTransparencyWhiteList");
+
+/* This value is actually incorrect as this constant only refers to the revocation expiration
+ * not the trust expiration. But it's API. */
+SEC_CONST_DECL (kSecTrustRevocationValidUntilDate, "TrustExpirationDate");
 
 #pragma mark -
 #pragma mark SecTrust
@@ -1834,15 +1839,7 @@ CFStringRef SecTrustCopyFailureDescription(SecTrustRef trust) {
     return reason;
 }
 
-#if TARGET_OS_OSX
-/* On OS X we need SecTrustCopyPublicKey to give us a CDSA-based SecKeyRef,
-   so we will refer to this one internally as SecTrustCopyPublicKey_ios,
-   and call it from SecTrustCopyPublicKey.
- */
-SecKeyRef SecTrustCopyPublicKey_ios(SecTrustRef trust)
-#else
-SecKeyRef SecTrustCopyPublicKey(SecTrustRef trust)
-#endif
+SecKeyRef SecTrustCopyKey(SecTrustRef trust)
 {
     if (!trust) {
         return NULL;
@@ -1870,7 +1867,20 @@ SecKeyRef SecTrustCopyPublicKey(SecTrustRef trust)
             }
         });
     }
-	return publicKey;
+    return publicKey;
+}
+
+#if TARGET_OS_OSX
+/* On OS X we need SecTrustCopyPublicKey to give us a CDSA-based SecKeyRef,
+   so we will refer to this one internally as SecTrustCopyPublicKey_ios,
+   and call it from SecTrustCopyPublicKey.
+ */
+SecKeyRef SecTrustCopyPublicKey_ios(SecTrustRef trust)
+#else
+SecKeyRef SecTrustCopyPublicKey(SecTrustRef trust)
+#endif
+{
+    return SecTrustCopyKey(trust);
 }
 
 CFIndex SecTrustGetCertificateCount(SecTrustRef trust) {
@@ -1940,7 +1950,9 @@ CFDataRef SecTrustCopyExceptions(SecTrustRef trust) {
             trust->_exceptions = NULL;
         }
     });
-    SecTrustSetNeedsEvaluation(trust);
+    if (oldExceptions) {
+        SecTrustSetNeedsEvaluation(trust);
+    }
 
     /* Create the new exceptions based on an unfiltered eval. */
     __block CFArrayRef details = NULL;
@@ -1950,13 +1962,11 @@ CFDataRef SecTrustCopyExceptions(SecTrustRef trust) {
     });
     CFIndex pathLength = details ? CFArrayGetCount(details) : 0;
     CFMutableArrayRef exceptions = CFArrayCreateMutable(kCFAllocatorDefault, pathLength, &kCFTypeArrayCallBacks);
-#if TARGET_OS_IPHONE
     /* Fetch the current exceptions epoch and tag each exception with it. */
     CFErrorRef exceptionResetCountError = NULL;
     uint64_t exceptionResetCount = SecTrustGetExceptionResetCount(&exceptionResetCountError);
     secinfo("trust", "The current exceptions epoch is %llu. (%{public}s)", exceptionResetCount, exceptionResetCountError ? "Error" : "OK");
     CFNumberRef exceptionResetCountRef = CFNumberCreate(NULL, kCFNumberSInt64Type, &exceptionResetCount);
-#endif
     CFIndex ix;
     for (ix = 0; ix < pathLength; ++ix) {
         CFDictionaryRef detail = (CFDictionaryRef)CFArrayGetValueAtIndex(details, ix);
@@ -1967,11 +1977,9 @@ CFDataRef SecTrustCopyExceptions(SecTrustRef trust) {
             SecCertificateRef certificate = SecTrustGetCertificateAtIndex(trust, ix);
             CFDataRef digest = SecCertificateGetSHA1Digest(certificate);
             CFDictionaryAddValue(exception, kSecCertificateDetailSHA1Digest, digest);
-#if TARGET_OS_IPHONE
             if (exceptionResetCount && !exceptionResetCountError && exceptionResetCountRef) {
                 CFDictionaryAddValue(exception, kSecCertificateExceptionResetCount, exceptionResetCountRef);
             }
-#endif
         } else {
             /* Add empty exception dictionaries for non leaf certs which have no exceptions to save space. */
             exception = (CFMutableDictionaryRef)CFDictionaryCreate(kCFAllocatorDefault, NULL, NULL, 0,
@@ -2004,13 +2012,11 @@ CFDataRef SecTrustCopyExceptions(SecTrustRef trust) {
         exceptions, kCFPropertyListBinaryFormat_v1_0, 0, NULL);
     CFRelease(exceptions);
     CFReleaseSafe(details);
-#if TARGET_OS_IPHONE
     CFReleaseSafe(exceptionResetCountRef);
-#endif
+    CFReleaseSafe(exceptionResetCountError);
     return encodedExceptions;
 }
 
-#if TARGET_OS_IPHONE
 static bool SecTrustExceptionsValidForThisEpoch(CFArrayRef exceptions) {
     if (!exceptions) {
         return false;
@@ -2023,6 +2029,7 @@ static bool SecTrustExceptionsValidForThisEpoch(CFArrayRef exceptions) {
     /* Fail closed: if we were unable to get the current exceptions epoch consider the exceptions invalid. */
     if (currentExceptionResetCountError) {
         secerror("Failed to get the current exceptions epoch.");
+        CFReleaseNull(currentExceptionResetCountError);
         return false;
     }
     /* If this is the first epoch ever there is no point in checking whether any exceptions belong in the past. */
@@ -2050,7 +2057,6 @@ static bool SecTrustExceptionsValidForThisEpoch(CFArrayRef exceptions) {
     secinfo("trust", "Exceptions are valid for the current exceptions epoch. (%llu)", currentExceptionResetCount);
     return true;
 }
-#endif
 
 bool SecTrustSetExceptions(SecTrustRef trust, CFDataRef encodedExceptions) {
 	if (!trust) {
@@ -2077,11 +2083,7 @@ bool SecTrustSetExceptions(SecTrustRef trust, CFDataRef encodedExceptions) {
     SecTrustSetNeedsEvaluation(trust);
 
 	/* If there is a valid exception entry for our current leaf we're golden. */
-#if TARGET_OS_IPHONE
     if (SecTrustGetExceptionForCertificateAtIndex(trust, 0) && SecTrustExceptionsValidForThisEpoch(exceptions)) {
-#else
-    if (SecTrustGetExceptionForCertificateAtIndex(trust, 0)) {
-#endif
 		return true;
     }
 
@@ -2222,7 +2224,6 @@ static void applyDetailProperty(const void *_key, const void *_value,
     } else if (CFEqual(key, kSecPolicyCheckCriticalExtensions)) {
         tf->unknownCritExtn = true;
     } else if (CFEqual(key, kSecPolicyCheckAnchorTrusted)
-        || CFEqual(key, kSecPolicyCheckAnchorSHA1)
         || CFEqual(key, kSecPolicyCheckAnchorSHA256)
         || CFEqual(key, kSecPolicyCheckAnchorApple)) {
         tf->untrustedAnchor = true;
@@ -2576,6 +2577,18 @@ CFDictionaryRef SecTrustOTASecExperimentCopyAsset(CFErrorRef *error) {
     return result;
 }
 
+bool SecTrustTriggerValidUpdate(CFErrorRef *error) {
+    do_if_registered(sec_valid_update, error);
+
+    os_activity_t activity = os_activity_create("SecTrustTriggerValidUpdate", OS_ACTIVITY_CURRENT, OS_ACTIVITY_FLAG_DEFAULT);
+    os_activity_scope(activity);
+
+    uint64_t num = do_ota_pki_op(kSecXPCOpValidUpdate, error);
+
+    os_release(activity);
+    return num;
+}
+
 bool SecTrustReportTLSAnalytics(CFStringRef eventName, xpc_object_t eventAttributes, CFErrorRef *error) {
     if (!eventName || !eventAttributes) {
         return false;
@@ -2678,6 +2691,12 @@ OSStatus SecTrustEvaluateLeafOnly(SecTrustRef trust, SecTrustResultType *result)
         trustResult = kSecTrustResultUnspecified;
     }
 
+    /* Set trust result validity dates. This is a short window based on verifyTime. */
+    CFAbsoluteTime resultNotBefore = SecTrustGetVerifyTime(trust);
+    CFAbsoluteTime resultNotAfter = resultNotBefore + TRUST_TIME_LEEWAY;
+    CFDateRef notBeforeDate = CFDateCreate(NULL, resultNotBefore);
+    CFDateRef notAfterDate = CFDateCreate(NULL, resultNotAfter);
+
     /* Set other result context information */
     dispatch_sync(trust->_trustQueue, ^{
         trust->_trustResult = trustResult;
@@ -2687,6 +2706,8 @@ OSStatus SecTrustEvaluateLeafOnly(SecTrustRef trust, SecTrustResultType *result)
                                                  &kCFTypeDictionaryValueCallBacks);
         CFMutableArrayRef leafCert = CFArrayCreateMutableCopy(NULL, 1, trust->_certificates);
         trust->_chain = leafCert;
+        if (notBeforeDate) { CFDictionarySetValue(trust->_info, kSecTrustInfoResultNotBefore, notBeforeDate); }
+        if (notAfterDate) { CFDictionarySetValue(trust->_info, kSecTrustInfoResultNotAfter, notAfterDate); }
     });
 
     SecLeafPVCDelete(&pvc);
@@ -2703,6 +2724,8 @@ OSStatus SecTrustEvaluateLeafOnly(SecTrustRef trust, SecTrustResultType *result)
     }
 
     CFReleaseSafe(policies);
+    CFReleaseSafe(notBeforeDate);
+    CFReleaseSafe(notAfterDate);
     return status;
 }
 
@@ -2933,7 +2956,6 @@ out:
     return trust;
 }
 
-#if TARGET_OS_IPHONE
 static uint64_t to_uint_error_request(enum SecXPCOperation op, CFErrorRef *error) {
     __block uint64_t result = 0;
 
@@ -2985,4 +3007,3 @@ OSStatus SecTrustIncrementExceptionResetCount(CFErrorRef *error) {
 
     return status;
 }
-#endif

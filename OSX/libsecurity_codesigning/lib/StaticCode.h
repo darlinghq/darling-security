@@ -107,7 +107,7 @@ public:
 	static SecCode *optionalDynamic(SecStaticCodeRef ref); // extract SecCodeRef or NULL if static
 
 	SecStaticCode(DiskRep *rep, uint32_t flags = 0);
-    virtual ~SecStaticCode() throw();
+    virtual ~SecStaticCode() _NOEXCEPT;
 
     void initializeFromParent(const SecStaticCode& parent);
 
@@ -140,7 +140,7 @@ public:
 	std::string signatureSource();
  	virtual CFDataRef component(CodeDirectory::SpecialSlot slot, OSStatus fail = errSecCSSignatureFailed);
  	virtual CFDictionaryRef infoDictionary();
-	CFDictionaryRef diskRepInformation();
+	CFDictionaryRef copyDiskRepInformation();
 
 	CFDictionaryRef entitlements();
 	CFDataRef copyComponent(CodeDirectory::SpecialSlot slot, CFDataRef hash);
@@ -156,7 +156,9 @@ public:
 	void setMonitor(SecCodeCallback monitor) { mMonitor = monitor; }
 	CFTypeRef reportEvent(CFStringRef stage, CFDictionaryRef info);
 	void reportProgress(unsigned amount = 1);
-	
+
+	SecCSFlags getFlags() { return mFlags; }
+	void setFlags(SecCSFlags flags) { mFlags = flags; }
 	void setValidationFlags(SecCSFlags flags) { mValidationFlags = flags; }
 	void setValidationModifiers(CFDictionaryRef modifiers);
 	
@@ -180,6 +182,8 @@ public:
 	void validateResources(SecCSFlags flags);
 	void validateExecutable();
 	void validateNestedCode(CFURLRef path, const ResourceSeal &seal, SecCSFlags flags, bool isFramework);
+	void checkRevocationOnNestedBinary(UnixPlusPlus::FileDesc &fd, CFURLRef url, SecCSFlags flags);
+	bool validationCannotUseNetwork();
 	
 	void validatePlainMemoryResource(string path, CFDataRef fileData, SecCSFlags flags);
 	
@@ -200,9 +204,7 @@ public:
 	CFDictionaryRef signingInformation(SecCSFlags flags); // omnibus information-gathering API (creates new dictionary)
 
 	static bool isAppleDeveloperCert(CFArrayRef certs); // determines if this is an apple developer certificate for library validation
-#if !TARGET_OS_OSX
     bool trustedSigningCertChain() { return mTrustedSigningCertChain; }
-#endif
 
 	void handleOtherArchitectures(void (^handle)(SecStaticCode* other));
 
@@ -211,6 +213,7 @@ public:
 public:
 	void staticValidate(SecCSFlags flags, const SecRequirement *req);
 	void staticValidateCore(SecCSFlags flags, const SecRequirement *req);
+	void staticValidateResource(string resourcePath, SecCSFlags flags, const SecRequirement *req);
 	
 protected:
 	bool loadCodeDirectories(CodeDirectoryMap& cdMap) const;
@@ -231,6 +234,7 @@ private:
 	void validateOtherVersions(CFURLRef path, SecCSFlags flags, SecRequirementRef req, SecStaticCode *code);
 	bool checkfix30814861(string path, bool addition);
 	bool checkfix41082220(OSStatus result);
+	CFArrayRef copyCertChain(SecTrustRef trust);
 
 	ResourceBuilder *mCheckfix30814861builder1;
 	dispatch_once_t mCheckfix30814861builder1_once;
@@ -298,20 +302,16 @@ private:
 
 	LimitedAsync *mLimitedAsync;		// limited async workers for verification
 
-	uint32_t mFlags;					// flags from creation
+	SecCSFlags mFlags;					// flags from creation
 	bool mNotarizationChecked;			// ensure notarization check only performed once
 	bool mStaplingChecked;				// ensure stapling check only performed once
 	double mNotarizationDate;			// the notarization ticket's date, if online check failed
+	bool mNetworkEnabledByDefault;		// whether this code object uses the network by default
 
 	// signature verification outcome (mTrust == NULL => not done yet)
 	CFRef<SecTrustRef> mTrust;			// outcome of crypto validation (valid or not)
 	CFRef<CFArrayRef> mCertChain;
-#if TARGET_OS_OSX
-    CSSM_TP_APPLE_EVIDENCE_INFO *mEvalDetails;
-#else
     bool mTrustedSigningCertChain;
-#endif
-
 };
 
 

@@ -33,12 +33,14 @@
 #include <corecrypto/ccder.h>
 #include <CoreFoundation/CoreFoundation.h>
 
-const uint8_t* der_decode_set(CFAllocatorRef allocator, CFOptionFlags mutability,
+const uint8_t* der_decode_set(CFAllocatorRef allocator,
                                      CFSetRef* set, CFErrorRef *error,
                                      const uint8_t* der, const uint8_t *der_end)
 {
-    if (NULL == der)
+    if (NULL == der) {
+        SecCFDERCreateError(kSecDERErrorNullInput, CFSTR("null input"), NULL, error);
         return NULL;
+    }
     
     const uint8_t *payload_end = 0;
     const uint8_t *payload = ccder_decode_constructed_tl(CCDER_CONSTRUCTED_CFSET, &payload_end, der, der_end);
@@ -60,7 +62,7 @@ const uint8_t* der_decode_set(CFAllocatorRef allocator, CFOptionFlags mutability
     while (payload != NULL && payload < payload_end) {
         CFTypeRef value = NULL;
         
-        payload = der_decode_plist(allocator, mutability, &value, error, payload, payload_end);
+        payload = der_decode_plist(allocator, &value, error, payload, payload_end);
         
         if (payload) {
             CFSetAddValue(theSet, value);
@@ -116,6 +118,7 @@ size_t der_sizeof_set(CFSetRef dict, CFErrorRef *error)
 
 struct encode_context {
     bool         success;
+    bool         repair_contents;
     CFErrorRef * error;
     CFMutableArrayRef list;
     CFAllocatorRef allocator;
@@ -135,7 +138,7 @@ static void add_sequence_to_array(const void *value_void, void *context_void)
             uint8_t* const encode_begin = CFDataGetMutableBytePtr(value);
             uint8_t *encode_end = encode_begin + der_size;
             
-            encode_end = der_encode_plist(value_void, context->error, encode_begin, encode_end);
+            encode_end = der_encode_plist_repair(value_void, context->error, context->repair_contents, encode_begin, encode_end);
             
             if (encode_end != NULL) {
                 CFDataDeleteBytes(value, CFRangeMake(0, (encode_end - encode_begin)));
@@ -148,18 +151,24 @@ static void add_sequence_to_array(const void *value_void, void *context_void)
     }
 }
 
-static CFComparisonResult cfdata_compare_contents(const void *val1, const void *val2, void *context __unused)
+static CFComparisonResult cfdata_compare_der_contents(const void *val1, const void *val2, void *context __unused)
 {
-    return CFDataCompare((CFDataRef) val1, (CFDataRef) val2);
+    return CFDataCompareDERData((CFDataRef) val1, (CFDataRef) val2);
 }
 
 
 uint8_t* der_encode_set(CFSetRef set, CFErrorRef *error,
                                const uint8_t *der, uint8_t *der_end)
 {
+    return der_encode_set_repair(set, error, false, der, der_end);
+}
+
+uint8_t* der_encode_set_repair(CFSetRef set, CFErrorRef *error,
+                               bool repair, const uint8_t *der, uint8_t *der_end)
+{
     CFMutableArrayRef elements = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
-    
-    struct encode_context context = { .success = true, .error = error, .list = elements };
+
+    struct encode_context context = { .success = true, .error = error, .list = elements, .repair_contents = repair };
     CFSetApplyFunction(set, add_sequence_to_array, &context);
     
     if (!context.success) {
@@ -169,7 +178,7 @@ uint8_t* der_encode_set(CFSetRef set, CFErrorRef *error,
     
     CFRange allOfThem = CFRangeMake(0, CFArrayGetCount(elements));
     
-    CFArraySortValues(elements, allOfThem, cfdata_compare_contents, NULL);
+    CFArraySortValues(elements, allOfThem, cfdata_compare_der_contents, NULL);
 
     uint8_t* original_der_end = der_end;
     
@@ -181,6 +190,7 @@ uint8_t* der_encode_set(CFSetRef set, CFErrorRef *error,
     
     CFReleaseNull(elements);
     
-    return ccder_encode_constructed_tl(CCDER_CONSTRUCTED_CFSET, original_der_end, der, der_end);
+    return SecCCDEREncodeHandleResult(ccder_encode_constructed_tl(CCDER_CONSTRUCTED_CFSET, original_der_end, der, der_end),
+                                      error);
     
 }

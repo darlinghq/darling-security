@@ -181,7 +181,10 @@ void SOSAccountNotifyEngines(SOSAccount* account)
         // We add V0 views to everyone if we see a V0 peer, or a peer with the view explicity enabled
         // V2 peers shouldn't be explicity enabling the uber V0 view, though the seeds did.
         __block bool addV0Views = SOSAccountSyncingV0(account);
-        
+
+        bool selfSupportCKKSForAll = SOSPeerInfoSupportsCKKSForAll(myPi);
+        secnotice("engine-notify", "Self peer(%@) %@ CKKS For All", myPi_id, selfSupportCKKSForAll ? @"supports" : @"doesn't support");
+
         syncing_peer_metas = CFArrayCreateMutableForCFTypes(kCFAllocatorDefault);
         zombie_peer_metas = CFArrayCreateMutableForCFTypes(kCFAllocatorDefault);
         SOSAccountForEachCirclePeerExceptMe(account, ^(SOSPeerInfoRef peer) {
@@ -194,6 +197,12 @@ void SOSAccountNotifyEngines(SOSAccount* account)
             
             if(addV0Views) {
                 CFSetAddValue(views, kSOSViewKeychainV0);
+            }
+
+            // If this peer supports CKKS4All, let's sync zero views to it.
+            if(selfSupportCKKSForAll && SOSPeerInfoSupportsCKKSForAll(peer)) {
+                secnotice("engine-notify", "Peer %@ supports CKKS For All; ignoring in SOS syncing", SOSPeerInfoGetPeerID(peer));
+                CFSetRemoveAllValues(views);
             }
             
             CFStringSetPerformWithDescription(views, ^(CFStringRef viewsDescription) {
@@ -347,6 +356,12 @@ bool SOSAccountHandleCircleMessage(SOSAccount* account,
                                    CFStringRef circleName, CFDataRef encodedCircleMessage, CFErrorRef *error) {
     bool success = false;
     CFErrorRef localError = NULL;
+
+    if(account && account.accountIsChanging) {
+        secnotice("circleOps", "SOSAccountHandleCircleMessage called before signing in to new account");
+        return true; // we want to drop circle notifications when account is changing
+    }
+
     SOSCircleRef circle = SOSAccountCreateCircleFrom(circleName, encodedCircleMessage, &localError);
     if (circle) {
         success = [account.trust updateCircleFromRemote:account.circle_transport newCircle:circle err:&localError];
@@ -374,14 +389,20 @@ bool SOSAccountHandleCircleMessage(SOSAccount* account,
 }
 
 bool SOSAccountHandleParametersChange(SOSAccount* account, CFDataRef parameters, CFErrorRef *error){
+    if(account && account.accountIsChanging) {
+        secnotice("circleOps", "SOSAccountHandleParametersChange called before signing in to new account");
+        return true; // we want to drop parm notifications when account is changing
+    }
     
     SecKeyRef newKey = NULL;
-    CFDataRef newParameters = NULL;
+    CFDataRef pbkdfParams = NULL;
     bool success = false;
     
-    if(SOSAccountRetrieveCloudParameters(account, &newKey, parameters, &newParameters, error)) {
-        debugDumpUserParameters(CFSTR("SOSAccountHandleParametersChange got new user key parameters:"), parameters);
-        secnotice("circleOps", "SOSAccountHandleParametersChange got new public key: %@", newKey);
+    if(SOSAccountRetrieveCloudParameters(account, &newKey, parameters, &pbkdfParams, error)) {
+        debugDumpUserParameters(CFSTR("SOSAccountHandleParametersChange got new user key parameters:"), pbkdfParams);
+        CFStringRef keyid = SOSCopyIDOfKeyWithLength(newKey, 8, NULL);
+        secnotice("circleOps", "SOSAccountHandleParametersChange got new public key: %@", keyid);
+        CFReleaseNull(keyid);
 
         if (CFEqualSafe(account.accountKey, newKey)) {
             secnotice("circleOps", "Got same public key sent our way. Ignoring.");
@@ -392,7 +413,7 @@ bool SOSAccountHandleParametersChange(SOSAccount* account, CFDataRef parameters,
         } else {
             SOSAccountSetUnTrustedUserPublicKey(account, newKey);
             CFReleaseNull(newKey);
-            SOSAccountSetParameters(account, newParameters);
+            SOSAccountSetParameters(account, pbkdfParams);
 
             if(SOSAccountRetryUserCredentials(account)) {
                 secnotice("circleOps", "Successfully used cached password with new parameters");
@@ -410,7 +431,7 @@ bool SOSAccountHandleParametersChange(SOSAccount* account, CFDataRef parameters,
     }
     
     CFReleaseNull(newKey);
-    CFReleaseNull(newParameters);
+    CFReleaseNull(pbkdfParams);
     
     return success;
 }

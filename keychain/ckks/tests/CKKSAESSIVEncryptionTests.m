@@ -28,6 +28,7 @@
 
 #import "keychain/ckks/CKKS.h"
 #import "keychain/ckks/CKKSKey.h"
+#import "keychain/ckks/CKKSMemoryKeyCache.h"
 #import "keychain/ckks/CKKSItem.h"
 #import "keychain/ckks/CKKSOutgoingQueueEntry.h"
 #import "keychain/ckks/CKKSIncomingQueueEntry.h"
@@ -308,7 +309,13 @@
     NSData* testCKRecord = [@"nonsense" dataUsingEncoding:NSUTF8StringEncoding];
     CKKSKey* tlk =  [self fakeTLK:self.testZoneID];
 
-    [tlk saveToDatabase:&error];
+    [CKKSSQLDatabaseObject performCKKSTransaction:^CKKSDatabaseTransactionResult {
+        NSError* saveError = nil;
+        [tlk saveToDatabase:&saveError];
+        XCTAssertNil(saveError, "tlk saved to database without error");
+        return CKKSDatabaseTransactionCommit;
+    }];
+
     [tlk saveKeyMaterialToKeychain:&error];
     XCTAssertNil(error, "tlk saved to database without error");
 
@@ -317,15 +324,24 @@
     XCTAssertNotNil(level1, "level 1 key created");
     XCTAssertNil(error, "level 1 key created");
 
-    [level1 saveToDatabase:&error];
-    XCTAssertNil(error, "level 1 key saved to database without error");
+    [CKKSSQLDatabaseObject performCKKSTransaction:^CKKSDatabaseTransactionResult {
+        NSError* saveError = nil;
+        [level1 saveToDatabase:&saveError];
+        XCTAssertNil(saveError, "level 1 key saved to database without error");
+        return CKKSDatabaseTransactionCommit;
+    }];
 
     CKKSKey* level2 = [CKKSKey randomKeyWrappedByParent: level1 error:&error];
     level2.encodedCKRecord = testCKRecord;
     XCTAssertNotNil(level2, "level 2 key created");
     XCTAssertNil(error, "no error creating level 2 key");
-    [level2 saveToDatabase:&error];
-    XCTAssertNil(error, "level 2 key saved to database without error");
+
+    [CKKSSQLDatabaseObject performCKKSTransaction:^CKKSDatabaseTransactionResult {
+        NSError* saveError = nil;
+        [level2 saveToDatabase:&saveError];
+        XCTAssertNil(saveError, "level 2 key saved to database without error");
+        return CKKSDatabaseTransactionCommit;
+    }];
 
     NSString* level2UUID = level2.uuid;
 
@@ -344,8 +360,14 @@
 
 - (void)ensureKeychainSaveLoad: (CKKSKey*) key {
     NSError* error = nil;
-    [key saveToDatabase:&error];
-    XCTAssertNil(error, "no error saving to database");
+
+    [CKKSSQLDatabaseObject performCKKSTransaction:^CKKSDatabaseTransactionResult {
+        NSError* saveError = nil;
+        [key saveToDatabase:&saveError];
+        XCTAssertNil(saveError, "no error saving to database");
+        return CKKSDatabaseTransactionCommit;
+    }];
+
     [key saveKeyMaterialToKeychain:&error];
     XCTAssertNil(error, "no error saving to keychain");
 
@@ -398,7 +420,7 @@
 - (BOOL)tryDecryptWithProperAuthData:(CKKSItem*)ciphertext plaintext:(NSDictionary<NSString*, NSData*>*)plaintext {
     NSDictionary<NSString*, NSData*>* roundtrip;
     NSError *error = nil;
-    roundtrip = [CKKSItemEncrypter decryptItemToDictionary: (CKKSItem*) ciphertext error: &error];
+    roundtrip = [CKKSItemEncrypter decryptItemToDictionary: (CKKSItem*) ciphertext keyCache:nil error: &error];
     XCTAssertNil(error, "No error decrypting roundtrip");
     XCTAssertNotNil(roundtrip, "Received a plaintext");
     XCTAssertEqualObjects(plaintext, roundtrip, "roundtripped dictionary matches input");
@@ -408,7 +430,7 @@
 - (BOOL)tryDecryptWithBrokenAuthData:(CKKSItem *)ciphertext {
     NSDictionary<NSString*, NSData*>* brokenAuthentication;
     NSError *error = nil;
-    brokenAuthentication = [CKKSItemEncrypter decryptItemToDictionary: (CKKSItem*) ciphertext error: &error];
+    brokenAuthentication = [CKKSItemEncrypter decryptItemToDictionary: (CKKSItem*) ciphertext keyCache:nil error: &error];
     XCTAssertNotNil(error, "Error exists decrypting ciphertext with bad authenticated data: %@", error);
     XCTAssertNil(brokenAuthentication, "Did not receive a plaintext if authenticated data was mucked with");
     return error != nil && brokenAuthentication == nil;
@@ -421,7 +443,12 @@
     NSString *uuid = @"8b2aeb7f-4af3-43e9-b6e6-70d5c728ebf7";
 
     CKKSKey* key = [self fakeTLK:self.testZoneID];
-    [key saveToDatabase: &error];
+    [CKKSSQLDatabaseObject performCKKSTransaction:^CKKSDatabaseTransactionResult {
+        NSError* saveError = nil;
+        [key saveToDatabase:&saveError];
+        XCTAssertNil(saveError, "no error saving to database");
+        return CKKSDatabaseTransactionCommit;
+    }];
     [key saveKeyMaterialToKeychain:&error];
     XCTAssertNil(error, @"could save the fake TLK to the database");
 
@@ -431,6 +458,7 @@
                                                dataDictionary:plaintext
                                              updatingCKKSItem:nil
                                                     parentkey:key
+                                                     keyCache:nil
                                                         error:&error];
     XCTAssertNil(error, "No error encrypting plaintext");
     XCTAssertNotNil(ciphertext, "Received a ciphertext");
@@ -467,9 +495,15 @@
                                                                error:&error];
     XCTAssertNil(error);
     CKKSKey* key = [self fakeTLK:self.testZoneID];
-    [key saveToDatabase: &error];
+
+    [CKKSSQLDatabaseObject performCKKSTransaction:^CKKSDatabaseTransactionResult {
+        NSError* saveError = nil;
+        [key saveToDatabase:&saveError];
+        XCTAssertNil(saveError, "could save the fake TLK to the database");
+        return CKKSDatabaseTransactionCommit;
+    }];
     [key saveKeyMaterialToKeychain:&error];
-    XCTAssertNil(error, @"could save the fake TLK to the database");
+    XCTAssertNil(error, @"could save the fake TLK to the keychain");
 
     CKKSAESSIVKey* keyToWrap = [[CKKSAESSIVKey alloc] initWithBase64: @"uImdbZ7Zg+6WJXScTnRBfNmoU1UiMkSYxWc+d1Vuq3IFn2RmTRkTdWTe3HmeWo1pAomqy+upK8KHg2PGiRGhqg=="];
     CKKSWrappedAESSIVKey* wrappedKey = [key wrapAESKey: keyToWrap error:&error];
@@ -484,8 +518,10 @@
                                                  encver:CKKSItemEncryptionVersionNone];
     XCTAssertNotNil(baseitem, "Constructed CKKSItem");
 
+    CKKSMemoryKeyCache* keyCache = [[CKKSMemoryKeyCache alloc] init];
+
     // First try versionNone. Should fail, we don't support unencrypted data
-    output = [CKKSItemEncrypter decryptItemToDictionary:baseitem error:&error];
+    output = [CKKSItemEncrypter decryptItemToDictionary:baseitem keyCache:keyCache error:&error];
     XCTAssert(error, "Did not failed to decrypt v0 item");
     XCTAssertNil(output, "Did not failed to decrypt v0 item");
     error = nil;
@@ -493,7 +529,7 @@
 
     // Then try version1. Should take actual decryption path and fail because there's no properly encrypted data.
     baseitem.encver = CKKSItemEncryptionVersion1;
-    output = [CKKSItemEncrypter decryptItemToDictionary:baseitem error:&error];
+    output = [CKKSItemEncrypter decryptItemToDictionary:baseitem keyCache:keyCache error:&error];
     XCTAssertNotNil(error, "Taking v1 codepath without encrypted item fails");
     XCTAssertEqualObjects(error.localizedDescription, @"could not ccsiv_crypt", "Error specifically failure to ccsiv_crypt");
     XCTAssertNil(output, "Did not receive output from failed decryption call");
@@ -502,7 +538,7 @@
 
     // Finally, some unknown version should fail immediately
     baseitem.encver = 100;
-    output = [CKKSItemEncrypter decryptItemToDictionary:baseitem error:&error];
+    output = [CKKSItemEncrypter decryptItemToDictionary:baseitem keyCache:keyCache error:&error];
     XCTAssertNotNil(error);
     NSString *errstr = [NSString stringWithFormat:@"%@", error.localizedDescription];
     NSString *expected = @"Unrecognized encryption version: 100";
@@ -735,7 +771,7 @@
 	memset((unsigned char *)[data mutableBytes], 0x55, 23);
 	NSData *padded = [CKKSItemEncrypter padData:data blockSize:0 additionalBlock:extra];
 	XCTAssertNotNil(padded, "Padding never returns nil");
-    XCTAssertTrue(padded.length == data.length + extra ? 2 : 1, "One byte of padding has been added, 2 if extra padding");
+    XCTAssertTrue(padded.length == data.length + (extra ? 2 : 1), "One byte of padding has been added, 2 if extra padding");
 	NSData *unpadded = [CKKSItemEncrypter removePaddingFromData:padded];
 	XCTAssertNotNil(unpadded, "Successfully removed padding again");
 	XCTAssertEqualObjects(data, unpadded, "Data effectively unmodified through padding-unpadding trip");

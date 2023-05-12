@@ -53,6 +53,8 @@
 
 #include "SecdTestKeychainUtilities.h"
 
+#if SOS_ENABLED
+
 static int kTestTestCount = 257;
 
 static void tests(void)
@@ -343,14 +345,17 @@ static void tests(void)
     
     SOSTestCleanup();
 }
+#endif
 
 int secd_55_account_circle(int argc, char *const *argv)
 {
+#if SOS_ENABLED
     plan_tests(kTestTestCount);
-    
     secd_test_setup_temp_keychain(__FUNCTION__, NULL);
-
     tests();
-    
+    secd_test_teardown_delete_temp_keychain(__FUNCTION__);
+#else
+    plan_tests(0);
+#endif
     return 0;
 }

@@ -28,11 +28,15 @@
 #import "keychain/ot/OTDefines.h"
 #import "keychain/ot/OTConstants.h"
 #import "keychain/categories/NSError+UsefulConstructors.h"
+#import "keychain/ckks/CloudKitCategories.h"
+#import "keychain/ckks/CKKS.h"
 
 OctagonState* const OctagonStateMachineNotStarted = (OctagonState*) @"not_started";
 OctagonState* const OctagonStateMachineHalted = (OctagonState*) @"halted";
 
-@implementation OctagonStateTransitionOperation : CKKSResultOperation
+#pragma mark -- OctagonStateTransitionOperation
+
+@implementation OctagonStateTransitionOperation
 - (instancetype)initIntending:(OctagonState*)intendedState
                    errorState:(OctagonState*)errorState
 {
@@ -75,6 +79,43 @@ OctagonState* const OctagonStateMachineHalted = (OctagonState*) @"halted";
 
 @end
 
+#pragma mark -- OctagonStateTransitionGroupOperation
+
+@implementation OctagonStateTransitionGroupOperation
+- (instancetype)initIntending:(OctagonState*)intendedState
+                   errorState:(OctagonState*)errorState
+{
+    if((self = [super init])) {
+        _nextState = errorState;
+        _intendedState = intendedState;
+    }
+    return self;
+}
+
+- (NSString*)description
+{
+    return [NSString stringWithFormat:@"<OctagonStateTransitionGroupOperation(%@): intended:%@ actual:%@>", self.name, self.intendedState, self.nextState];
+}
+
++ (instancetype)named:(NSString*)name
+            intending:(OctagonState*)intendedState
+           errorState:(OctagonState*)errorState
+  withBlockTakingSelf:(void(^)(OctagonStateTransitionGroupOperation* op))block
+{
+    OctagonStateTransitionGroupOperation* op = [[self alloc] initIntending:intendedState
+                                                                errorState:errorState];
+    WEAKIFY(op);
+    [op runBeforeGroupFinished:[NSBlockOperation blockOperationWithBlock:^{
+        STRONGIFY(op);
+        block(op);
+    }]];
+    op.name = name;
+    return op;
+}
+@end
+
+#pragma mark -- OctagonStateTransitionRequest
+
 @interface OctagonStateTransitionRequest ()
 @property dispatch_queue_t queue;
 @property bool timeoutCanOccur;
@@ -104,7 +145,7 @@ OctagonState* const OctagonStateMachineHalted = (OctagonState*) @"halted";
 
 - (NSString*)description
 {
-    return [NSString stringWithFormat:@"<OctagonStateTransitionRequest: %@ %@ %@>", self.name, self.transitionOperation, self.sourceStates];
+    return [NSString stringWithFormat:@"<OctagonStateTransitionRequest: %@ %@ sources:%d>", self.name, self.transitionOperation, (unsigned int)[self.sourceStates count]];
 }
 
 - (CKKSResultOperation<OctagonStateTransitionOperationProtocol>* _Nullable)_onqueueStart
@@ -134,6 +175,69 @@ OctagonState* const OctagonStateMachineHalted = (OctagonState*) @"halted";
     });
 
     return self;
+}
+
+@end
+
+@implementation NSError (Octagon)
+
+- (NSTimeInterval)overallCuttlefishRetry {
+    NSTimeInterval baseDelay = SecCKKSTestsEnabled() ? 2 : 30;
+    NSTimeInterval ckDelay = CKRetryAfterSecondsForError(self);
+    NSTimeInterval cuttlefishDelay = [self cuttlefishRetryAfter];
+    NSTimeInterval delay = MAX(ckDelay, cuttlefishDelay);
+    if (delay == 0) {
+        delay = baseDelay;
+    }
+    return delay;
+}
+
+- (bool)retryableCuttlefishError {
+    bool retry = false;
+    // Specific errors that are transaction failed -- try them again
+    if ([self isCuttlefishError:CuttlefishErrorRetryableServerFailure] ||
+        [self isCuttlefishError:CuttlefishErrorTransactionalFailure]) {
+        retry = true;
+    // These are the CuttlefishError -> FunctionErrorType
+    } else if ([self isCuttlefishError:CuttlefishErrorJoinFailed] ||
+               [self isCuttlefishError:CuttlefishErrorUpdateTrustFailed] ||
+               [self isCuttlefishError:CuttlefishErrorEstablishPeerFailed] ||
+               [self isCuttlefishError:CuttlefishErrorEstablishBottleFailed] ||
+               [self isCuttlefishError:CuttlefishErrorEscrowProxyFailure]) {
+        retry = true;
+    } else if ([self.domain isEqualToString:TrustedPeersHelperErrorDomain]) {
+        switch (self.code) {
+        case TrustedPeersHelperErrorUnknownCloudKitError:
+            retry = true;
+            break;
+        default:
+            break;
+        }
+    } else if ([self.domain isEqualToString:NSURLErrorDomain]) {
+        switch (self.code) {
+        case NSURLErrorTimedOut:
+            retry = true;
+            break;
+        default:
+            break;
+        }
+    } else if ([self.domain isEqualToString:CKErrorDomain]) {
+        if (self.userInfo[CKErrorRetryAfterKey] != nil) {
+            retry = true;
+        } else {
+            switch (self.code) {
+            case CKErrorNetworkFailure:
+                retry = true;
+                break;
+            default:
+                break;
+            }
+        }
+    } else if ([self isCKServerInternalError]) {
+        retry = true;
+    }
+
+    return retry;
 }
 
 @end
