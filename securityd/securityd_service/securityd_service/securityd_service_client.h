@@ -9,6 +9,9 @@ extern "C" {
 
 #include <bsm/audit.h>
 #include <mach/message.h>
+#ifdef DARLING
+#include <uuid/uuid.h>
+#endif
 #include <stdbool.h>
 #include <libaks.h>
 

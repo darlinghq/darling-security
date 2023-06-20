@@ -30,6 +30,7 @@
 #ifndef	_LIB_DER_OIDS_H_
 #define _LIB_DER_OIDS_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -161,6 +162,9 @@ extern const DERItem
 extern const DERItem
     oidGoogleEmbeddedSignedCertificateTimestamp,
     oidGoogleOCSPSignedCertificateTimestamp;
+
+/* Compare two decoded OIDs.  Returns true iff they are equivalent. */
+bool DEROidCompare(const DERItem *oid1, const DERItem *oid2);
 
 __END_DECLS
 
