@@ -31,7 +31,6 @@
 #define _LIB_DER_OIDSPRIV_H_
 
 #include <libDER/oids.h>
-#include <stdbool.h>
 
 __BEGIN_DECLS
 
@@ -90,9 +89,6 @@ extern const DERItem
     oidAppleCertExtAppleServerAuthenticationMMCSProd,
     oidAppleCertExtAppleServerAuthenticationiCloudSetupProdQA,
     oidAppleCertExtAppleServerAuthenticationiCloudSetupProd;
-
-    /* Compare two decoded OIDs.  Returns true iff they are equivalent. */
-    bool DEROidCompare(const DERItem *oid1, const DERItem *oid2);
 
 __END_DECLS
 
