@@ -539,10 +539,16 @@ static bool Flush(CFErrorRef *error) {
 
 
 + (SOSAccountGhostBustingOptions) ghostBustGetRampSettings {
+#if !defined(DARLING) || OCTAGON
     OTManager *otm = [OTManager manager];
     SOSAccountGhostBustingOptions options = ([otm ghostbustByMidEnabled] == YES ? SOSGhostBustByMID: 0) |
                                             ([otm ghostbustBySerialEnabled] == YES ? SOSGhostBustBySerialNumber : 0) |
                                             ([otm ghostbustByAgeEnabled] == YES ? SOSGhostBustSerialByAge: 0);
+#else
+    // Apple's original code (above) doesn't have a case for when `OCTAGON=0`,
+    // and tries to use Octagon code regardless (OTManager)
+    SOSAccountGhostBustingOptions options = 0;
+#endif
     return options;
 }
 

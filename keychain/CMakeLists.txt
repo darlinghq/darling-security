@@ -64,6 +64,7 @@ add_lib_ios_shim(libsecurityd_ios
 		#ckks/CKKSListenerCollection.m
 		#ckks/CKKSLocalSynchronizeOperation.m
 		#ckks/CKKSLockStateTracker.m
+		ckks/CKKSLogging.m
 		#ckks/CKKSManifest.m
 		#ckks/CKKSManifestLeafRecord.m
 		#ckks/CKKSMirrorEntry.m
@@ -99,7 +100,7 @@ add_lib_ios_shim(libsecurityd_ios
 		#ckks/NSOperationCategories.m
 		#ckks/OctagonAPSReceiver.m
 		#ckks/proto/generated_source/CKKSSerializedKey.m
-		#ckks/RateLimiter.m
+		ckks/RateLimiter.m
 		#CoreDataKeychain/KeychainModel.xcdatamodeld
 		#CoreDataKeychain/SecCDKeychain.m
 		#escrowrequest/EscrowRequestController.m
@@ -183,6 +184,7 @@ add_lib_ios_shim(libsecurityd_ios
 		securityd/SecDbKeychainV7-protobufs/generated_source/SecDbKeychainSerializedAKSWrappedKey.m
 		securityd/SecDbKeychainV7-protobufs/generated_source/SecDbKeychainSerializedItemV7.m
 		securityd/SecDbKeychainV7-protobufs/generated_source/SecDbKeychainSerializedMetadata.m
+		securityd/SecDbKeychainV7-protobufs/generated_source/SecDbKeychainSerializedMetadataKey.m
 		securityd/SecDbKeychainV7-protobufs/generated_source/SecDbKeychainSerializedSecretData.m
 		securityd/SecDbQuery.c
 		securityd/SecItemBackupServer.c

@@ -61,7 +61,7 @@ add_subdirectory(SecurityTool/macOS)
 #add_subdirectory(KeychainCircle)
 
 add_subdirectory(trust/trustd)
-#add_subdirectory(keychain/securityd) # can't build this with Octagon disabled
+add_subdirectory(keychain/securityd) # can't build this with Octagon disabled
 #add_subdirectory(OSX/authd)
 
 install(DIRECTORY DESTINATION libexec/darling/System/Library/Security)

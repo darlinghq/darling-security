@@ -21,11 +21,11 @@ target_compile_options(secd PRIVATE
 	-fobjc-arc
 )
 target_link_libraries(secd
-	#TrustedPeers
+	TrustedPeers
 	#CloudServices # missing
 	z
 	AuthKit
-	#AppleAccount # missing
+	AppleAccount
 	Accounts
 	#prequelite # missing
 	CrashReporterSupport
@@ -39,6 +39,7 @@ target_link_libraries(secd
 	aks # already includes aks_acl
 	#aks_acl
 	security_asn1
+	MobileKeyBag
 
 	#coreauthd_client
 	LocalAuthentication # instead of coreauthd_client
@@ -55,7 +56,7 @@ target_link_libraries(secd
 	IOKit
 	CoreData
 	#ApplePushService # missing
-	#CloudKit # missing
+	CloudKit
 	SystemConfiguration
 	Security
 	ProtocolBuffer

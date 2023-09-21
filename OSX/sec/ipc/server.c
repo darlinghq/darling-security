@@ -121,6 +121,10 @@
 
 #include "util.h"
 
+#ifdef DARLING
+#include <sys/stat.h>
+#endif
+
 static void refresh_prng(void)
 {
     aks_ref_key_t ref = NULL;
