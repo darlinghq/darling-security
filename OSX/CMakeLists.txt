@@ -99,7 +99,7 @@ if (BUILD_TARGET_64BIT)
 	)
 
 	set (generate-security-exp-depends ${generate-security-exp-depends}
-		${CMAKE_CURRENT_BINARY_DIR}/Security.x86_64.exp
+		${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
 	)
 endif ()
 
@@ -115,7 +115,7 @@ if (BUILD_TARGET_32BIT)
 	)
 
 	set (generate-security-exp-depends ${generate-security-exp-depends}
-		${CMAKE_CURRENT_BINARY_DIR}/Security.i386.exp
+		${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
 	)
 endif ()
 
