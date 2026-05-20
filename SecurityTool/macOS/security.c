@@ -746,7 +746,7 @@ const command commands[] =
         "<requirements> [<DER certificate file> ...]\n"
         "Evaluates the given requirement string against the given cert chain.",
         "Evaluate a requirement against a cert chain." },
-#if TARGET_OS_OSX && TARGET_CPU_ARM64
+#if TARGET_OS_OSX && TARGET_CPU_ARM64 && !defined(DARLING)
     { "filevault" , fvunlock,
         "skip-sc-enforcement <data volume UUID> <operation>\n"
         "  data volume UUID can by obtained by running diskutil apfs list"
