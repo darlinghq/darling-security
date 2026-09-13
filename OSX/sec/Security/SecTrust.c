@@ -1918,6 +1918,22 @@ SecCertificateRef SecTrustGetCertificateAtIndex(SecTrustRef trust,
     return cert;
 }
 
+CFArrayRef SecTrustCopyCertificateChain(SecTrustRef trust) {
+    if (!trust) {
+        return NULL;
+    }
+    SecTrustEvaluateIfNecessary(trust);
+    __block CFArrayRef chain = NULL;
+    dispatch_sync(trust->_trustQueue, ^{
+        if (trust->_chain) {
+            chain = CFArrayCreateCopy(kCFAllocatorDefault, trust->_chain);
+        } else if (trust->_certificates && CFArrayGetCount(trust->_certificates) > 0) {
+            chain = CFArrayCreateCopy(kCFAllocatorDefault, trust->_certificates);
+        }
+    });
+    return chain;
+}
+
 CFDictionaryRef SecTrustCopyInfo(SecTrustRef trust) {
     if (!trust) {
         return NULL;

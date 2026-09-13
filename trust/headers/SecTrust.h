@@ -509,6 +509,17 @@ SecCertificateRef SecTrustGetCertificateAtIndex(SecTrustRef trust, CFIndex ix)
     __OSX_AVAILABLE_STARTING(__MAC_10_7, __IPHONE_2_0);
 
 /*!
+    @function SecTrustCopyCertificateChain
+    @abstract Returns the evaluated certificate chain.
+    @param trust Reference to a trust object.
+    @result A CFArrayRef of SecCertificateRef objects representing the evaluated certificate chain.
+ */
+CF_RETURNS_RETAINED
+__nullable
+CFArrayRef SecTrustCopyCertificateChain(SecTrustRef trust)
+    API_AVAILABLE(macos(12.0), ios(15.0), watchos(8.0), tvos(15.0));
+
+/*!
     @function SecTrustCopyExceptions
     @abstract Returns an opaque cookie which will allow future evaluations
     of the current certificate to succeed.
