@@ -66,6 +66,11 @@ target_include_directories(securityd_exe PRIVATE
 )
 target_compile_options(securityd_exe PRIVATE
 	-fobjc-arc
+	# Darling runs unprivileged, and the NDEBUG=1 set for the whole
+	# security subtree would make securityd refuse to start for any
+	# user. Undefining it selects Apple's own "unprivileged, some
+	# features may not work" path so trust evaluation can run.
+	-UNDEBUG
 )
 make_fat(securityd_exe)
 

@@ -1247,7 +1247,11 @@ void SecStaticCode::validateExecutable()
 			if (!cd)
 				MacOSError::throwMe(errSecCSUnsigned);
 			AutoFileDesc fd(mainExecutablePath(), O_RDONLY);
+#ifndef DARLING
+			// This is only an I/O optimization. Darling does not implement this
+			// Darwin cache hint; retain the complete page-by-page hash validation.
 			fd.fcntl(F_NOCACHE, true);		// turn off page caching (one-pass)
+#endif
 			if (Universal *fat = mRep->mainExecutableImage())
 				fd.seek(fat->archOffset());
 			size_t pageSize = cd->pageSize ? (1 << cd->pageSize) : 0;
@@ -1328,8 +1332,14 @@ void SecStaticCode::validateResources(SecCSFlags flags)
 				itemIsOnRootFS, skipRootVolumeExceptions, useRootFSPolicy, itemMightUseXattrFiles, skipXattrFiles);
 
 		if (mLimitedAsync == NULL) {
+#ifdef DARLING
+			// Darling cannot query disk media through Apple's I/O registry.
+			// Use the existing serial resource validator without that SSD hint.
+			bool runMultiThreaded = false;
+#else
 			bool runMultiThreaded = ((flags & kSecCSSingleThreaded) == kSecCSSingleThreaded) ? false :
 					(diskRep()->fd().mediumType() == kIOPropertyMediumTypeSolidStateKey);
+#endif
 			mLimitedAsync = new LimitedAsync(runMultiThreaded);
 		}
 

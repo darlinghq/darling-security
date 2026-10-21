@@ -44,6 +44,15 @@ static NSTimeInterval TrustURLSessionGetResourceTimeout(void) {
 @property NSMutableArray <NSData *>* _clientLRUList;
 @end
 
+bool TrustURLSessionsAvailable(void)
+{
+    // Darling's Foundation has no working NSURLSession yet: the configuration
+    // class cannot even be messaged from trustd (ephemeral sessions are
+    // unrecognized, and class introspection aborts in the runtime). Report
+    // network fetches as unavailable until that exists.
+    return false;
+}
+
 @implementation TrustURLSessionCache
 
 - (instancetype)initWithDelegate:(TrustURLSessionDelegate *)delegate
@@ -58,6 +67,11 @@ static NSTimeInterval TrustURLSessionGetResourceTimeout(void) {
 
 - (NSURLSession *)createSessionForAuditToken:(NSData *)auditToken
 {
+    if (!TrustURLSessionsAvailable()) {
+        // network fetches (OCSP, CRL, CA issuers) are unavailable; callers
+        // treat a nil session like an unreachable server
+        return nil;
+    }
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
     config.timeoutIntervalForResource = TrustURLSessionGetResourceTimeout();
     config.HTTPAdditionalHeaders = @{@"User-Agent" : TrustdUserAgent};
@@ -71,6 +85,9 @@ static NSTimeInterval TrustURLSessionGetResourceTimeout(void) {
 
 - (NSURLSession *)sessionForAuditToken:(NSData *)auditToken
 {
+    if (!TrustURLSessionsAvailable()) {
+        return nil;
+    }
     @synchronized (self._clientLRUList) {
         NSURLSession *result = [self._clientSessionMap objectForKey:auditToken];
         if (result) {
@@ -82,6 +99,9 @@ static NSTimeInterval TrustURLSessionGetResourceTimeout(void) {
         }
         /* Cache miss: create new session */
         result = [self createSessionForAuditToken:auditToken];
+        if (result == nil) {
+            return nil;
+        }
         [self._clientLRUList insertObject:auditToken atIndex:0];
         [self._clientSessionMap setObject:result forKey:auditToken];
         secdebug("http", "creating session for %@", auditToken);
