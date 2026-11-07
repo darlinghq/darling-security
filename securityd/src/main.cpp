@@ -168,13 +168,15 @@ int main(int argc, char *argv[])
     // if we're not running as root in production mode, fail
     // in debug mode, issue a warning
     if (uid_t uid = getuid()) {
-#if defined(NDEBUG)
+#if defined(NDEBUG) && !defined(DARLING)
         Syslog::alert("Tried to run securityd as user %d: aborted", uid);
         fprintf(stderr, "You are not allowed to run securityd\n");
         exit(1);
 #else
+        // In Darling, launchd and its jobs run as the user who owns the
+        // prefix, so a release build has to accept a non-root uid as well.
         fprintf(stderr, "securityd is unprivileged (uid=%d); some features may not work.\n", uid);
-#endif //NDEBUG
+#endif //NDEBUG && !DARLING
     }
     
     // turn into a properly diabolical daemon unless debugMode is on
