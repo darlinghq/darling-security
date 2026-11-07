@@ -111,3 +111,4 @@ target_link_libraries(trustdFileHelper
 	system
 )
 install(TARGETS trustdFileHelper DESTINATION libexec/darling/usr/libexec)
+install(FILES trustdFileHelper/com.apple.trustdFileHelper.plist DESTINATION libexec/darling/System/Library/LaunchDaemons)
