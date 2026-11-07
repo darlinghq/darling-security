@@ -1247,11 +1247,7 @@ void SecStaticCode::validateExecutable()
 			if (!cd)
 				MacOSError::throwMe(errSecCSUnsigned);
 			AutoFileDesc fd(mainExecutablePath(), O_RDONLY);
-#ifndef DARLING
-			// This is only an I/O optimization. Darling does not implement this
-			// Darwin cache hint; retain the complete page-by-page hash validation.
 			fd.fcntl(F_NOCACHE, true);		// turn off page caching (one-pass)
-#endif
 			if (Universal *fat = mRep->mainExecutableImage())
 				fd.seek(fat->archOffset());
 			size_t pageSize = cd->pageSize ? (1 << cd->pageSize) : 0;
