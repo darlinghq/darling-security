@@ -1328,8 +1328,14 @@ void SecStaticCode::validateResources(SecCSFlags flags)
 				itemIsOnRootFS, skipRootVolumeExceptions, useRootFSPolicy, itemMightUseXattrFiles, skipXattrFiles);
 
 		if (mLimitedAsync == NULL) {
+#ifdef DARLING
+			// Darling cannot query disk media through Apple's I/O registry.
+			// Use the existing serial resource validator without that SSD hint.
+			bool runMultiThreaded = false;
+#else
 			bool runMultiThreaded = ((flags & kSecCSSingleThreaded) == kSecCSSingleThreaded) ? false :
 					(diskRep()->fd().mediumType() == kIOPropertyMediumTypeSolidStateKey);
+#endif
 			mLimitedAsync = new LimitedAsync(runMultiThreaded);
 		}
 

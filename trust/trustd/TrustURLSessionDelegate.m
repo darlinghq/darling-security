@@ -283,6 +283,10 @@ NSString *kSecTrustRequestHeaderUUID = @"X-Apple-Request-UUID";
 }
 
 - (BOOL)fetchNext:(NSURLSession *)session context:(TrustURLSessionContext *)context {
+    if (session == nil) {
+        secnotice("http", "no URL session available, skipping network fetch");
+        return true;
+    }
     if (context.numTasks >= MAX_TASKS) {
         secnotice("http", "Too many fetch %@ requests for this cert", [self class]);
         return true;

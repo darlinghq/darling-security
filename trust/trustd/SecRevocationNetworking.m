@@ -358,6 +358,11 @@ static ValidUpdateRequest *request = nil;
 }
 
 - (BOOL) scheduleUpdateFromServer:(NSString *)server forVersion:(NSUInteger)version withQueue:(dispatch_queue_t)updateQueue {
+    if (!TrustURLSessionsAvailable()) {
+        // no URL session support on this platform; keep the built-in database
+        secnotice("validupdate", "no URL session support, skipping update");
+        return NO;
+    }
     if (!server) {
         secnotice("validupdate", "invalid update request");
         return NO;

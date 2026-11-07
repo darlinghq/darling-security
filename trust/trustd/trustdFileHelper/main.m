@@ -12,10 +12,13 @@
 
 #import <xpc/private.h>
 #import <xpc/xpc.h>
+#if !defined(__DARLING__) && !defined(DARLING)
 #import <xpc/activity_private.h>
+#endif
 
 #import <dirhelper_priv.h>
 #include <sandbox.h>
+#include <sys/stat.h>
 #include <utilities/SecCFWrappers.h>
 #include <utilities/SecFileLocations.h>
 

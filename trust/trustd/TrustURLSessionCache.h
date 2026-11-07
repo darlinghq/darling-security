@@ -30,6 +30,10 @@
 
 extern const NSString *TrustdUserAgent;
 
+// Darling: whether this platform's Foundation can create the URL sessions
+// trustd's network fetches (OCSP, CRL, CA issuers, database updates) need.
+bool TrustURLSessionsAvailable(void);
+
 @interface TrustURLSessionCache : NSObject
 - (instancetype)initWithDelegate:(TrustURLSessionDelegate *)delegate;
 - (NSURLSession *)sessionForAuditToken:(NSData *)auditToken;
