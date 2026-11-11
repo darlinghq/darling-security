@@ -221,6 +221,7 @@ _kSecTrustRevocationReason
 _kSecTrustRevocationValidUntilDate
 
 _SecTrustAddToInputCertificates
+_SecTrustCopyCertificateChain
 _SecTrustCopyCustomAnchorCertificates
 _SecTrustCopyDetailedPropertiesAtIndex
 _SecTrustCopyExceptions
