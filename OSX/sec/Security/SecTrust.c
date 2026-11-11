@@ -1927,8 +1927,6 @@ CFArrayRef SecTrustCopyCertificateChain(SecTrustRef trust) {
     dispatch_sync(trust->_trustQueue, ^{
         if (trust->_chain) {
             chain = CFArrayCreateCopy(kCFAllocatorDefault, trust->_chain);
-        } else if (trust->_certificates && CFArrayGetCount(trust->_certificates) > 0) {
-            chain = CFArrayCreateCopy(kCFAllocatorDefault, trust->_certificates);
         }
     });
     return chain;
