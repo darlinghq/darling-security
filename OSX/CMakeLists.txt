@@ -71,7 +71,7 @@ if (BUILD_TARGET_64BIT)
 			${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
 			${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecExports.exp-in
 		COMMAND
-			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c -target ${APPLE_TARGET_TRIPLET_64BIT} ${EXP_IN_FLAGS} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
+			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c ${EXP_IN_FLAGS} -target ${APPLE_TARGET_TRIPLET_64BIT} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
 	)
 
 	# can't be called `Security_x86_64`; add_separated_framework already uses that
@@ -113,7 +113,7 @@ if (BUILD_TARGET_32BIT)
 			${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
 			${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecExports.exp-in
 		COMMAND
-			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c -target ${APPLE_TARGET_TRIPLET_32BIT} ${EXP_IN_FLAGS} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
+			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c ${EXP_IN_FLAGS} -target ${APPLE_TARGET_TRIPLET_32BIT} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
 	)
 
 	set (generate-security-exp-depends ${generate-security-exp-depends}
