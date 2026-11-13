@@ -59,6 +59,21 @@ separate_arguments(EXP_IN_FLAGS)
 
 set(EXP_IN_FLAGS ${EXP_IN_FLAGS} ${DirOpts})
 
+# Every file the preprocessor reads while it expands Security.exp-in, directly or through the
+# lists it includes. If an exp-in or list file is added or no longer included, compare with the
+# files `clang -E -MD` reports for Security.exp-in (impl/V479-tests/exp-depends.sh does that).
+set(SECURITY_EXP_IN_DEPENDS
+	${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in
+	${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
+	${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecExports.exp-in
+	${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecPolicy.list
+	${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecPolicyChecks.list
+	${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecAccessControlExports.exp-in
+	${CMAKE_CURRENT_SOURCE_DIR}/../keychain/SecureObjectSync/SOSExports.exp-in
+	${CMAKE_CURRENT_SOURCE_DIR}/../keychain/SecureObjectSync/SOSViews.exp-in
+	${CMAKE_CURRENT_SOURCE_DIR}/../keychain/SecureObjectSync/ViewList.list
+)
+
 set (security_objects "")
 set (generate-security-exp-depends "")
 
@@ -67,9 +82,7 @@ if (BUILD_TARGET_64BIT)
 		OUTPUT
 			${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
 		DEPENDS
-			${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in
-			${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
-			${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecExports.exp-in
+			${SECURITY_EXP_IN_DEPENDS}
 		COMMAND
 			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c ${EXP_IN_FLAGS} -target ${APPLE_TARGET_TRIPLET_64BIT} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
 	)
@@ -109,9 +122,7 @@ if (BUILD_TARGET_32BIT)
 		OUTPUT
 			${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
 		DEPENDS
-			${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in
-			${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
-			${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecExports.exp-in
+			${SECURITY_EXP_IN_DEPENDS}
 		COMMAND
 			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c ${EXP_IN_FLAGS} -target ${APPLE_TARGET_TRIPLET_32BIT} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
 	)
@@ -310,6 +321,11 @@ if (BUILD_TARGET_64BIT)
 		Foundation
 	)
 
+	# add_dependencies only orders the build: relink when the export list is regenerated
+	set_property(TARGET Security_${APPLE_ARCH_64BIT}_firstpass Security_${APPLE_ARCH_64BIT}
+		APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
+	)
+
 	target_link_options(Security_${APPLE_ARCH_64BIT}_firstpass PRIVATE
 		-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
 	)
@@ -328,6 +344,11 @@ if (BUILD_TARGET_32BIT)
 	add_dependencies(Security_${APPLE_ARCH_32BIT}
 		generate-security-exp
 		Foundation
+	)
+
+	# add_dependencies only orders the build: relink when the export list is regenerated
+	set_property(TARGET Security_${APPLE_ARCH_32BIT}_firstpass Security_${APPLE_ARCH_32BIT}
+		APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
 	)
 
 	target_link_options(Security_${APPLE_ARCH_32BIT}_firstpass PRIVATE
