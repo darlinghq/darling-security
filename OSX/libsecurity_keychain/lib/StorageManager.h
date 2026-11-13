@@ -224,6 +224,13 @@ private:
 	SecPreferencesDomain mDomain; // current domain (in mSavedList and cache fields)
 	Mutex mMutex;
 	RecursiveMutex mKeychainMapMutex;
+
+#if defined(DARLING)
+	// Darling has no login window to set up the user's login keychain, so
+	// this does it once per process on first use (see StorageManager.cpp).
+	void sessionLoginOnFirstUse();
+	bool mSessionLoginDone;
+#endif
 };
 
 } // end namespace KeychainCore
