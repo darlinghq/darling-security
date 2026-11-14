@@ -53,6 +53,12 @@
 #include <securityd_client/ssblob.h>
 #include <Security/SecBasePriv.h>
 #include "TokenLogin.h"
+#if defined(DARLING)
+#include <sys/file.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
+#endif
 
 //%%% add this to AuthorizationTagsPriv.h later
 #ifndef AGENT_HINT_LOGIN_KC_SUPPRESS_RESET_PANEL
@@ -135,6 +141,9 @@ StorageManager::StorageManager() :
 	mCommonList(kSecPreferencesDomainCommon),
 	mDomain(kSecPreferencesDomainUser),
 	mMutex(Mutex::recursive)
+#if defined(DARLING)
+	, mSessionLoginDone(false)
+#endif
 {
 }
 
@@ -567,6 +576,10 @@ StorageManager::defaultKeychain()
 {
 	StLock<Mutex>_(mMutex);
 
+#if defined(DARLING)
+	sessionLoginOnFirstUse();
+#endif
+
 	Keychain theKeychain;
     CFTypeRef ref;
 
@@ -650,6 +663,10 @@ Keychain
 StorageManager::loginKeychain()
 {
 	StLock<Mutex>_(mMutex);
+
+#if defined(DARLING)
+	sessionLoginOnFirstUse();
+#endif
 
 	Keychain theKeychain;
 	{
@@ -1061,6 +1078,10 @@ StorageManager::getSearchList(KeychainList &keychainList)
 		keychainList.clear();
 		return;
 	}
+
+#if defined(DARLING)
+	sessionLoginOnFirstUse();
+#endif
 
     mSavedList.revert(false);
 	mCommonList.revert(false);
@@ -2443,3 +2464,150 @@ StorageManager::keychainOwnerPermissionsValidForDomain(const char* path, SecPref
 	// user owns file and can read/write it
 	return true;
 }
+
+#if defined(DARLING)
+
+// Opens an existing directory owned by the caller without following a
+// symbolic link in the last component. Returns -1 otherwise.
+static int openOwnDirectory(const string &path)
+{
+	int fd = ::open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+	if (fd < 0)
+		return -1;
+	struct stat st;
+	if (::fstat(fd, &st) != 0 || !S_ISDIR(st.st_mode) || st.st_uid != geteuid()) {
+		::close(fd);
+		return -1;
+	}
+	return fd;
+}
+
+// Creates the directory with owner-only access if it is missing, then opens it.
+static int makeOwnDirectory(const string &path)
+{
+	if (::mkdir(path.c_str(), 0700) != 0 && errno != EEXIST)
+		return -1;
+	return openOwnDirectory(path);
+}
+
+// Removes group and other access from the login keychain file. With an empty
+// password, the file permissions are what protects the secrets in it.
+static void restrictKeychainFile(const string &path)
+{
+	int fd = ::open(path.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+	if (fd < 0)
+		return;
+	struct stat st;
+	if (::fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_uid == geteuid()
+		&& (st.st_mode & 077) != 0) {
+		if (::fchmod(fd, st.st_mode & 0700) != 0)
+			secnotice("KCLogin", "cannot restrict mode of %s: %d", path.c_str(), errno);
+	}
+	::close(fd);
+}
+
+//
+// On macOS the login window logs the user in to the keychain at every login
+// (SecKeychainLogin with the login password): that creates
+// ~/Library/Keychains/login.keychain-db when it is missing, puts it in the
+// search list, makes it the default keychain if there is no usable default,
+// and unlocks it. Darling has no login window and no login password, so the
+// first process of a session that needs the default keychain, the login
+// keychain or the search list does the same with an empty password. A user
+// who sets a password on the login keychain keeps it locked; it then has to
+// be unlocked explicitly (for example with "security unlock-keychain").
+//
+// Nothing is done for root, setuid/setgid processes, sandboxed applications,
+// processes in the system preference domain, or without an absolute HOME.
+// Existing keychain files are never replaced or moved, except an empty
+// (zero-length) login.keychain-db, which can only be left behind by a process
+// that died while creating it and holds no data.
+//
+void
+StorageManager::sessionLoginOnFirstUse()
+{
+	StLock<Mutex>_(mMutex);
+
+	if (mSessionLoginDone)
+		return;
+	mSessionLoginDone = true;	// also guards against re-entry from login()
+
+	if (gServerMode || mDomain != kSecPreferencesDomainUser)
+		return;
+
+	uid_t uid = geteuid();
+	if (uid == 0 || issetugid())
+		return;
+
+	const char *home = getenv("HOME");
+	if (!home || home[0] != '/')
+		return;
+
+	try {
+		if (defaultPreferenceDomain() != kSecPreferencesDomainUser || isAppSandboxed())
+			return;
+
+		struct passwd *pw = getpwuid(uid);
+		if (!pw || !pw->pw_name)
+			return;
+		string userName = pw->pw_name;
+
+		string library = DLDbListCFPref::ExpandTildesInPath("~/Library");
+		string keychains = library + "/Keychains";
+		string loginDb = keychains + "/login.keychain-db";
+		string loginOld = keychains + "/login.keychain";
+
+		int libraryFd = makeOwnDirectory(library);
+		if (libraryFd < 0) {
+			secnotice("KCLogin", "no usable %s, not setting up the login keychain", library.c_str());
+			return;
+		}
+		::close(libraryFd);
+
+		bool created = (::mkdir(keychains.c_str(), 0700) == 0);
+		int dirFd = openOwnDirectory(keychains);
+		if (dirFd < 0) {
+			secnotice("KCLogin", "no usable %s, not setting up the login keychain", keychains.c_str());
+			return;
+		}
+
+		// Serialize with other processes of the user doing the same, so that
+		// only one creates the keychain and none opens it half written.
+		if (::flock(dirFd, LOCK_EX) != 0) {
+			::close(dirFd);
+			return;
+		}
+
+		try {
+			struct stat st;
+			if (::lstat(loginDb.c_str(), &st) == 0 && S_ISREG(st.st_mode) && st.st_size == 0) {
+				secnotice("KCLogin", "removing empty %s left by an interrupted creation", loginDb.c_str());
+				::unlink(loginDb.c_str());
+			}
+
+			bool exists = (::lstat(loginDb.c_str(), &st) == 0 || ::lstat(loginOld.c_str(), &st) == 0);
+			if (!exists && !created) {
+				// A keychain with an empty password is only as private as
+				// its file: make the directory owner-only before creating it.
+				struct stat dst;
+				if (::fstat(dirFd, &dst) == 0 && (dst.st_mode & 077) != 0)
+					::fchmod(dirFd, dst.st_mode & 0700);
+			}
+
+			login((UInt32) userName.length(), userName.c_str(), 0, "", false);
+		} catch (const CommonError &e) {
+			secnotice("KCLogin", "login keychain setup failed: %d", (int) e.osStatus());
+		} catch (...) {
+			secnotice("KCLogin", "login keychain setup failed");
+		}
+
+		restrictKeychainFile(loginDb);
+
+		::flock(dirFd, LOCK_UN);
+		::close(dirFd);
+	} catch (...) {
+		secnotice("KCLogin", "login keychain setup failed");
+	}
+}
+
+#endif // DARLING
