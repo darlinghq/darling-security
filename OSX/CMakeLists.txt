@@ -300,6 +300,9 @@ add_separated_framework(Security
 
 )
 
+# Keep the upward-library operand distinct from the ordinary Foundation input.
+# Otherwise Clang can move both occurrences into a long-command -filelist,
+# leaving -upward_library without its operand. The path resolves to the same file.
 if (BUILD_TARGET_64BIT)
 	add_dependencies(Security_${APPLE_ARCH_64BIT}_firstpass
 		generate-security-exp
@@ -317,7 +320,7 @@ if (BUILD_TARGET_64BIT)
 	target_link_options(Security_${APPLE_ARCH_64BIT} PRIVATE
 		-Wl,-dead_strip
 		-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
-		-Wl,-upward_library,$<TARGET_FILE:Foundation>
+		-Wl,-upward_library,$<TARGET_FILE_DIR:Foundation>/./$<TARGET_FILE_NAME:Foundation>
 	)
 endif ()
 if (BUILD_TARGET_32BIT)
@@ -337,7 +340,7 @@ if (BUILD_TARGET_32BIT)
 	target_link_options(Security_${APPLE_ARCH_32BIT} PRIVATE
 		-Wl,-dead_strip
 		-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
-		-Wl,-upward_library,$<TARGET_FILE:Foundation>
+		-Wl,-upward_library,$<TARGET_FILE_DIR:Foundation>/./$<TARGET_FILE_NAME:Foundation>
 	)
 endif ()
 
