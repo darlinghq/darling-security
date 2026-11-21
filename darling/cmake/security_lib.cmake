@@ -52,7 +52,14 @@ function(add_security_library name)
 	endif()
 
 	if(SECLIB_MODERN_OBJC)
-		set(STATICLIB_ARG_RUNTIME "64BIT_ONLY")
+		# the slices with the modern Objective-C runtime
+		set(STATICLIB_ARG_RUNTIME "ARCHS")
+		foreach(arch IN LISTS DARLING_ARCHS)
+			darling_arch_objc_abi(${arch} objc_abi)
+			if(objc_abi STREQUAL "modern")
+				list(APPEND STATICLIB_ARG_RUNTIME ${arch})
+			endif()
+		endforeach()
 		set(STATICLIB_ARG_FAT "")
 	endif()
 
