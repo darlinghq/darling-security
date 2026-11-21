@@ -77,16 +77,24 @@ set(SECURITY_EXP_IN_DEPENDS
 set (security_objects "")
 set (generate-security-exp-depends "")
 
-if (BUILD_TARGET_64BIT)
+# The export list of each slice, preprocessed for its architecture
+foreach (arch IN LISTS DARLING_ARCHS)
+	darling_arch_triple(${arch} security_triple)
 	add_custom_command(
 		OUTPUT
-			${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
+			${CMAKE_CURRENT_BINARY_DIR}/Security.${arch}.exp
 		DEPENDS
 			${SECURITY_EXP_IN_DEPENDS}
 		COMMAND
-			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c ${EXP_IN_FLAGS} -target ${APPLE_TARGET_TRIPLET_64BIT} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
+			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c ${EXP_IN_FLAGS} -target ${security_triple} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${arch}.exp
 	)
 
+	set (generate-security-exp-depends ${generate-security-exp-depends}
+		${CMAKE_CURRENT_BINARY_DIR}/Security.${arch}.exp
+	)
+endforeach ()
+
+if (BUILD_TARGET_64BIT)
 	# can't be called `Security_x86_64`; add_separated_framework already uses that
 	add_darling_object_library(Security_x86_64_only_stuff
 		64BIT_ONLY
@@ -110,25 +118,6 @@ if (BUILD_TARGET_64BIT)
 
 	set (security_objects ${security_objects}
 		$<TARGET_OBJECTS:Security_x86_64_only_stuff>
-	)
-
-	set (generate-security-exp-depends ${generate-security-exp-depends}
-		${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
-	)
-endif ()
-
-if (BUILD_TARGET_32BIT)
-	add_custom_command(
-		OUTPUT
-			${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
-		DEPENDS
-			${SECURITY_EXP_IN_DEPENDS}
-		COMMAND
-			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c ${EXP_IN_FLAGS} -target ${APPLE_TARGET_TRIPLET_32BIT} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
-	)
-
-	set (generate-security-exp-depends ${generate-security-exp-depends}
-		${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
 	)
 endif ()
 
@@ -314,56 +303,31 @@ add_separated_framework(Security
 # Keep the upward-library operand distinct from the ordinary Foundation input.
 # Otherwise Clang can move both occurrences into a long-command -filelist,
 # leaving -upward_library without its operand. The path resolves to the same file.
-if (BUILD_TARGET_64BIT)
-	add_dependencies(Security_${APPLE_ARCH_64BIT}_firstpass
+foreach (arch IN LISTS DARLING_ARCHS)
+	add_dependencies(Security_${arch}_firstpass
 		generate-security-exp
 	)
 
-	add_dependencies(Security_${APPLE_ARCH_64BIT}
-		generate-security-exp
-		Foundation
-	)
-
-	# add_dependencies only orders the build: relink when the export list is regenerated
-	set_property(TARGET Security_${APPLE_ARCH_64BIT}_firstpass Security_${APPLE_ARCH_64BIT}
-		APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
-	)
-
-	target_link_options(Security_${APPLE_ARCH_64BIT}_firstpass PRIVATE
-		-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
-	)
-
-	target_link_options(Security_${APPLE_ARCH_64BIT} PRIVATE
-		-Wl,-dead_strip
-		-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
-		-Wl,-upward_library,$<TARGET_FILE_DIR:Foundation>/./$<TARGET_FILE_NAME:Foundation>
-	)
-endif ()
-if (BUILD_TARGET_32BIT)
-	add_dependencies(Security_${APPLE_ARCH_32BIT}_firstpass
-		generate-security-exp
-	)
-
-	add_dependencies(Security_${APPLE_ARCH_32BIT}
+	add_dependencies(Security_${arch}
 		generate-security-exp
 		Foundation
 	)
 
 	# add_dependencies only orders the build: relink when the export list is regenerated
-	set_property(TARGET Security_${APPLE_ARCH_32BIT}_firstpass Security_${APPLE_ARCH_32BIT}
-		APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
+	set_property(TARGET Security_${arch}_firstpass Security_${arch}
+		APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/Security.${arch}.exp
 	)
 
-	target_link_options(Security_${APPLE_ARCH_32BIT}_firstpass PRIVATE
-		-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
+	target_link_options(Security_${arch}_firstpass PRIVATE
+		-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.${arch}.exp
 	)
 
-	target_link_options(Security_${APPLE_ARCH_32BIT} PRIVATE
+	target_link_options(Security_${arch} PRIVATE
 		-Wl,-dead_strip
-		-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
+		-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/Security.${arch}.exp
 		-Wl,-upward_library,$<TARGET_FILE_DIR:Foundation>/./$<TARGET_FILE_NAME:Foundation>
 	)
-endif ()
+endforeach ()
 
 target_include_directories(Security_obj PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/include
