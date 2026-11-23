@@ -66,6 +66,10 @@ session_create(session_id_t sid)
     require(session != NULL, done);
     
     session->auditinfo.ai_asid = sid;
+    // DARLING: the audit session lookup can fail where the kernel does not know
+    // the session (a Darling process only knows its own). A zeroed record would
+    // make root the session owner, so start from "no audit user" instead.
+    session->auditinfo.ai_auid = AU_DEFAUDITID;
     
     if (!session_update(session)) {
         os_log_error(AUTHD_LOG, "session: failed to get session info");
