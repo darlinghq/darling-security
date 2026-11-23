@@ -815,6 +815,41 @@ done:
     return entitled;
 }
 
+// DARLING: Darling has no SecurityAgent and no authentication UI, and a Darling
+// prefix has no account passwords to verify. Where macOS would ask the user to
+// authenticate, the user who created the authorization is treated as
+// authenticated: the right is granted when that user satisfies the rule on
+// their own account (uid 0, the session owner when the rule asks for that, or
+// member of the rule group, for example admin), and denied otherwise. The
+// checks that come before this point (kAuthorizationFlagExtendRights,
+// kAuthorizationFlagInteractionAllowed, rule timeout and sharing) are the same
+// as on macOS. Documented in OSX/authd/DARLING.md.
+// Test: tests/src/authd_rights.c (class "user" rights with and without
+// kAuthorizationFlagInteractionAllowed)
+static OSStatus
+_evaluate_headless_authentication(engine_t engine, rule_t rule)
+{
+    OSStatus status = errAuthorizationDenied;
+    credential_t cred = credential_create(auth_token_get_uid(engine->auth));
+    require_action(cred != NULL, done, os_log_error(AUTHD_LOG, "engine %lld: no credential for the authorization creator", engine->engine_index));
+
+    status = _evaluate_user_credential_for_rule(engine, cred, rule, true, false, &engine->reason);
+    if (status == errAuthorizationSuccess) {
+        os_log(AUTHD_LOG, "engine %lld: no authentication UI, treating the creator (UID %i) as authenticated for right '%{public}s'", engine->engine_index, credential_get_uid(cred), engine->currentRightName);
+        _engine_set_credential(engine, cred, rule_get_shared(rule));
+
+        if (auth_token_least_privileged(engine->auth)) {
+            credential_t rightCred = credential_create_with_right(engine->currentRightName);
+            _engine_set_credential(engine, rightCred, rule_get_shared(rule));
+            CFReleaseSafe(rightCred);
+        }
+    }
+
+done:
+    CFReleaseSafe(cred);
+    return status;
+}
+
 static OSStatus
 _evaluate_class_user(engine_t engine, rule_t rule)
 {
@@ -899,18 +934,11 @@ _evaluate_class_user(engine_t engine, rule_t rule)
             return errAuthorizationInteractionNotAllowed;
         }
         
-        if (!(session_get_attributes(auth_token_get_session(engine->auth)) & AU_SESSION_FLAG_HAS_GRAPHIC_ACCESS)) {
-            os_log_error(AUTHD_LOG, "Fatal: interaction not allowed (session has no ui access) (engine %lld)", engine->engine_index);
-            return errAuthorizationInteractionNotAllowed;
-        }
-        
-        if (server_in_dark_wake() && !(engine->flags & kAuthorizationFlagIgnoreDarkWake)) {
-            os_log_error(AUTHD_LOG, "Fatal: authorization denied (DW) (engine %lld)", engine->engine_index);
-            return errAuthorizationDenied;
-        }
+        // DARLING: the session UI access and dark wake checks are not made: the
+        // authentication below does not show a window and does not need a display.
     }
 
-	return _evaluate_authentication(engine, rule);
+	return _evaluate_headless_authentication(engine, rule);
 }
 
 static OSStatus
