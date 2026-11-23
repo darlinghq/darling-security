@@ -124,18 +124,13 @@ credential_create(uid_t uid)
 
     struct passwd *pw = getpwuid(uid);
 	if (pw != NULL) {
-        // avoid hinting a locked account
-		// LibInfo started to return asterisk for system accounts in <rdar://problem/31633690> J93: 17a240: Hang during boot (opendirectoryd/powerd deadlock)
-		// so do not make this check for those system accounts
-		if ( (uid < 500) ||  (pw->pw_passwd == NULL) || strcmp(pw->pw_passwd, "*") ) {
-            cred->uid = pw->pw_uid;
-            cred->name = _copy_string(pw->pw_name);
-            cred->realName = _copy_string(pw->pw_gecos);
-            cred->valid = true;
-        } else {
-            cred->uid = (uid_t)-2;
-            cred->valid = false;
-        }
+        // DARLING: macOS does not hint a locked account (a "*" password field for a user
+        // with uid 500 or more). The accounts of a Darling prefix are plain files without
+        // passwords, so the user has "*" there and is not locked: the field is not checked.
+        cred->uid = pw->pw_uid;
+        cred->name = _copy_string(pw->pw_name);
+        cred->realName = _copy_string(pw->pw_gecos);
+        cred->valid = true;
         endpwent();
     }
     
