@@ -420,6 +420,16 @@ OSStatus SecTrustAddToInputCertificates(SecTrustRef trust, CFTypeRef _Nonnull ce
     __OSX_AVAILABLE(10.12.4) __IOS_AVAILABLE(10.3) __TVOS_AVAILABLE(10.2) __WATCHOS_AVAILABLE(3.2);
 
 /*!
+ @function SecTrustSetClientAuditToken
+ @abstract Record the audit token of the client the trust is evaluated for.
+ @param trust A reference to the trust object
+ @param auditToken The client's audit_token_t as data, or NULL to clear it.
+ @result A result code. See "Security Error Codes" (SecBase.h)
+ @discussion The token identifies the client; it does not change the result of the evaluation.
+ */
+OSStatus SecTrustSetClientAuditToken(SecTrustRef trust, CFDataRef _Nullable auditToken);
+
+/*!
  @function SecTrustSetPinningPolicyName
  @abstract Set the policy name to be used during the trust evaluation.
  @param trust A reference to the trust object

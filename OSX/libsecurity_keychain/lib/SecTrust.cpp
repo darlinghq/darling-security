@@ -340,6 +340,7 @@ typedef struct __TSecTrust {
     void*                   _legacy_info_array;
     void*                   _legacy_status_array;
     dispatch_queue_t        _trustQueue;
+    CFDataRef               _clientAuditToken;
 } TSecTrust;
 
 CFArrayRef SecTrustCopyInputCertificates(SecTrustRef trust)

@@ -145,6 +145,11 @@ struct __SecTrust {
     /* Dispatch queue for thread-safety */
     dispatch_queue_t        _trustQueue;
 
+    /* Darling: the audit token of the client a trust is evaluated for, as
+     * set by SecTrustSetClientAuditToken. It is kept for the client; it does
+     * not take part in evaluation. */
+    CFDataRef               _clientAuditToken;
+
     /* === IMPORTANT! ===
      * Any change to this structure definition
      * must also be made in the TSecTrust structure,
@@ -183,6 +188,7 @@ static void SecTrustDestroy(CFTypeRef cf) {
     CFReleaseNull(trust->_details);
     CFReleaseNull(trust->_info);
     CFReleaseNull(trust->_exceptions);
+    CFReleaseNull(trust->_clientAuditToken);
 
     if (trust->_legacy_info_array) {
         free(trust->_legacy_info_array);
@@ -721,6 +727,23 @@ OSStatus SecTrustSetNetworkFetchAllowed(SecTrustRef trust, Boolean allowFetch) {
         SecTrustSetNeedsEvaluation(trust);
     }
 	return status;
+}
+
+/* Darling: records the audit token of the process a trust is evaluated on
+ * behalf of. The token identifies that client (for example to attribute
+ * network fetches to it); it does not change the evaluation or its result,
+ * so it does not invalidate a result already computed. A NULL token clears
+ * it. */
+OSStatus SecTrustSetClientAuditToken(SecTrustRef trust, CFDataRef auditToken) {
+    if (!trust) {
+        return errSecParam;
+    }
+    dispatch_sync(trust->_trustQueue, ^{
+        CFDataRef copy = auditToken ? CFDataCreateCopy(CFGetAllocator(trust), auditToken) : NULL;
+        CFReleaseSafe(trust->_clientAuditToken);
+        trust->_clientAuditToken = copy;
+    });
+    return errSecSuccess;
 }
 
 OSStatus SecTrustGetNetworkFetchAllowed(SecTrustRef trust, Boolean *allowFetch) {
