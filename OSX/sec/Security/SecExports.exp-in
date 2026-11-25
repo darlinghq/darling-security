@@ -264,6 +264,7 @@ _SecTrustReportNetworkingAnalytics
 _SecTrustSerialize
 _SecTrustSetAnchorCertificates
 _SecTrustSetAnchorCertificatesOnly
+_SecTrustSetClientAuditToken
 _SecTrustSetExceptions
 _SecTrustSetKeychainsAllowed
 _SecTrustSetNeedsEvaluation
