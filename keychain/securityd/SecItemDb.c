@@ -38,6 +38,7 @@
 
 #include "keychain/securityd/SecDbKeychainItem.h"
 #include "keychain/securityd/SecItemSchema.h"
+#include "keychain/securityd/SecItemSecretService.h"
 #include "keychain/securityd/SecItemServer.h"
 #include <Security/SecAccessControlPriv.h>
 #include <Security/SecBasePriv.h>
@@ -57,6 +58,24 @@
 #include "keychain/ckks/CKKS.h"
 
 #define kSecBackupKeybagUUIDKey CFSTR("keybag-uuid")
+
+/* The optional Secret Service backend handles only ordinary password items. */
+static bool
+SecItemSecretServiceSupportsQuery(Query *q)
+{
+    return q != NULL && q->q_error == NULL && q->q_ref == NULL &&
+        q->q_row_id == 0 && q->q_token_object_id == NULL &&
+        !q->q_use_item_list &&
+        (q->q_class == genp_class() || q->q_class == inet_class());
+}
+
+static bool
+SecItemSecretServiceSupportsCopy(Query *q)
+{
+    return SecItemSecretServiceSupportsQuery(q) && q->q_limit == 1 &&
+        (q->q_return_type & kSecReturnDataMask) != 0 &&
+        (q->q_return_type & ~(uint32_t)kSecReturnDataMask) == 0;
+}
 
 const SecDbAttr *SecDbAttrWithKey(const SecDbClass *c,
                                   CFTypeRef key,
@@ -281,6 +300,17 @@ s3dl_query_add(SecDbConnectionRef dbt, Query *q, CFTypeRef *result, CFErrorRef *
     /* Add requires a class to be specified unless we are adding a ref. */
     if (q->q_use_item_list)
         return errSecUseItemListUnsupported;
+
+    if (result == NULL && SecItemSecretServiceSupportsQuery(q)) {
+        SecItemSecretServiceResult serviceResult =
+            SecItemSecretServiceAdd(q->q_item, q->q_data, error);
+        if (serviceResult == kSecItemSecretServiceHandled) {
+            q->q_changed = true;
+            return true;
+        }
+        if (serviceResult == kSecItemSecretServiceFailed)
+            return false;
+    }
 
     /* Actual work here. */
     SecDbItemRef item = SecDbItemCreateWithAttributes(kCFAllocatorDefault, q->q_class, q->q_item, KEYBAG_DEVICE, error);
@@ -982,6 +1012,22 @@ s3dl_copy_matching(SecDbConnectionRef dbt, Query *q, CFTypeRef *result,
     // Only copy things that aren't tombstones unless the client explicitly asks otherwise.
     if (!CFDictionaryContainsKey(q->q_item, kSecAttrTombstone))
         query_add_attribute(kSecAttrTombstone, kCFBooleanFalse, q);
+
+    if (SecItemSecretServiceSupportsCopy(q)) {
+        CFDataRef value = NULL;
+        SecItemSecretServiceResult serviceResult =
+            SecItemSecretServiceCopy(q->q_item, &value, error);
+        if (serviceResult == kSecItemSecretServiceHandled) {
+            if (result != NULL)
+                *result = value;
+            else
+                CFReleaseNull(value);
+            return true;
+        }
+        if (serviceResult == kSecItemSecretServiceFailed)
+            return false;
+    }
+
     bool ok = s3dl_query(s3dl_query_row, &ctx, error);
     if (ok && result)
         *result = ctx.result;
@@ -1145,6 +1191,17 @@ s3dl_query_update(SecDbConnectionRef dbt, Query *q,
     if (q->q_token_object_id && query_attr_count(q) != 1)
         return SecError(errSecItemIllegalQuery, error, CFSTR("attributes to update illegal; both token persistent ref and other attributes can't be updated at the same time"));
 
+    if (SecItemSecretServiceSupportsQuery(q)) {
+        SecItemSecretServiceResult serviceResult =
+            SecItemSecretServiceUpdate(q->q_item, attributesToUpdate, error);
+        if (serviceResult == kSecItemSecretServiceHandled) {
+            q->q_changed = true;
+            return true;
+        }
+        if (serviceResult == kSecItemSecretServiceFailed)
+            return false;
+    }
+
     __block bool result = true;
     Query *u = query_create(q->q_class, NULL, attributesToUpdate, NULL, error);
     if (u == NULL) return false;
@@ -1226,6 +1283,18 @@ s3dl_query_delete(SecDbConnectionRef dbt, Query *q, CFArrayRef accessGroups, CFE
     // Only delete things that aren't tombstones, unless the client explicitly asks otherwise.
     if (!CFDictionaryContainsKey(q->q_item, kSecAttrTombstone))
         query_add_attribute(kSecAttrTombstone, kCFBooleanFalse, q);
+
+    if (SecItemSecretServiceSupportsQuery(q)) {
+        SecItemSecretServiceResult serviceResult =
+            SecItemSecretServiceDelete(q->q_item, error);
+        if (serviceResult == kSecItemSecretServiceHandled) {
+            q->q_changed = true;
+            return true;
+        }
+        if (serviceResult == kSecItemSecretServiceFailed)
+            return false;
+    }
+
     ok &= SecDbItemSelect(q, dbt, error, NULL, ^bool(const SecDbAttr *attr) {
         return false;
     },^bool(CFMutableStringRef sql, bool *needWhere) {
