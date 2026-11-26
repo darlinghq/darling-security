@@ -485,7 +485,7 @@ static OSStatus SecECPrivateKeyInit(SecKeyRef key,
             return errSecKeySizeNotAllowed;
         }
 
-        if (!ccec_generate_key_fips(cp, ccrng_seckey, fullkey))
+        if (!ccec_generate_key(cp, ccrng_seckey, fullkey))
             err = errSecSuccess;
         break;
     }
