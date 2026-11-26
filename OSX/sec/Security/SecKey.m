@@ -1431,6 +1431,13 @@ static inline bool SecKeyErrorPropagate(bool succeeded, CFErrorRef possibleError
 }
 
 CFDataRef SecKeyCopyExternalRepresentation(SecKeyRef key, CFErrorRef *error) {
+    if (key == NULL) {
+        if (error != NULL) {
+            *error = NULL;
+        }
+        SecError(errSecParam, error, CFSTR("key is NULL"));
+        return NULL;
+    }
     if (!key->key_class->copyExternalRepresentation) {
         if (error != NULL) {
             *error = NULL;
@@ -1478,6 +1485,9 @@ CFDictionaryRef SecKeyCopyAttributes(SecKeyRef key) {
 }
 
 SecKeyRef SecKeyCopyPublicKey(SecKeyRef key) {
+    if (key == NULL) {
+        return NULL;
+    }
     SecKeyRef result = NULL;
     if (key->key_class->version >= 4 && key->key_class->copyPublicKey) {
         result = key->key_class->copyPublicKey(key);
