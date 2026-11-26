@@ -528,6 +528,51 @@ out:
     return NULL;
 }
 
+static SecKeyRef SecKeyCreateRSAPublicKeyFromSPKI(CFAllocatorRef allocator, CFDataRef keyData)
+{
+    if (keyData == NULL) {
+        return NULL;
+    }
+
+    DERItem der = {
+        .data = (DERByte *)CFDataGetBytePtr(keyData),
+        .length = (DERSize)CFDataGetLength(keyData),
+    };
+    DERDecodedInfo top;
+    if (DERDecodeItem(&der, &top) != DR_Success || top.tag != ASN1_CONSTR_SEQUENCE) {
+        return NULL;
+    }
+    if ((size_t)(top.content.data - der.data) + top.content.length != der.length) {
+        return NULL;
+    }
+
+    DERSubjPubKeyInfo spki;
+    if (DERParseSequenceContent(&top.content, DERNumSubjPubKeyInfoItemSpecs,
+                                DERSubjPubKeyInfoItemSpecs, &spki, sizeof(spki)) != DR_Success) {
+        return NULL;
+    }
+
+    DERAlgorithmId algId;
+    if (DERParseSequenceContent(&spki.algId, DERNumAlgorithmIdItemSpecs,
+                                DERAlgorithmIdItemSpecs, &algId, sizeof(algId)) != DR_Success) {
+        return NULL;
+    }
+
+    const SecAsn1Oid oid = { .Data = algId.oid.data, .Length = algId.oid.length };
+    if (!SecAsn1OidCompare(&oid, &CSSMOID_RSA)) {
+        return NULL;
+    }
+
+    DERItem pubKeyBytes;
+    DERByte unusedBits = 0;
+    if (DERParseBitString(&spki.pubKey, &pubKeyBytes, &unusedBits) != DR_Success ||
+        unusedBits != 0 || pubKeyBytes.length == 0) {
+        return NULL;
+    }
+
+    return SecKeyCreateRSAPublicKey_ios(allocator, pubKeyBytes.data, pubKeyBytes.length, kSecKeyEncodingPkcs1);
+}
+
 static const DERByte oidRSA[] = {
     0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00,
 };
@@ -1359,9 +1404,12 @@ SecKeyRef SecKeyCreateWithData(CFDataRef keyData, CFDictionaryRef parameters, CF
         case 0: // kSecAttrKeyClassPublic
             switch (algorithm) {
                 case 42: // kSecAlgorithmRSA
-                    key = SecKeyCreateRSAPublicKey(allocator,
-                                                   CFDataGetBytePtr(keyData), CFDataGetLength(keyData),
-                                                   kSecKeyEncodingBytes);
+                    key = SecKeyCreateRSAPublicKeyFromSPKI(allocator, keyData);
+                    if (key == NULL) {
+                        key = SecKeyCreateRSAPublicKey(allocator,
+                                                       CFDataGetBytePtr(keyData), CFDataGetLength(keyData),
+                                                       kSecKeyEncodingBytes);
+                    }
                     if (key == NULL) {
                         SecError(errSecParam, error, CFSTR("RSA public key creation from data failed"));
                     }
