@@ -8,6 +8,9 @@
 #include "crc.h"
 
 #include <pwd.h>
+#ifdef DARLING
+#include <unistd.h>
+#endif
 #include <membership.h>
 #include <membershipPriv.h>
 
@@ -23,6 +26,7 @@ struct _credential_s {
     CFAbsoluteTime creationTime;
     bool valid;
     bool shared;
+    bool consent; // Darling: minted by the consent step; the only credential that satisfies a rule there
     
     CFMutableSetRef cachedGroups;
 };
@@ -64,6 +68,7 @@ _credential_hash(CFTypeRef value)
         crc = crc64_update(crc, &cred->uid, sizeof(cred->uid));
     }
     crc = crc64_update(crc, &cred->shared, sizeof(cred->shared));
+    crc = crc64_update(crc, &cred->consent, sizeof(cred->consent));
     crc = crc64_final(crc);
     
     return (CFHashCode)crc;
@@ -109,10 +114,35 @@ _credential_create()
     
     cred->creationTime = CFAbsoluteTimeGetCurrent();
     cred->cachedGroups = CFSetCreateMutable(kCFAllocatorDefault, 0, &kCFTypeSetCallBacks);;
+#ifdef DARLING
+    cred->shared = false;
+    cred->consent = false;
+#endif
     
 done:
     return cred;
 }
+
+#ifdef DARLING
+// Darling: a non-consent credential may only carry the non-root uid of the user authd runs as.
+// Anything else, non-consent uid 0 included, becomes invalid with uid -2. Right credentials have
+// no uid; they keep the -2 marker. Consent credentials keep getuid() and stay valid.
+static void
+_credential_enforce_identity(credential_t cred)
+{
+    if (cred->right) {
+        cred->uid = (uid_t)-2;
+        return;
+    }
+    if (cred->consent && cred->uid == getuid()) {
+        return;
+    }
+    if (cred->uid == 0 || cred->uid != getuid()) {
+        cred->uid = (uid_t)-2;
+        cred->valid = false;
+    }
+}
+#endif
 
 credential_t
 credential_create(uid_t uid)
@@ -133,7 +163,35 @@ credential_create(uid_t uid)
         cred->valid = true;
         endpwent();
     }
+
+#ifdef DARLING
+    _credential_enforce_identity(cred); // also covers a missing passwd entry: uid stays 0 there
+#endif
     
+done:
+    return cred;
+}
+
+credential_t
+credential_create_consent(void)
+{
+    credential_t cred = _credential_create();
+    require(cred != NULL, done);
+
+    // Darling has one local user and uid carries no information, so the credential belongs to
+    // the user authd runs as, never to a uid taken from a message or a mechanism.
+    uid_t uid = getuid();
+    struct passwd *pw = getpwuid(uid);
+    cred->uid = uid;
+    cred->name = _copy_string(pw ? pw->pw_name : "user");
+    cred->realName = _copy_string(pw && pw->pw_gecos ? pw->pw_gecos : cred->name);
+    cred->valid = true;
+    cred->consent = true;
+    endpwent();
+#ifdef DARLING
+    _credential_enforce_identity(cred);
+#endif
+
 done:
     return cred;
 }
@@ -142,6 +200,10 @@ credential_t
 credential_create_fvunlock(auth_items_t context, bool session)
 {
     credential_t cred = NULL;
+#ifdef DARLING
+    (void)context; (void)session;
+    return NULL; // no FileVault unlock in Darling: the credential is refused, never minted
+#endif
     
     cred = _credential_create();
     require(cred != NULL, done);
@@ -168,7 +230,11 @@ credential_create_with_credential(credential_t srcCred, bool shared)
     cred->realName = _copy_string(srcCred->realName);
     cred->valid = srcCred->valid;
     cred->right = srcCred->right;
+    cred->consent = srcCred->consent;
     cred->shared = shared;
+#ifdef DARLING
+    _credential_enforce_identity(cred);
+#endif
     
 done:
     return cred;
@@ -186,6 +252,9 @@ credential_create_with_right(const char * right)
     cred->name = _copy_string(right);
     cred->uid = (uid_t)-2;
     cred->valid = true;
+#ifdef DARLING
+    _credential_enforce_identity(cred);
+#endif
     
 done:
     return cred;
@@ -231,6 +300,12 @@ bool
 credential_is_right(credential_t cred)
 {
     return cred->right;
+}
+
+bool
+credential_is_consent(credential_t cred)
+{
+    return cred->consent;
 }
 
 bool

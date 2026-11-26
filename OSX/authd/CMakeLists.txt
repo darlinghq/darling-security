@@ -8,6 +8,7 @@ add_darling_executable(authd
 	authutilities.c
 	ccaudit.c
 	connection.c
+	consent.c
 	crc.c
 	credential.c
 	darling_prelogin.c

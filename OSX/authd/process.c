@@ -198,12 +198,14 @@ process_create(const audit_info_s * auditInfo, session_t session)
         value = NULL;
     }
     
+#ifndef DARLING // entitlements of a guest are claims nothing verifies, so they are never read
     if (CFDictionaryGetValueIfPresent(code_info, kSecCodeInfoEntitlementsDict, &value)) {
         if (CFGetTypeID(value) == CFDictionaryGetTypeID()) {
             proc->code_entitlements = CFDictionaryCreateCopy(kCFAllocatorDefault, value);
         }
         value = NULL;
     }
+#endif
 
     // This is the clownfish supported way to check for a Mac App Store or B&I signed build
 	// AppStore apps must have resource envelope 2. Check with spctl -a -t exec -vv <path>

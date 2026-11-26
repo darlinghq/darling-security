@@ -312,6 +312,9 @@ done:
 
 bool isInFVUnlock()
 {
+#ifdef DARLING
+    return false; // there is no FileVault unlock environment in Darling
+#endif
     // temporary solution until we find a better way
     return getenv("__OSINSTALL_ENVIRONMENT") != NULL;
 }

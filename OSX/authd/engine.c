@@ -28,6 +28,7 @@ int checkpw_internal( const struct passwd *pw, const char* password );
 #include <sandbox.h>
 #include <coreauthd_spi.h>
 #include <ctkloginhelper.h>
+#include "consent.h"
 
 AUTHD_DEFINE_LOG
 
@@ -68,6 +69,9 @@ struct _engine_s {
 
     enum Reason reason;
     int32_t tries;
+#ifdef DARLING
+    consent_answer_t consent;
+#endif
     
     CFAbsoluteTime now;
     
@@ -154,6 +158,9 @@ engine_create(connection_t conn, auth_token_t auth)
     engine->grantedRights = auth_rights_create();
     
     engine->reason = noReason;
+#ifdef DARLING
+    engine->consent = ConsentNotAsked;
+#endif
 
 	engine->la_context = NULL;
     
@@ -294,6 +301,9 @@ _set_session_hints(engine_t engine, rule_t rule)
 static OSStatus
 _evaluate_credential_for_rule(engine_t engine, credential_t cred, rule_t rule, bool ignoreShared, bool sessionOwner, enum Reason * reason)
 {
+#ifdef DARLING
+    return _evaluate_user_credential_for_rule(engine, cred, rule, ignoreShared, sessionOwner, reason);
+#endif
     if (auth_token_least_privileged(engine->auth)) {
         if (credential_is_right(cred) && credential_get_valid(cred) && _compare_string(engine->currentRightName, credential_get_name(cred))) {
             if (!ignoreShared) {
@@ -372,6 +382,16 @@ _evaluate_user_credential_for_rule(engine_t engine, credential_t cred, rule_t ru
         }
     }
     
+#ifdef DARLING
+    // Consent mode: only a credential minted by the user's confirmation satisfies a rule. uid 0,
+    // group membership and session ownership say nothing here, every guest process is uid 0.
+    if (credential_is_consent(cred)) {
+        os_log(AUTHD_LOG, "%{public}s is a consent credential (does satisfy rule) (engine %lld)", cred_label, engine->engine_index);
+        return errAuthorizationSuccess;
+    }
+    if (reason) {  *reason = unacceptableUser; }
+    return errAuthorizationDenied;
+#endif
     if (credential_get_uid(cred) == 0) {
         os_log(AUTHD_LOG, "%{public}s %i has uid 0 (does satisfy rule) (engine %lld)", cred_label, credential_get_uid(cred), engine->engine_index);
         return errAuthorizationSuccess;
@@ -470,9 +490,39 @@ _extract_password_from_la(engine_t engine)
 	return retval;
 }
 
+#ifdef DARLING
+// Consent mode: a mechanism list is satisfied only by the user confirming "builtin:authenticate".
+// Privileged mechanisms (authorizationhost) are skipped and every other plugin mechanism denies;
+// no agent or host is contacted for them.
+static OSStatus
+_evaluate_consent_mechanisms(engine_t engine, CFArrayRef mechanisms)
+{
+    engine->consent = ConsentDeclined;
+    CFIndex count = CFArrayGetCount(mechanisms);
+    for (CFIndex i = 0; i < count; i++) {
+        mechanism_t mech = (mechanism_t)CFArrayGetValueAtIndex(mechanisms, i);
+        const char *name = mechanism_get_string(mech);
+        if (mechanism_is_privileged(mech)) {
+            continue;
+        }
+        if (mechanism_get_type(mech) == 0 && name != NULL && strcmp(name, "builtin:authenticate") == 0) {
+            os_log_error(AUTHD_LOG, "engine %lld: no consent dialog is available, denying right %{public}s", engine->engine_index, engine->currentRightName);
+            return errAuthorizationDenied;
+        }
+        os_log_error(AUTHD_LOG, "engine %lld: mechanism %{public}s needs real authentication, not implemented in Darling", engine->engine_index, name ? name : "(null)");
+        return errAuthorizationDenied;
+    }
+    os_log_error(AUTHD_LOG, "engine %lld: no confirmation step in the mechanism list, denying right %{public}s", engine->engine_index, engine->currentRightName);
+    return errAuthorizationDenied;
+}
+#endif
+
 static OSStatus
 _evaluate_mechanisms(engine_t engine, CFArrayRef mechanisms)
 {
+#ifdef DARLING
+    return _evaluate_consent_mechanisms(engine, mechanisms);
+#endif
     uint64_t result = kAuthorizationResultAllow;
     ccaudit_t ccaudit = ccaudit_create(engine->proc, engine->auth, AUE_ssauthmech);
     auth_items_t context = auth_items_create();
@@ -691,6 +741,9 @@ _evaluate_authentication(engine_t engine, rule_t rule)
     require_action(CFArrayGetCount(mechanisms) > 0, done, os_log_debug(AUTHD_LOG, "engine %lld: error - no mechanisms found", engine->engine_index));
     
     int64_t ruleTries = rule_get_tries(rule);
+#ifdef DARLING
+    ruleTries = 1; // a declined confirmation is final, do not ask again
+#endif
 
 	if (engine->la_context) {
 		ruleTries = 1;
@@ -712,6 +765,11 @@ _evaluate_authentication(engine_t engine, rule_t rule)
             
             credential_t newCred = NULL;
 
+#ifdef DARLING
+            if (engine->consent == ConsentConfirmed) {
+                newCred = credential_create_consent();
+            }
+#else
             if (isInFVUnlock() && auth_items_exist(engine->context, kAuthorizationFVAdmin)) {
                 os_log_debug(AUTHD_LOG, "Credentials for FV unlock (engine %lld)", engine->engine_index);
                 newCred = credential_create_fvunlock(engine->context, false);
@@ -724,6 +782,7 @@ _evaluate_authentication(engine_t engine, rule_t rule)
 					CFReleaseNull(engine->la_context);
 				}
             }
+#endif
             
             if (newCred) {
                 if (credential_get_valid(newCred) || isInFVUnlock()) {
@@ -785,6 +844,10 @@ done:
 static bool
 _check_entitlement_for_rule(engine_t engine, rule_t rule)
 {
+#ifdef DARLING
+    (void)engine; (void)rule;
+    return false; // entitlements are never trusted in Darling: nothing verifies them
+#endif
     bool entitled = false;
     CFTypeRef value = NULL;
     
@@ -859,10 +922,12 @@ _evaluate_class_user(engine_t engine, rule_t rule)
         return errAuthorizationSuccess;
     }
     
+#ifndef DARLING // every guest process is uid 0, so allow-root would grant everything
     if (rule_get_allow_root(rule) && auth_token_get_uid(engine->auth) == 0) {
         os_log_info(AUTHD_LOG, "Creator of authorization has uid == 0, granting right %{public}s (engine %lld)", engine->currentRightName, engine->engine_index);
         return errAuthorizationSuccess;
     }
+#endif
     
     if (!rule_get_authenticate_user(rule)) {
         if (!isInFVUnlock()) {
@@ -924,9 +989,11 @@ _evaluate_class_user(engine_t engine, rule_t rule)
     }
     
     // authorization that timeout immediately cannot be preauthorized
+#ifndef DARLING // consent mode: such a right still needs the user's answer, it is never granted here
     if (engine->flags & kAuthorizationFlagPreAuthorize && rule_get_timeout(rule) == 0) {
         return errAuthorizationSuccess;
 	}
+#endif
 
     if (!(engine->flags & kAuthorizationFlagSheet)) {
         if (!(engine->flags & kAuthorizationFlagInteractionAllowed)) {
@@ -960,7 +1027,16 @@ _evaluate_class_rule(engine_t engine, rule_t rule, bool *save_pwd)
         }
         
         os_log_debug(AUTHD_LOG, "engine %lld: * evaluate rule %{public}s (%i)", engine->engine_index, rule_get_name(delegate), count);
+#ifdef DARLING
+        if (consent_right_is_reserved(rule_get_name(delegate))) {
+            os_log_error(AUTHD_LOG, "engine %lld: delegate rule '%{public}s' is in a reserved namespace (denied)", engine->engine_index, rule_get_name(delegate));
+            status = errAuthorizationDenied;
+        } else {
+            status = _evaluate_rule(engine, delegate, save_pwd);
+        }
+#else
         status = _evaluate_rule(engine, delegate, save_pwd);
+#endif
         
         // if status is cancel/internal error abort
 		if ((status == errAuthorizationCanceled) || (status == errAuthorizationInternal))
@@ -1007,7 +1083,11 @@ _evaluate_class_mechanism(engine_t engine, rule_t rule)
     OSStatus status = errAuthorizationDenied;
     CFArrayRef mechanisms = NULL;
     
+#ifdef DARLING
+    require_action(rule_get_mechanisms_count(rule) > 0, done, status = errAuthorizationDenied; os_log_error(AUTHD_LOG, "Fatal: no mechanisms specified (engine %lld)", engine->engine_index));
+#else
     require_action(rule_get_mechanisms_count(rule) > 0, done, status = errAuthorizationSuccess; os_log_error(AUTHD_LOG, "Fatal: no mechanisms specified (engine %lld)", engine->engine_index));
+#endif
     
     mechanisms = rule_get_mechanisms(rule);
     
@@ -1022,6 +1102,9 @@ _evaluate_class_mechanism(engine_t engine, rule_t rule)
     }
     
     int64_t ruleTries = rule_get_tries(rule);
+#ifdef DARLING
+    ruleTries = 1; // consent mode does not retry a declined or missing confirmation
+#endif
     engine->tries = 0;
     do {
         auth_items_set_data(engine->hints, AGENT_HINT_RETRY_REASON, &engine->reason, sizeof(engine->reason));
@@ -1032,11 +1115,17 @@ _evaluate_class_mechanism(engine_t engine, rule_t rule)
         
 		if (status == errAuthorizationSuccess) {
 			credential_t newCred = NULL;
+#ifdef DARLING
+			if (engine->consent == ConsentConfirmed) {
+				newCred = credential_create_consent();
+			}
+#else
 			if (auth_items_exist(engine->context, AGENT_CONTEXT_UID)) {
 				newCred = credential_create(auth_items_get_uint(engine->context, AGENT_CONTEXT_UID));
 			} else {
 				os_log_info(AUTHD_LOG, "Mechanism did not return a uid (engine %lld)", engine->engine_index);
 			}
+#endif
 
 			if (newCred) {
 				_engine_set_credential(engine, newCred, rule_get_shared(rule));
@@ -1188,6 +1277,12 @@ done:
 
 static void _parse_environment(engine_t engine, auth_items_t environment)
 {
+#ifdef DARLING
+    // A username and password in the environment never authenticate anyone here: nothing is
+    // checked against checkpw and no credential is minted for the uid of a named account.
+    (void)engine; (void)environment;
+    return;
+#endif
     require(environment != NULL, done);
 
 #if DEBUG
@@ -1328,6 +1423,9 @@ OSStatus engine_authorize(engine_t engine, auth_rights_t rights, auth_items_t en
         CFReleaseNull(rights_list);
     }
     
+#ifdef DARLING
+    flags &= ~kAuthorizationFlagSheet; // no sheet UI in Darling, in any build type
+#endif
 	if (!auth_token_apple_signed(engine->auth) && (flags & kAuthorizationFlagSheet)) {
 #ifdef NDEBUG
         os_log_error(AUTHD_LOG, "engine %lld: extra flags are ommited as creator is not signed by Apple", engine->engine_index);
@@ -1342,6 +1440,11 @@ OSStatus engine_authorize(engine_t engine, auth_rights_t rights, auth_items_t en
     if (environment) {
         _parse_environment(engine, environment);
         auth_items_copy(engine->hints, environment);
+#ifdef DARLING
+        // a client-supplied username and password are never copied into hints
+        auth_items_remove(engine->hints, kAuthorizationEnvironmentUsername);
+        auth_items_remove(engine->hints, kAuthorizationEnvironmentPassword);
+#endif
     }
 
     // Restore all context values from the AuthorizationRef
@@ -1426,6 +1529,14 @@ OSStatus engine_authorize(engine_t engine, auth_rights_t rights, auth_items_t en
     auth_rights_iterate(rights, ^bool(const char *key) {
         if (!key)
             return true;
+
+#ifdef DARLING
+        if (consent_right_is_reserved(key)) {
+            os_log_error(AUTHD_LOG, "engine %lld: right '%{public}s' is in a reserved namespace and needs real authentication, which is not implemented in Darling (denied)", engine->engine_index, key);
+            status = errAuthorizationDenied;
+            return (engine->flags & kAuthorizationFlagPartialRights) != 0; // same as any other denied right
+        }
+#endif
 
         if (!_verify_sandbox(engine, key)) { // _verify_sandbox is already logging failures
             status = errAuthorizationDenied;
@@ -1694,6 +1805,9 @@ done:
 void
 _engine_set_credential(engine_t engine, credential_t cred, bool shared)
 {
+#ifdef DARLING
+    shared = false; // never shared across the session
+#endif
     os_log_debug(AUTHD_LOG, "engine %lld: adding %{public}scredential %{public}s (%i) to engine shared: %i", engine->engine_index, credential_get_shared(cred) ? "shared " : "", credential_get_name(cred), credential_get_uid(cred), shared);
     CFSetSetValue(engine->credentials, cred);
     if (shared) {

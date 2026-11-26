@@ -479,6 +479,10 @@ done:
 // OUT: AUTH_XPC_BLOB
 OSStatus authorization_create_with_audit_token(connection_t conn, xpc_object_t message, xpc_object_t reply)
 {
+#ifdef DARLING
+    os_log_error(AUTHD_LOG, "server: creating an authorization from an audit token is not implemented in Darling (denied)");
+    return errAuthorizationDenied;
+#endif
     OSStatus status = errAuthorizationDenied;
     auth_token_t auth = NULL;
     
@@ -957,6 +961,10 @@ static int64_t _get_max_process_rights()
 OSStatus
 authorization_right_set(connection_t conn, xpc_object_t message, xpc_object_t reply AUTH_UNUSED)
 {
+#ifdef DARLING
+    os_log_error(AUTHD_LOG, "server: changing the rights database is not implemented in Darling (denied)");
+    return errAuthorizationDenied;
+#endif
     __block OSStatus status = errAuthorizationDenied;
     __block engine_t engine = NULL;
     CFStringRef cf_rule_name = NULL;
@@ -1072,6 +1080,10 @@ done:
 OSStatus
 authorization_right_remove(connection_t conn, xpc_object_t message, xpc_object_t reply AUTH_UNUSED)
 {
+#ifdef DARLING
+    os_log_error(AUTHD_LOG, "server: changing the rights database is not implemented in Darling (denied)");
+    return errAuthorizationDenied;
+#endif
     __block OSStatus status = errAuthorizationDenied;
     __block engine_t engine = NULL;
     rule_t rule = NULL;

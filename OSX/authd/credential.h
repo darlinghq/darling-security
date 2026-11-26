@@ -21,6 +21,9 @@ AUTH_WARN_RESULT AUTH_MALLOC AUTH_NONNULL_ALL AUTH_RETURNS_RETAINED
 credential_t credential_create_with_right(const char *);
 
 AUTH_WARN_RESULT AUTH_MALLOC AUTH_RETURNS_RETAINED
+credential_t credential_create_consent(void);
+
+AUTH_WARN_RESULT AUTH_MALLOC AUTH_RETURNS_RETAINED
 credential_t credential_create_fvunlock(auth_items_t context, bool session);
 
 AUTH_NONNULL_ALL
@@ -43,6 +46,9 @@ bool credential_get_shared(credential_t);
     
 AUTH_NONNULL_ALL
 bool credential_is_right(credential_t);
+
+AUTH_NONNULL_ALL
+bool credential_is_consent(credential_t);
 
 AUTH_NONNULL_ALL    
 bool credential_check_membership(credential_t,const char*);
