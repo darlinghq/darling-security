@@ -8,6 +8,31 @@ include(security_xcconfigs)
 set(CMAKE_CXX_STANDARD 14)
 set(SECURITY_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
+# Optional freedesktop Secret Service backend for password keychain items.
+# It is disabled by default so normal Darling builds have no new dependency.
+option(DARLING_SECURITY_USE_SECRET_SERVICE
+    "Use libsecret as an optional Secret Service backend in securityd" OFF)
+
+set(DARLING_SECRET_SERVICE_DEFINITIONS "")
+set(DARLING_SECRET_SERVICE_INCLUDES "")
+set(DARLING_SECRET_SERVICE_LIBRARIES "")
+
+if(DARLING_SECURITY_USE_SECRET_SERVICE)
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(DARLING_LIBSECRET QUIET libsecret-1)
+    endif()
+
+    if(DARLING_LIBSECRET_FOUND)
+        list(APPEND DARLING_SECRET_SERVICE_DEFINITIONS DARLING_USE_SECRET_SERVICE=1)
+        set(DARLING_SECRET_SERVICE_INCLUDES ${DARLING_LIBSECRET_INCLUDE_DIRS})
+        set(DARLING_SECRET_SERVICE_LIBRARIES ${DARLING_LIBSECRET_LIBRARIES})
+        message(STATUS "security: enabling optional Secret Service backend")
+    else()
+        message(STATUS "security: libsecret-1 not found; Secret Service backend disabled")
+    endif()
+endif()
+
 add_compile_options(
 	-w
 	-nostdinc

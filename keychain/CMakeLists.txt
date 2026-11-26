@@ -191,6 +191,7 @@ add_lib_ios_shim(libsecurityd_ios
 		securityd/SecItemDataSource.c
 		securityd/SecItemDb.c
 		securityd/SecItemSchema.c
+		securityd/SecItemSecretService.c
 		securityd/SecItemServer.c
 		securityd/SecKeybagSupport.c
 		securityd/SecLogSettingsServer.m
@@ -200,4 +201,9 @@ add_lib_ios_shim(libsecurityd_ios
 		#TrustedPeersHelper/TrustedPeersHelperProtocol.m
 	DEFINITIONS
 		USE_KEYSTORE=1
+		${DARLING_SECRET_SERVICE_DEFINITIONS}
+	INCLUDES
+		${DARLING_SECRET_SERVICE_INCLUDES}
+	LIBRARIES
+		${DARLING_SECRET_SERVICE_LIBRARIES}
 )
