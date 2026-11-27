@@ -212,3 +212,8 @@ add_lib_ios_shim(libsecurityd_ios
 	LIBRARIES
 		darling_dbus_loader
 )
+
+# The Secret Service transfer encryption is a client of the macOS Security
+# framework CSSM API (the Apple CSP), whose declarations SecBase.h hides when
+# SEC_IOS_ON_OSX is set as for the rest of securityd.
+set_source_files_properties(securityd/SecItemSecretServiceCrypto.c PROPERTIES COMPILE_OPTIONS "-USEC_IOS_ON_OSX")
