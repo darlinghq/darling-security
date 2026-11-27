@@ -3,520 +3,864 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+/*
+ * Optional storage of password items in the host's freedesktop Secret Service.
+ *
+ * The Secret Service is a service of the host's session bus, and securityd runs
+ * inside the prefix, so this talks to it through Darling's libdbus wrapper
+ * (darling_dbus), as the other daemons that reach host services do, using the
+ * "plain" session algorithm of the Secret Service API. The backend is off
+ * unless the preference SecretServiceBackend of the domain
+ * org.darlinghq.security is true; with the preference off or absent it never
+ * loads the wrapper or opens a connection, and every function reports
+ * kSecItemSecretServiceUnavailable.
+ */
+
 #include "SecItemSecretService.h"
 
+#include <CoreFoundation/CoreFoundation.h>
 #include <Security/SecBase.h>
 #include <Security/SecItem.h>
+#include <darling_dbus.h>
+#include <pthread.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <utilities/SecCFError.h>
 #include <utilities/SecCFRelease.h>
 
-#ifdef DARLING_USE_SECRET_SERVICE
+#define kSecretServiceName "org.freedesktop.secrets"
+#define kSecretServicePath "/org/freedesktop/secrets"
+#define kSecretServiceInterface "org.freedesktop.Secret.Service"
+#define kSecretItemInterface "org.freedesktop.Secret.Item"
+#define kSecretCollectionInterface "org.freedesktop.Secret.Collection"
+#define kPropertiesInterface "org.freedesktop.DBus.Properties"
+#define kCallTimeoutMs 10000
+#define kMaxAttributes 24
+#define kMaxPathLength 256
 
-#include <libsecret/secret.h>
-#include <glib.h>
+static const CFStringRef kPreferenceDomain = CFSTR("org.darlinghq.security");
+static const CFStringRef kPreferenceKey = CFSTR("SecretServiceBackend");
 
-#include <inttypes.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-
-/*
- * The freedesktop Secret Service stores string attributes and text values.
- * SecItem attributes are flattened to strings and kSecValueData is carried as
- * base64 so arbitrary binary values survive the round trip.
- */
-static const SecretSchema kDarlingSecItemSchema = {
-    "org.darling.Security.SecItem",
-    SECRET_SCHEMA_DONT_MATCH_NAME,
-    {
-        { "class",              SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "service",            SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "account",            SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "access-group",       SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "server",             SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "protocol",           SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "port",               SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "path",               SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "security-domain",    SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "authentication-type", SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "generic",            SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "label",              SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "description",        SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "comment",            SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "creator",            SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "type",               SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { "value-encoding",     SECRET_SCHEMA_ATTRIBUTE_STRING },
-        { NULL, 0 }
-    }
+struct Attribute {
+    char *name;
+    char *value;
 };
 
-static gsize gAttributeNamesInitialized = 0;
-static GHashTable *gAttributeNames = NULL;
+struct AttributeSet {
+    struct Attribute entries[kMaxAttributes];
+    int count;
+};
+
+/*
+ * The SecItem attributes that are stored, and the Secret Service attribute that
+ * carries each. Everything is flattened to a string.
+ */
+static const struct {
+    const CFStringRef *key;
+    const char *name;
+} kAttributeNames[] = {
+    { &kSecAttrService, "service" },
+    { &kSecAttrAccount, "account" },
+    { &kSecAttrAccessGroup, "access-group" },
+    { &kSecAttrServer, "server" },
+    { &kSecAttrProtocol, "protocol" },
+    { &kSecAttrPort, "port" },
+    { &kSecAttrPath, "path" },
+    { &kSecAttrSecurityDomain, "security-domain" },
+    { &kSecAttrAuthenticationType, "authentication-type" },
+    { &kSecAttrGeneric, "generic" },
+    { &kSecAttrLabel, "label" },
+    { &kSecAttrDescription, "description" },
+    { &kSecAttrComment, "comment" },
+    { &kSecAttrCreator, "creator" },
+    { &kSecAttrType, "type" },
+};
+
+static pthread_mutex_t gLock = PTHREAD_MUTEX_INITIALIZER;
+static bool gPreferenceRead = false;
+static bool gPreferenceOn = false;
+static bool gDisabled = false;
+static const struct darling_dbus *gApi = NULL;
+static DBusConnection *gConnection = NULL;
+static char gSessionPath[kMaxPathLength];
+static char gCollectionPath[kMaxPathLength];
+
+#pragma mark - Attribute sets
 
 static void
-AddAttributeName(GHashTable *names, CFTypeRef key, const char *name)
+AttributeSetFree(struct AttributeSet *set)
 {
-    g_hash_table_insert(names, (gpointer)key, (gpointer)name);
+    for (int i = 0; i < set->count; i++) {
+        free(set->entries[i].name);
+        free(set->entries[i].value);
+    }
+    set->count = 0;
 }
 
-static GHashTable *
-GetAttributeNames(void)
+static void
+AttributeSetPut(struct AttributeSet *set, const char *name, char *value)
 {
-    if (g_once_init_enter(&gAttributeNamesInitialized)) {
-        GHashTable *names = g_hash_table_new(g_direct_hash, g_direct_equal);
-        AddAttributeName(names, kSecAttrService, "service");
-        AddAttributeName(names, kSecAttrAccount, "account");
-        AddAttributeName(names, kSecAttrAccessGroup, "access-group");
-        AddAttributeName(names, kSecAttrServer, "server");
-        AddAttributeName(names, kSecAttrProtocol, "protocol");
-        AddAttributeName(names, kSecAttrPort, "port");
-        AddAttributeName(names, kSecAttrPath, "path");
-        AddAttributeName(names, kSecAttrSecurityDomain, "security-domain");
-        AddAttributeName(names, kSecAttrAuthenticationType, "authentication-type");
-        AddAttributeName(names, kSecAttrGeneric, "generic");
-        AddAttributeName(names, kSecAttrLabel, "label");
-        AddAttributeName(names, kSecAttrDescription, "description");
-        AddAttributeName(names, kSecAttrComment, "comment");
-        AddAttributeName(names, kSecAttrCreator, "creator");
-        AddAttributeName(names, kSecAttrType, "type");
-        gAttributeNames = names;
-        g_once_init_leave(&gAttributeNamesInitialized, 1);
+    for (int i = 0; i < set->count; i++) {
+        if (strcmp(set->entries[i].name, name) == 0) {
+            free(set->entries[i].value);
+            set->entries[i].value = value;
+            return;
+        }
     }
-    return gAttributeNames;
+    if (set->count == kMaxAttributes) {
+        free(value);
+        return;
+    }
+    set->entries[set->count].name = strdup(name);
+    set->entries[set->count].value = value;
+    set->count++;
+}
+
+static const char *
+AttributeSetGet(const struct AttributeSet *set, const char *name)
+{
+    for (int i = 0; i < set->count; i++) {
+        if (strcmp(set->entries[i].name, name) == 0)
+            return set->entries[i].value;
+    }
+    return NULL;
+}
+
+static char *
+EncodeBase64(const uint8_t *bytes, CFIndex length)
+{
+    static const char alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    char *out = malloc((size_t)((length + 2) / 3) * 4 + 1);
+    if (out == NULL)
+        return NULL;
+    char *p = out;
+    for (CFIndex i = 0; i < length; i += 3) {
+        uint32_t chunk = (uint32_t)bytes[i] << 16;
+        if (i + 1 < length)
+            chunk |= (uint32_t)bytes[i + 1] << 8;
+        if (i + 2 < length)
+            chunk |= bytes[i + 2];
+        *p++ = alphabet[(chunk >> 18) & 63];
+        *p++ = alphabet[(chunk >> 12) & 63];
+        *p++ = i + 1 < length ? alphabet[(chunk >> 6) & 63] : '=';
+        *p++ = i + 2 < length ? alphabet[chunk & 63] : '=';
+    }
+    *p = '\0';
+    return out;
+}
+
+static char *
+CopyStringValue(CFTypeRef value)
+{
+    CFTypeID type = CFGetTypeID(value);
+    if (type == CFStringGetTypeID()) {
+        CFStringRef string = (CFStringRef)value;
+        CFIndex size = CFStringGetMaximumSizeForEncoding(CFStringGetLength(string),
+            kCFStringEncodingUTF8) + 1;
+        char *buffer = malloc((size_t)size);
+        if (buffer != NULL && !CFStringGetCString(string, buffer, size, kCFStringEncodingUTF8)) {
+            free(buffer);
+            buffer = NULL;
+        }
+        return buffer;
+    }
+    if (type == CFBooleanGetTypeID())
+        return strdup(CFBooleanGetValue((CFBooleanRef)value) ? "true" : "false");
+    if (type == CFNumberGetTypeID()) {
+        int64_t number = 0;
+        char text[32];
+        if (!CFNumberGetValue((CFNumberRef)value, kCFNumberSInt64Type, &number))
+            return NULL;
+        snprintf(text, sizeof(text), "%lld", (long long)number);
+        return strdup(text);
+    }
+    if (type == CFDataGetTypeID()) {
+        CFDataRef data = (CFDataRef)value;
+        return EncodeBase64(CFDataGetBytePtr(data), CFDataGetLength(data));
+    }
+    return NULL;
 }
 
 /*
- * Once a Secret Service call fails there is no session bus or usable default
- * collection. Keep subsequent SecItem calls on the SQLite path instead of
- * retrying a blocking D-Bus operation for every item.
+ * The attributes of a SecItem dictionary that the backend stores. The class is
+ * always recorded, so that generic and internet passwords never collide.
  */
-static bool gSecretServiceDisabled = false;
-
 static bool
-SecretServiceEnabled(void)
+AttributeSetFromDictionary(struct AttributeSet *set, CFDictionaryRef dictionary, bool withClass)
 {
-    return !gSecretServiceDisabled;
-}
-
-static void
-DisableSecretService(GError *error)
-{
-    if (error != NULL) {
-        g_error_free(error);
-        gSecretServiceDisabled = true;
-    }
-}
-
-static char *
-CopyCFStringUTF8(CFStringRef string)
-{
-    if (string == NULL)
-        return NULL;
-
-    CFIndex maximum = CFStringGetMaximumSizeForEncoding(CFStringGetLength(string),
-        kCFStringEncodingUTF8) + 1;
-    char *buffer = g_malloc0((gsize)maximum);
-    if (buffer == NULL)
-        return NULL;
-    if (!CFStringGetCString(string, buffer, (CFIndex)maximum, kCFStringEncodingUTF8)) {
-        g_free(buffer);
-        return NULL;
-    }
-    return buffer;
-}
-
-static char *
-CopyCFTypeString(CFTypeRef value)
-{
-    if (value == NULL)
-        return NULL;
-
-    CFTypeID type = CFGetTypeID(value);
-    if (type == CFStringGetTypeID())
-        return CopyCFStringUTF8((CFStringRef)value);
-
-    if (type == CFBooleanGetTypeID())
-        return g_strdup(CFBooleanGetValue((CFBooleanRef)value) ? "true" : "false");
-
-    if (type == CFNumberGetTypeID()) {
-        int64_t number = 0;
-        if (CFNumberGetValue((CFNumberRef)value, kCFNumberSInt64Type, &number))
-            return g_strdup_printf("%" PRId64, number);
-        return NULL;
-    }
-
-    if (type == CFDataGetTypeID()) {
-        CFDataRef data = (CFDataRef)value;
-        gsize length = (gsize)CFDataGetLength(data);
-        return length == 0 ? g_strdup("") :
-            g_base64_encode(CFDataGetBytePtr(data), length);
-    }
-
-    return NULL;
-}
-
-static char *
-CopyClassString(CFTypeRef class)
-{
-    if (class == NULL)
-        return NULL;
-    if (CFEqual(class, kSecClassGenericPassword))
-        return g_strdup("generic");
-    if (CFEqual(class, kSecClassInternetPassword))
-        return g_strdup("internet");
-    return NULL;
-}
-
-static GHashTable *
-CreateAttributeTable(CFDictionaryRef dictionary, bool includeClass)
-{
-    GHashTable *attributes = g_hash_table_new_full(g_str_hash, g_str_equal,
-        g_free, g_free);
-    if (attributes == NULL || dictionary == NULL)
-        return attributes;
-
-    if (includeClass) {
-        char *class = CopyClassString(CFDictionaryGetValue(dictionary, kSecClass));
-        if (class != NULL)
-            g_hash_table_insert(attributes, g_strdup("class"), class);
-    }
-
-    GHashTable *names = GetAttributeNames();
-    GHashTableIter iter;
-    gpointer key = NULL;
-    gpointer name = NULL;
-    g_hash_table_iter_init(&iter, names);
-    while (g_hash_table_iter_next(&iter, &key, &name)) {
-        CFTypeRef value = CFDictionaryGetValue(dictionary, (CFTypeRef)key);
-        if (value == NULL)
-            continue;
-        char *string = CopyCFTypeString(value);
-        if (string == NULL)
-            continue;
-        g_hash_table_insert(attributes, g_strdup((const char *)name), string);
-    }
-
-    return attributes;
-}
-
-static void
-MergeAttributes(GHashTable *destination, GHashTable *source)
-{
-    GHashTableIter iter;
-    gpointer key = NULL;
-    gpointer value = NULL;
-
-    g_hash_table_iter_init(&iter, source);
-    while (g_hash_table_iter_next(&iter, &key, &value))
-        g_hash_table_insert(destination, g_strdup((const char *)key),
-            g_strdup((const char *)value));
-}
-
-static bool
-TablesEqual(GHashTable *left, GHashTable *right)
-{
-    if (g_hash_table_size(left) != g_hash_table_size(right))
+    memset(set, 0, sizeof(*set));
+    if (dictionary == NULL)
         return false;
-
-    GHashTableIter iter;
-    gpointer key = NULL;
-    gpointer value = NULL;
-    g_hash_table_iter_init(&iter, left);
-    while (g_hash_table_iter_next(&iter, &key, &value)) {
-        const char *other = g_hash_table_lookup(right, key);
-        if (other == NULL || strcmp((const char *)value, other) != 0)
+    if (withClass) {
+        CFTypeRef class = CFDictionaryGetValue(dictionary, kSecClass);
+        if (class != NULL && CFEqual(class, kSecClassGenericPassword))
+            AttributeSetPut(set, "class", strdup("generic"));
+        else if (class != NULL && CFEqual(class, kSecClassInternetPassword))
+            AttributeSetPut(set, "class", strdup("internet"));
+        else
             return false;
+    }
+    for (size_t i = 0; i < sizeof(kAttributeNames) / sizeof(kAttributeNames[0]); i++) {
+        CFTypeRef value = CFDictionaryGetValue(dictionary, *kAttributeNames[i].key);
+        char *string = value != NULL ? CopyStringValue(value) : NULL;
+        if (string != NULL)
+            AttributeSetPut(set, kAttributeNames[i].name, string);
     }
     return true;
 }
 
+/* Only passwords that are named well enough to be looked up again are handled. */
 static bool
-IsSupportedCredential(GHashTable *attributes)
+IsSupportedCredential(const struct AttributeSet *set)
 {
-    const char *class = g_hash_table_lookup(attributes, "class");
-    if (class == NULL)
+    const char *class = AttributeSetGet(set, "class");
+    if (class == NULL || AttributeSetGet(set, "account") == NULL)
         return false;
-
     if (strcmp(class, "generic") == 0)
-        return g_hash_table_lookup(attributes, "service") != NULL &&
-               g_hash_table_lookup(attributes, "account") != NULL;
-
-    if (strcmp(class, "internet") == 0)
-        return g_hash_table_lookup(attributes, "server") != NULL &&
-               g_hash_table_lookup(attributes, "account") != NULL;
-
-    return false;
+        return AttributeSetGet(set, "service") != NULL;
+    return AttributeSetGet(set, "server") != NULL;
 }
 
 static CFDataRef
-CopyDataValue(CFTypeRef value)
+CopyValueData(CFTypeRef value)
 {
     if (value == NULL)
         return NULL;
     if (CFGetTypeID(value) == CFDataGetTypeID())
         return CFDataCreateCopy(kCFAllocatorDefault, (CFDataRef)value);
     if (CFGetTypeID(value) == CFStringGetTypeID()) {
-        char *string = CopyCFStringUTF8((CFStringRef)value);
+        char *string = CopyStringValue(value);
         if (string == NULL)
             return NULL;
-        CFDataRef data = CFDataCreate(kCFAllocatorDefault,
-            (const UInt8 *)string, (CFIndex)strlen(string));
-        g_free(string);
+        CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)string, (CFIndex)strlen(string));
+        free(string);
         return data;
     }
     return NULL;
 }
 
-static CFDataRef
-CopyStoredValue(GHashTable *attributes, bool *serviceError)
-{
-    GError *error = NULL;
-    gchar *encoded = secret_password_lookupv_sync(&kDarlingSecItemSchema,
-        attributes, NULL, &error);
-    if (error != NULL) {
-        DisableSecretService(error);
-        if (serviceError != NULL)
-            *serviceError = true;
-        return NULL;
-    }
-    if (encoded == NULL)
-        return NULL;
+#pragma mark - D-Bus helpers
 
-    gsize length = 0;
-    guchar *bytes = (guchar *)g_base64_decode(encoded, &length);
-    CFDataRef data = bytes != NULL ? CFDataCreate(kCFAllocatorDefault,
-        bytes, (CFIndex)length) : NULL;
-    g_free(bytes);
-    g_free(encoded);
+static void
+DisableLocked(void)
+{
+    gDisabled = true;
+    if (gConnection != NULL) {
+        gApi->connection_close(gConnection);
+        gApi->connection_unref(gConnection);
+        gConnection = NULL;
+    }
+}
+
+static bool
+PreferenceOn(void)
+{
+    if (!gPreferenceRead) {
+        CFTypeRef value = CFPreferencesCopyAppValue(kPreferenceKey, kPreferenceDomain);
+        gPreferenceOn = value != NULL && CFGetTypeID(value) == CFBooleanGetTypeID() &&
+            CFBooleanGetValue((CFBooleanRef)value);
+        if (value != NULL)
+            CFRelease(value);
+        gPreferenceRead = true;
+    }
+    return gPreferenceOn;
+}
+
+/*
+ * The address of the host's session bus: the one the launcher passed on, or the
+ * usual $XDG_RUNTIME_DIR/bus. Only a plain socket address is used.
+ */
+static bool
+SessionBusAddress(char *buffer, size_t size)
+{
+    const char *env = getenv("DBUS_SESSION_BUS_ADDRESS");
+    if (env != NULL && env[0] != '\0') {
+        if (strncmp(env, "unix:path=", 10) != 0 && strncmp(env, "unix:abstract=", 14) != 0)
+            return false;
+        if (strchr(env, ';') != NULL || strstr(env, "unixexec") != NULL || strlen(env) >= size)
+            return false;
+        strcpy(buffer, env);
+        return true;
+    }
+    const char *runtime = getenv("XDG_RUNTIME_DIR");
+    if (runtime == NULL || runtime[0] != '/')
+        return false;
+    char *escaped = gApi->address_escape_value(runtime);
+    if (escaped == NULL)
+        return false;
+    int length = snprintf(buffer, size, "unix:path=%s/bus", escaped);
+    gApi->free(escaped);
+    return length > 0 && (size_t)length < size;
+}
+
+static bool
+AppendString(DBusMessageIter *iter, const char *string)
+{
+    return gApi->message_iter_append_basic(iter, DBUS_TYPE_STRING, &string);
+}
+
+static bool
+AppendBool(DBusMessageIter *iter, bool value)
+{
+    dbus_bool_t flag = value ? TRUE : FALSE;
+    return gApi->message_iter_append_basic(iter, DBUS_TYPE_BOOLEAN, &flag);
+}
+
+static bool
+AppendPath(DBusMessageIter *iter, const char *path)
+{
+    return gApi->message_iter_append_basic(iter, DBUS_TYPE_OBJECT_PATH, &path);
+}
+
+static bool
+AppendAttributes(DBusMessageIter *iter, const struct AttributeSet *set)
+{
+    DBusMessageIter array, entry;
+    if (!gApi->message_iter_open_container(iter, DBUS_TYPE_ARRAY, "{ss}", &array))
+        return false;
+    for (int i = 0; i < set->count; i++) {
+        if (!gApi->message_iter_open_container(&array, DBUS_TYPE_DICT_ENTRY, NULL, &entry) ||
+            !AppendString(&entry, set->entries[i].name) ||
+            !AppendString(&entry, set->entries[i].value) ||
+            !gApi->message_iter_close_container(&array, &entry))
+            return false;
+    }
+    return gApi->message_iter_close_container(iter, &array);
+}
+
+static bool
+AppendBytes(DBusMessageIter *iter, const uint8_t *bytes, CFIndex length)
+{
+    DBusMessageIter array;
+    if (!gApi->message_iter_open_container(iter, DBUS_TYPE_ARRAY, "y", &array))
+        return false;
+    for (CFIndex i = 0; i < length; i++) {
+        if (!gApi->message_iter_append_basic(&array, DBUS_TYPE_BYTE, &bytes[i]))
+            return false;
+    }
+    return gApi->message_iter_close_container(iter, &array);
+}
+
+/* The Secret struct (session, parameters, value, content type). */
+static bool
+AppendSecret(DBusMessageIter *iter, CFDataRef data)
+{
+    DBusMessageIter secret;
+    if (!gApi->message_iter_open_container(iter, DBUS_TYPE_STRUCT, NULL, &secret) ||
+        !AppendPath(&secret, gSessionPath) ||
+        !AppendBytes(&secret, NULL, 0) ||
+        !AppendBytes(&secret, CFDataGetBytePtr(data), CFDataGetLength(data)) ||
+        !AppendString(&secret, "application/octet-stream"))
+        return false;
+    return gApi->message_iter_close_container(iter, &secret);
+}
+
+static DBusMessage *
+NewCall(const char *path, const char *interface, const char *method)
+{
+    return gApi->message_new_method_call(kSecretServiceName, path, interface, method);
+}
+
+/* Sends the call and returns the reply, or NULL. A D-Bus error is not a lost bus. */
+static DBusMessage *
+Send(DBusMessage *message, bool *busFailure)
+{
+    DBusError error;
+    gApi->error_init(&error);
+    DBusMessage *reply = gApi->connection_send_with_reply_and_block(gConnection, message,
+        kCallTimeoutMs, &error);
+    gApi->message_unref(message);
+    if (reply == NULL) {
+        /* An error reply is the service saying no; anything else lost the connection. */
+        if (busFailure != NULL)
+            *busFailure = !gApi->connection_get_is_connected(gConnection) || error.name == NULL ||
+                strncmp(error.name, "org.freedesktop.Secret.Error.", 29) != 0;
+    }
+    gApi->error_free(&error);
+    return reply;
+}
+
+static bool
+ReadPath(DBusMessageIter *iter, char *buffer)
+{
+    if (gApi->message_iter_get_arg_type(iter) != DBUS_TYPE_OBJECT_PATH)
+        return false;
+    const char *path = NULL;
+    gApi->message_iter_get_basic(iter, &path);
+    if (path == NULL || strlen(path) >= kMaxPathLength)
+        return false;
+    strcpy(buffer, path);
+    return true;
+}
+
+/* Opens the connection, a plain session and the default collection, once. */
+static bool
+OpenLocked(void)
+{
+    if (gConnection != NULL)
+        return true;
+    if (gDisabled)
+        return false;
+    gApi = darling_dbus_get(0);
+    if (gApi == NULL) {
+        gDisabled = true;
+        return false;
+    }
+    char address[1024];
+    if (!SessionBusAddress(address, sizeof(address))) {
+        gDisabled = true;
+        return false;
+    }
+    DBusError error;
+    gApi->error_init(&error);
+    gConnection = gApi->connection_open_private(address, &error);
+    if (gConnection == NULL || !gApi->bus_register(gConnection, &error)) {
+        gApi->error_free(&error);
+        if (gConnection != NULL) {
+            gApi->connection_close(gConnection);
+            gApi->connection_unref(gConnection);
+            gConnection = NULL;
+        }
+        gDisabled = true;
+        return false;
+    }
+    gApi->error_free(&error);
+
+    DBusMessage *message = NewCall(kSecretServicePath, kSecretServiceInterface, "OpenSession");
+    DBusMessageIter args, variant;
+    gApi->message_iter_init_append(message, &args);
+    if (!AppendString(&args, "plain") ||
+        !gApi->message_iter_open_container(&args, DBUS_TYPE_VARIANT, "s", &variant) ||
+        !AppendString(&variant, "") ||
+        !gApi->message_iter_close_container(&args, &variant)) {
+        gApi->message_unref(message);
+        DisableLocked();
+        return false;
+    }
+    DBusMessage *reply = Send(message, NULL);
+    DBusMessageIter iter;
+    bool ok = reply != NULL && gApi->message_iter_init(reply, &iter) &&
+        gApi->message_iter_next(&iter) && ReadPath(&iter, gSessionPath);
+    if (reply != NULL)
+        gApi->message_unref(reply);
+
+    if (ok) {
+        message = NewCall(kSecretServicePath, kSecretServiceInterface, "ReadAlias");
+        gApi->message_iter_init_append(message, &args);
+        AppendString(&args, "default");
+        reply = Send(message, NULL);
+        ok = reply != NULL && gApi->message_iter_init(reply, &iter) &&
+            ReadPath(&iter, gCollectionPath) && strcmp(gCollectionPath, "/") != 0;
+        if (reply != NULL)
+            gApi->message_unref(reply);
+    }
+    if (!ok) {
+        DisableLocked();
+        return false;
+    }
+    return true;
+}
+
+/* Asks the service to unlock the objects. A request for the user's input is not made. */
+static bool
+UnlockLocked(const char *path)
+{
+    DBusMessage *message = NewCall(kSecretServicePath, kSecretServiceInterface, "Unlock");
+    DBusMessageIter args, array;
+    gApi->message_iter_init_append(message, &args);
+    if (!gApi->message_iter_open_container(&args, DBUS_TYPE_ARRAY, "o", &array) ||
+        !AppendPath(&array, path) || !gApi->message_iter_close_container(&args, &array)) {
+        gApi->message_unref(message);
+        return false;
+    }
+    DBusMessage *reply = Send(message, NULL);
+    DBusMessageIter iter;
+    char prompt[kMaxPathLength];
+    bool ok = reply != NULL && gApi->message_iter_init(reply, &iter) &&
+        gApi->message_iter_next(&iter) && ReadPath(&iter, prompt) && strcmp(prompt, "/") == 0;
+    if (reply != NULL)
+        gApi->message_unref(reply);
+    return ok;
+}
+
+enum Lookup {
+    kLookupFound,
+    kLookupNotFound,
+    kLookupLocked,
+    kLookupFailed,
+};
+
+/* Finds the item whose attributes include all of the given ones. */
+static enum Lookup
+FindItemLocked(const struct AttributeSet *attributes, char *itemPath)
+{
+    DBusMessage *message = NewCall(kSecretServicePath, kSecretServiceInterface, "SearchItems");
+    DBusMessageIter args;
+    gApi->message_iter_init_append(message, &args);
+    if (!AppendAttributes(&args, attributes)) {
+        gApi->message_unref(message);
+        return kLookupFailed;
+    }
+    bool busFailure = false;
+    DBusMessage *reply = Send(message, &busFailure);
+    if (reply == NULL) {
+        if (busFailure)
+            DisableLocked();
+        return kLookupFailed;
+    }
+    enum Lookup result = kLookupNotFound;
+    DBusMessageIter iter, array;
+    if (gApi->message_iter_init(reply, &iter)) {
+        for (int list = 0; list < 2 && result == kLookupNotFound; list++) {
+            if (gApi->message_iter_get_arg_type(&iter) != DBUS_TYPE_ARRAY)
+                break;
+            gApi->message_iter_recurse(&iter, &array);
+            if (gApi->message_iter_get_arg_type(&array) == DBUS_TYPE_OBJECT_PATH &&
+                ReadPath(&array, itemPath))
+                result = list == 0 ? kLookupFound : kLookupLocked;
+            if (!gApi->message_iter_next(&iter))
+                break;
+        }
+    }
+    gApi->message_unref(reply);
+    return result;
+}
+
+/* Like FindItemLocked, but an item in a locked collection is unlocked first. */
+static enum Lookup
+FindUnlockedItemLocked(const struct AttributeSet *attributes, char *itemPath)
+{
+    enum Lookup found = FindItemLocked(attributes, itemPath);
+    if (found == kLookupLocked)
+        found = UnlockLocked(itemPath) ? kLookupFound : kLookupLocked;
+    return found;
+}
+
+static CFDataRef
+CopySecretLocked(const char *itemPath)
+{
+    DBusMessage *message = NewCall(itemPath, kSecretItemInterface, "GetSecret");
+    DBusMessageIter args;
+    gApi->message_iter_init_append(message, &args);
+    AppendPath(&args, gSessionPath);
+    DBusMessage *reply = Send(message, NULL);
+    if (reply == NULL)
+        return NULL;
+    CFMutableDataRef data = NULL;
+    DBusMessageIter iter, secret, bytes;
+    if (gApi->message_iter_init(reply, &iter) &&
+        gApi->message_iter_get_arg_type(&iter) == DBUS_TYPE_STRUCT) {
+        gApi->message_iter_recurse(&iter, &secret);
+        /* the session, the parameters, then the value */
+        if (gApi->message_iter_next(&secret) && gApi->message_iter_next(&secret) &&
+            gApi->message_iter_get_arg_type(&secret) == DBUS_TYPE_ARRAY) {
+            data = CFDataCreateMutable(kCFAllocatorDefault, 0);
+            gApi->message_iter_recurse(&secret, &bytes);
+            while (gApi->message_iter_get_arg_type(&bytes) == DBUS_TYPE_BYTE) {
+                uint8_t byte = 0;
+                gApi->message_iter_get_basic(&bytes, &byte);
+                CFDataAppendBytes(data, &byte, 1);
+                if (!gApi->message_iter_next(&bytes))
+                    break;
+            }
+        }
+    }
+    gApi->message_unref(reply);
     return data;
 }
 
 static bool
-StoreValue(GHashTable *attributes, CFDataRef data)
+SetSecretLocked(const char *itemPath, CFDataRef data)
 {
-    const char *label = g_hash_table_lookup(attributes, "label");
-    if (label == NULL)
-        label = "Darling keychain item";
-
-    g_hash_table_insert(attributes, g_strdup("value-encoding"), g_strdup("base64"));
-    gsize length = (gsize)CFDataGetLength(data);
-    gchar *encoded = length == 0 ? g_strdup("") :
-        g_base64_encode(CFDataGetBytePtr(data), length);
-    GError *error = NULL;
-    gboolean stored = secret_password_storev_sync(&kDarlingSecItemSchema,
-        attributes, NULL, label, encoded, NULL, &error);
-    DisableSecretService(error);
-    g_free(encoded);
-    return stored;
+    DBusMessage *message = NewCall(itemPath, kSecretItemInterface, "SetSecret");
+    DBusMessageIter args;
+    gApi->message_iter_init_append(message, &args);
+    if (!AppendSecret(&args, data)) {
+        gApi->message_unref(message);
+        return false;
+    }
+    DBusMessage *reply = Send(message, NULL);
+    if (reply == NULL)
+        return false;
+    gApi->message_unref(reply);
+    return true;
 }
 
 static bool
-ClearStoredValues(GHashTable *attributes, bool *serviceError)
+SetItemAttributesLocked(const char *itemPath, const struct AttributeSet *set)
 {
-    GError *error = NULL;
-    gboolean cleared = secret_password_clearv_sync(&kDarlingSecItemSchema,
-        attributes, NULL, &error);
-    if (error != NULL) {
-        DisableSecretService(error);
-        if (serviceError != NULL)
-            *serviceError = true;
+    DBusMessage *message = NewCall(itemPath, kPropertiesInterface, "Set");
+    DBusMessageIter args, variant;
+    gApi->message_iter_init_append(message, &args);
+    if (!AppendString(&args, kSecretItemInterface) || !AppendString(&args, "Attributes") ||
+        !gApi->message_iter_open_container(&args, DBUS_TYPE_VARIANT, "a{ss}", &variant) ||
+        !AppendAttributes(&variant, set) ||
+        !gApi->message_iter_close_container(&args, &variant)) {
+        gApi->message_unref(message);
         return false;
     }
-    return cleared;
+    DBusMessage *reply = Send(message, NULL);
+    if (reply == NULL)
+        return false;
+    gApi->message_unref(reply);
+    return true;
 }
+
+static bool
+SetItemLabelLocked(const char *itemPath, const char *label)
+{
+    DBusMessage *message = NewCall(itemPath, kPropertiesInterface, "Set");
+    DBusMessageIter args, variant;
+    gApi->message_iter_init_append(message, &args);
+    if (!AppendString(&args, kSecretItemInterface) || !AppendString(&args, "Label") ||
+        !gApi->message_iter_open_container(&args, DBUS_TYPE_VARIANT, "s", &variant) ||
+        !AppendString(&variant, label) ||
+        !gApi->message_iter_close_container(&args, &variant)) {
+        gApi->message_unref(message);
+        return false;
+    }
+    DBusMessage *reply = Send(message, NULL);
+    if (reply == NULL)
+        return false;
+    gApi->message_unref(reply);
+    return true;
+}
+
+/* Reads back the attributes of an item, to merge an update into them. */
+static bool
+ReadItemAttributesLocked(const char *itemPath, struct AttributeSet *set)
+{
+    memset(set, 0, sizeof(*set));
+    DBusMessage *message = NewCall(itemPath, kPropertiesInterface, "Get");
+    DBusMessageIter args, iter, variant, array, entry;
+    gApi->message_iter_init_append(message, &args);
+    AppendString(&args, kSecretItemInterface);
+    AppendString(&args, "Attributes");
+    DBusMessage *reply = Send(message, NULL);
+    if (reply == NULL)
+        return false;
+    bool ok = false;
+    if (gApi->message_iter_init(reply, &iter) &&
+        gApi->message_iter_get_arg_type(&iter) == DBUS_TYPE_VARIANT) {
+        gApi->message_iter_recurse(&iter, &variant);
+        if (gApi->message_iter_get_arg_type(&variant) == DBUS_TYPE_ARRAY) {
+            ok = true;
+            gApi->message_iter_recurse(&variant, &array);
+            while (gApi->message_iter_get_arg_type(&array) == DBUS_TYPE_DICT_ENTRY) {
+                const char *name = NULL, *value = NULL;
+                gApi->message_iter_recurse(&array, &entry);
+                gApi->message_iter_get_basic(&entry, &name);
+                if (gApi->message_iter_next(&entry))
+                    gApi->message_iter_get_basic(&entry, &value);
+                if (name != NULL && value != NULL)
+                    AttributeSetPut(set, name, strdup(value));
+                if (!gApi->message_iter_next(&array))
+                    break;
+            }
+        }
+    }
+    gApi->message_unref(reply);
+    return ok;
+}
+
+#pragma mark - Public entry points
 
 SecItemSecretServiceResult
 SecItemSecretServiceAdd(CFDictionaryRef attributes, CFDataRef data, CFErrorRef *error)
 {
-    if (!SecretServiceEnabled())
-        return kSecItemSecretServiceUnavailable;
-
-    GHashTable *itemAttributes = CreateAttributeTable(attributes, true);
-    if (!IsSupportedCredential(itemAttributes)) {
-        g_hash_table_unref(itemAttributes);
-        return kSecItemSecretServiceUnavailable;
+    SecItemSecretServiceResult result = kSecItemSecretServiceUnavailable;
+    pthread_mutex_lock(&gLock);
+    struct AttributeSet set;
+    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, attributes, true))
+        goto out;
+    if (!IsSupportedCredential(&set) || !OpenLocked()) {
+        AttributeSetFree(&set);
+        goto out;
     }
 
-    bool serviceError = false;
-    CFDataRef existing = CopyStoredValue(itemAttributes, &serviceError);
-    if (serviceError) {
-        g_hash_table_unref(itemAttributes);
-        return kSecItemSecretServiceUnavailable;
+    char itemPath[kMaxPathLength];
+    enum Lookup found = FindItemLocked(&set, itemPath);
+    if (found == kLookupFailed) {
+        AttributeSetFree(&set);
+        goto out;
     }
-    if (existing != NULL) {
-        CFRelease(existing);
-        SecError(errSecDuplicateItem, error,
-            CFSTR("Secret Service item already exists"));
-        g_hash_table_unref(itemAttributes);
-        return kSecItemSecretServiceFailed;
+    if (found != kLookupNotFound) {
+        SecError(errSecDuplicateItem, error, CFSTR("Secret Service item already exists"));
+        result = kSecItemSecretServiceFailed;
+        AttributeSetFree(&set);
+        goto out;
     }
 
     CFDataRef empty = NULL;
     if (data == NULL)
-        empty = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)"", 0);
-    bool stored = StoreValue(itemAttributes, data != NULL ? data : empty);
+        data = empty = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)"", 0);
+
+    /* a locked default collection is unlocked, never prompted for */
+    bool unlocked = UnlockLocked(gCollectionPath);
+    const char *label = AttributeSetGet(&set, "label");
+    DBusMessage *message = NewCall(gCollectionPath, kSecretCollectionInterface, "CreateItem");
+    DBusMessageIter args, properties, entry, variant;
+    DBusMessage *reply = NULL;
+    gApi->message_iter_init_append(message, &args);
+    bool built = unlocked &&
+        gApi->message_iter_open_container(&args, DBUS_TYPE_ARRAY, "{sv}", &properties) &&
+        gApi->message_iter_open_container(&properties, DBUS_TYPE_DICT_ENTRY, NULL, &entry) &&
+        AppendString(&entry, kSecretItemInterface ".Label") &&
+        gApi->message_iter_open_container(&entry, DBUS_TYPE_VARIANT, "s", &variant) &&
+        AppendString(&variant, label != NULL ? label : "Darling keychain item") &&
+        gApi->message_iter_close_container(&entry, &variant) &&
+        gApi->message_iter_close_container(&properties, &entry) &&
+        gApi->message_iter_open_container(&properties, DBUS_TYPE_DICT_ENTRY, NULL, &entry) &&
+        AppendString(&entry, kSecretItemInterface ".Attributes") &&
+        gApi->message_iter_open_container(&entry, DBUS_TYPE_VARIANT, "a{ss}", &variant) &&
+        AppendAttributes(&variant, &set) &&
+        gApi->message_iter_close_container(&entry, &variant) &&
+        gApi->message_iter_close_container(&properties, &entry) &&
+        gApi->message_iter_close_container(&args, &properties) &&
+        AppendSecret(&args, data) &&
+        AppendBool(&args, false);
+    if (built) {
+        bool busFailure = false;
+        reply = Send(message, &busFailure);
+        if (reply == NULL && busFailure)
+            DisableLocked();
+    } else {
+        gApi->message_unref(message);
+    }
     CFReleaseNull(empty);
-    g_hash_table_unref(itemAttributes);
+    AttributeSetFree(&set);
 
-    if (!stored) {
-        if (!SecretServiceEnabled())
-            return kSecItemSecretServiceUnavailable;
-        SecError(errSecInternalComponent, error,
+    DBusMessageIter iter;
+    char created[kMaxPathLength], prompt[kMaxPathLength];
+    bool stored = reply != NULL && gApi->message_iter_init(reply, &iter) &&
+        ReadPath(&iter, created) && gApi->message_iter_next(&iter) &&
+        ReadPath(&iter, prompt) && strcmp(prompt, "/") == 0;
+    if (reply != NULL)
+        gApi->message_unref(reply);
+    if (stored) {
+        result = kSecItemSecretServiceHandled;
+    } else if (!gDisabled) {
+        SecError(unlocked ? errSecInternalComponent : errSecInteractionNotAllowed, error,
             CFSTR("failed to store item in Secret Service"));
-        return kSecItemSecretServiceFailed;
+        result = kSecItemSecretServiceFailed;
     }
-    return kSecItemSecretServiceHandled;
+out:
+    pthread_mutex_unlock(&gLock);
+    return result;
 }
 
 SecItemSecretServiceResult
 SecItemSecretServiceCopy(CFDictionaryRef query, CFDataRef *data, CFErrorRef *error)
 {
-    if (!SecretServiceEnabled())
-        return kSecItemSecretServiceUnavailable;
-
-    GHashTable *queryAttributes = CreateAttributeTable(query, true);
-    if (!IsSupportedCredential(queryAttributes)) {
-        g_hash_table_unref(queryAttributes);
-        return kSecItemSecretServiceUnavailable;
+    SecItemSecretServiceResult result = kSecItemSecretServiceUnavailable;
+    pthread_mutex_lock(&gLock);
+    struct AttributeSet set;
+    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, true))
+        goto out;
+    char itemPath[kMaxPathLength];
+    if (IsSupportedCredential(&set) && OpenLocked()) {
+        enum Lookup found = FindUnlockedItemLocked(&set, itemPath);
+        if (found == kLookupFound) {
+            CFDataRef value = CopySecretLocked(itemPath);
+            if (value != NULL) {
+                *data = value;
+                result = kSecItemSecretServiceHandled;
+            } else if (!gDisabled) {
+                SecError(errSecInternalComponent, error, CFSTR("failed to read item from Secret Service"));
+                result = kSecItemSecretServiceFailed;
+            }
+        } else if (found == kLookupLocked) {
+            SecError(errSecInteractionNotAllowed, error, CFSTR("the Secret Service item is locked"));
+            result = kSecItemSecretServiceFailed;
+        }
+        /* not found: the item may be one stored before the backend was switched on */
     }
-
-    bool serviceError = false;
-    CFDataRef value = CopyStoredValue(queryAttributes, &serviceError);
-    g_hash_table_unref(queryAttributes);
-
-    if (serviceError)
-        return kSecItemSecretServiceUnavailable;
-    if (value == NULL) {
-        SecError(errSecItemNotFound, error,
-            CFSTR("no matching Secret Service item found"));
-        return kSecItemSecretServiceFailed;
-    }
-
-    *data = value;
-    return kSecItemSecretServiceHandled;
+    AttributeSetFree(&set);
+out:
+    pthread_mutex_unlock(&gLock);
+    return result;
 }
 
 SecItemSecretServiceResult
-SecItemSecretServiceUpdate(CFDictionaryRef query, CFDictionaryRef attributesToUpdate,
-    CFErrorRef *error)
+SecItemSecretServiceUpdate(CFDictionaryRef query, CFDictionaryRef attributesToUpdate, CFErrorRef *error)
 {
-    if (!SecretServiceEnabled())
-        return kSecItemSecretServiceUnavailable;
-
-    GHashTable *queryAttributes = CreateAttributeTable(query, true);
-    if (!IsSupportedCredential(queryAttributes)) {
-        g_hash_table_unref(queryAttributes);
-        return kSecItemSecretServiceUnavailable;
+    SecItemSecretServiceResult result = kSecItemSecretServiceUnavailable;
+    pthread_mutex_lock(&gLock);
+    struct AttributeSet set;
+    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, true))
+        goto out;
+    char itemPath[kMaxPathLength];
+    if (IsSupportedCredential(&set) && OpenLocked()) {
+        enum Lookup found = FindUnlockedItemLocked(&set, itemPath);
+        if (found == kLookupFound) {
+            struct AttributeSet merged, changes;
+            bool ok = ReadItemAttributesLocked(itemPath, &merged);
+            AttributeSetFromDictionary(&changes, attributesToUpdate, false);
+            for (int i = 0; ok && i < changes.count; i++)
+                AttributeSetPut(&merged, changes.entries[i].name, strdup(changes.entries[i].value));
+            ok = ok && SetItemAttributesLocked(itemPath, &merged);
+            const char *label = AttributeSetGet(&changes, "label");
+            ok = ok && (label == NULL || SetItemLabelLocked(itemPath, label));
+            CFDataRef newValue = attributesToUpdate != NULL ?
+                CopyValueData(CFDictionaryGetValue(attributesToUpdate, kSecValueData)) : NULL;
+            ok = ok && (newValue == NULL || SetSecretLocked(itemPath, newValue));
+            CFReleaseNull(newValue);
+            AttributeSetFree(&merged);
+            AttributeSetFree(&changes);
+            if (ok) {
+                result = kSecItemSecretServiceHandled;
+            } else if (!gDisabled) {
+                SecError(errSecInternalComponent, error, CFSTR("failed to update item in Secret Service"));
+                result = kSecItemSecretServiceFailed;
+            }
+        } else if (found == kLookupLocked) {
+            SecError(errSecInteractionNotAllowed, error, CFSTR("the Secret Service item is locked"));
+            result = kSecItemSecretServiceFailed;
+        }
     }
-
-    bool serviceError = false;
-    CFDataRef existing = CopyStoredValue(queryAttributes, &serviceError);
-    if (serviceError) {
-        g_hash_table_unref(queryAttributes);
-        return kSecItemSecretServiceUnavailable;
-    }
-    if (existing == NULL) {
-        g_hash_table_unref(queryAttributes);
-        SecError(errSecItemNotFound, error,
-            CFSTR("no matching Secret Service item found"));
-        return kSecItemSecretServiceFailed;
-    }
-
-    GHashTable *updateAttributes = CreateAttributeTable(attributesToUpdate, false);
-    CFDataRef newValue = CopyDataValue(CFDictionaryGetValue(attributesToUpdate,
-        kSecValueData));
-    CFDataRef valueToStore = newValue != NULL ? newValue : existing;
-
-    GHashTable *newAttributes = g_hash_table_new_full(g_str_hash, g_str_equal,
-        g_free, g_free);
-    MergeAttributes(newAttributes, queryAttributes);
-    MergeAttributes(newAttributes, updateAttributes);
-
-    bool sameIdentity = TablesEqual(queryAttributes, newAttributes);
-    bool stored = StoreValue(newAttributes, valueToStore);
-    bool cleared = true;
-    if (stored && !sameIdentity)
-        cleared = ClearStoredValues(queryAttributes, &serviceError);
-
-    CFReleaseNull(newValue);
-    CFReleaseNull(existing);
-    g_hash_table_unref(queryAttributes);
-    g_hash_table_unref(updateAttributes);
-    g_hash_table_unref(newAttributes);
-
-    if (serviceError || (!stored && !SecretServiceEnabled()))
-        return kSecItemSecretServiceUnavailable;
-    if (!stored || !cleared) {
-        SecError(errSecInternalComponent, error,
-            CFSTR("failed to update item in Secret Service"));
-        return kSecItemSecretServiceFailed;
-    }
-    return kSecItemSecretServiceHandled;
+    AttributeSetFree(&set);
+out:
+    pthread_mutex_unlock(&gLock);
+    return result;
 }
 
 SecItemSecretServiceResult
 SecItemSecretServiceDelete(CFDictionaryRef query, CFErrorRef *error)
 {
-    if (!SecretServiceEnabled())
-        return kSecItemSecretServiceUnavailable;
-
-    GHashTable *queryAttributes = CreateAttributeTable(query, true);
-    if (!IsSupportedCredential(queryAttributes)) {
-        g_hash_table_unref(queryAttributes);
-        return kSecItemSecretServiceUnavailable;
+    SecItemSecretServiceResult result = kSecItemSecretServiceUnavailable;
+    pthread_mutex_lock(&gLock);
+    struct AttributeSet set;
+    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, true))
+        goto out;
+    char itemPath[kMaxPathLength];
+    if (IsSupportedCredential(&set) && OpenLocked()) {
+        enum Lookup found = FindUnlockedItemLocked(&set, itemPath);
+        if (found == kLookupFound) {
+            DBusMessage *message = NewCall(itemPath, kSecretItemInterface, "Delete");
+            DBusMessage *reply = Send(message, NULL);
+            DBusMessageIter iter;
+            char prompt[kMaxPathLength];
+            bool ok = reply != NULL && gApi->message_iter_init(reply, &iter) &&
+                ReadPath(&iter, prompt) && strcmp(prompt, "/") == 0;
+            if (reply != NULL)
+                gApi->message_unref(reply);
+            if (ok) {
+                result = kSecItemSecretServiceHandled;
+            } else if (!gDisabled) {
+                SecError(errSecInternalComponent, error, CFSTR("failed to delete item from Secret Service"));
+                result = kSecItemSecretServiceFailed;
+            }
+        } else if (found == kLookupLocked) {
+            SecError(errSecInteractionNotAllowed, error, CFSTR("the Secret Service item is locked"));
+            result = kSecItemSecretServiceFailed;
+        }
     }
-
-    bool serviceError = false;
-    bool cleared = ClearStoredValues(queryAttributes, &serviceError);
-    g_hash_table_unref(queryAttributes);
-
-    if (serviceError)
-        return kSecItemSecretServiceUnavailable;
-    if (!cleared) {
-        SecError(errSecItemNotFound, error,
-            CFSTR("no matching Secret Service item found"));
-        return kSecItemSecretServiceFailed;
-    }
-    return kSecItemSecretServiceHandled;
+    AttributeSetFree(&set);
+out:
+    pthread_mutex_unlock(&gLock);
+    return result;
 }
-
-#else /* !DARLING_USE_SECRET_SERVICE */
-
-SecItemSecretServiceResult
-SecItemSecretServiceAdd(CFDictionaryRef attributes, CFDataRef data, CFErrorRef *error)
-{
-    (void)attributes;
-    (void)data;
-    (void)error;
-    return kSecItemSecretServiceUnavailable;
-}
-
-SecItemSecretServiceResult
-SecItemSecretServiceCopy(CFDictionaryRef query, CFDataRef *data, CFErrorRef *error)
-{
-    (void)query;
-    (void)data;
-    (void)error;
-    return kSecItemSecretServiceUnavailable;
-}
-
-SecItemSecretServiceResult
-SecItemSecretServiceUpdate(CFDictionaryRef query, CFDictionaryRef attributesToUpdate,
-    CFErrorRef *error)
-{
-    (void)query;
-    (void)attributesToUpdate;
-    (void)error;
-    return kSecItemSecretServiceUnavailable;
-}
-
-SecItemSecretServiceResult
-SecItemSecretServiceDelete(CFDictionaryRef query, CFErrorRef *error)
-{
-    (void)query;
-    (void)error;
-    return kSecItemSecretServiceUnavailable;
-}
-
-#endif /* DARLING_USE_SECRET_SERVICE */

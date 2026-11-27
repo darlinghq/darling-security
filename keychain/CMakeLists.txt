@@ -1,5 +1,9 @@
 project(libsecurityd_ios)
 
+# The optional Secret Service backend reaches the host through Darling's libdbus wrapper.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PC_DBUS REQUIRED dbus-1)
+
 include_directories(
 	ckks
 	securityd/SecDbBackupManager-protobufs/generated_source
@@ -199,11 +203,11 @@ add_lib_ios_shim(libsecurityd_ios
 		securityd/SFKeychainControlManager.m
 		securityd/SFKeychainServer.m
 		#TrustedPeersHelper/TrustedPeersHelperProtocol.m
+	INCLUDES
+		${CMAKE_SOURCE_DIR}/src/libdarlingdbus/include
+		${PC_DBUS_INCLUDE_DIRS}
 	DEFINITIONS
 		USE_KEYSTORE=1
-		${DARLING_SECRET_SERVICE_DEFINITIONS}
-	INCLUDES
-		${DARLING_SECRET_SERVICE_INCLUDES}
 	LIBRARIES
-		${DARLING_SECRET_SERVICE_LIBRARIES}
+		darling_dbus_loader
 )

@@ -6,23 +6,43 @@ https://github.com/apple-oss-distributions/Security/tree/Security-59754.140.13
 
 ## Optional Secret Service backend
 
-`securityd` can optionally store generic and internet password items in the
-freedesktop Secret Service through `libsecret`. This is disabled by default.
+`securityd` can store generic and internet password items in the host's
+freedesktop Secret Service (GNOME Keyring, KWallet, KeePassXC, ...) instead of
+the keychain database in the prefix. It is **off by default**; with the setting
+off nothing changes, and no D-Bus connection is made.
 
-Build with:
+Switch it on in the prefix with
 
 ```sh
-cmake -DDARLING_SECURITY_USE_SECRET_SERVICE=ON ...
+defaults write org.darlinghq.security SecretServiceBackend -bool YES
 ```
 
-If `libsecret-1` is unavailable at build time, or the Secret Service is
-unavailable at runtime, `securityd` starts normally and the ordinary SQLite
-keychain backend is used. Darling never requires a session bus or a running
-keyring daemon for this feature.
+and restart the prefix (`darling shutdown`), so that `secd` reads it again. The
+backend talks to the host's session bus (`DBUS_SESSION_BUS_ADDRESS`, or
+`$XDG_RUNTIME_DIR/bus`) through Darling's libdbus wrapper, uses the "plain"
+Secret Service session and the collection that the service names `default`. If
+the bus, the service or the default collection is missing, or a call fails to
+reach the service, the backend turns itself off until `secd` restarts and the
+keychain database is used.
 
-The backend does not provide macOS access groups, entitlements, or ACLs.
-Existing `securityd` entitlement checks still apply before the backend is
-called. This feature is a storage backend only, not a policy equivalence layer.
+What leaves the prefix when it is on: for each generic or internet password
+item that is added with a service and an account (or a server and an account),
+its secret value and its service, account, access group, server, protocol,
+port, path, security domain, authentication type, generic, label, description,
+comment, creator and type attributes are sent to the host's Secret Service,
+where any process of the host user that can use the session bus can read them
+like any other Secret Service entry. The secret travels unencrypted over the
+local session bus ("plain" session). Keys, certificates, identities and every
+other item remain in the prefix's keychain database.
+
+Behavior: copy (data only), update, delete and add of those items go to the
+service; an item that the service does not hold is looked up in the database as
+before, so items stored earlier stay reachable. Queries that ask for
+attributes, references or several results are answered from the database only.
+The service has no access groups, entitlements or ACLs; the checks `securityd`
+makes before the backend is called are unchanged, and the backend adds none. A
+locked collection is unlocked when the service allows it without a prompt;
+otherwise the call fails with `errSecInteractionNotAllowed`.
 
 ## Updating Source
 
