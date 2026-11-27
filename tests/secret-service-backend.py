@@ -201,6 +201,9 @@ def mock_items_text():
     return "\n".join(f"attribute.{k} = {v}" for item in mock_items()["items"] for k, v in item["attributes"].items())
 
 
+MONITOR_EXITED = "dbus-monitor exited before the end of the step\n"
+
+
 class Monitor:
     """dbus-monitor on one of the private buses while a guest step runs."""
 
@@ -208,19 +211,22 @@ class Monitor:
         require_private(bus_address)
         self.file = open(path, "w")
         self.path = path
-        self.proc = subprocess.Popen(["dbus-monitor", f"--address={bus_address}"], stdin=subprocess.DEVNULL,
+        # dbus-monitor takes the address as a separate argument; "--address=..." only prints its usage
+        self.proc = subprocess.Popen(["dbus-monitor", "--address", bus_address], stdin=subprocess.DEVNULL,
                                      stdout=self.file, stderr=subprocess.STDOUT)
         procs.append(self.proc)
         time.sleep(1)
 
     def stop(self):
         time.sleep(0.5)
+        # a monitor that is gone before the end recorded nothing that can be judged
+        exited = self.proc.poll() is not None
         self.proc.terminate()
         self.proc.wait(timeout=10)
         procs.remove(self.proc)
         self.file.close()
         with open(self.path) as f:
-            return f.read()
+            return (MONITOR_EXITED if exited else "") + f.read()
 
 
 def darling(*args, env=None, timeout=180, out=None):
@@ -298,13 +304,16 @@ def wire_checks(arch, scenario, record):
     # dbus-monitor prints a byte array as a quoted string when it is text and
     # as hex bytes otherwise; look for every value in both forms
     flat = "".join(record.split()).lower()
+    # the checks that look for something absent mean nothing unless the record is complete
+    recorded = MONITOR_EXITED not in record and "member=OpenSession" in record
+    check(recorded, f"{scenario}/{arch}: dbus-monitor recorded every step, from the opening of the session on")
     check("member=CreateItem" in record and "member=GetSecret" in record and "member=SetSecret" in record,
           f"{scenario}/{arch}: the bus record holds the CreateItem, GetSecret and SetSecret calls")
     check("member=OpenSession" in record and f'string "{DH_ALGORITHM}"' in record,
           f"{scenario}/{arch}: the session was opened with {DH_ALGORITHM}")
-    check('string "plain"' not in record, f"{scenario}/{arch}: no plain session was asked for")
+    check(recorded and 'string "plain"' not in record, f"{scenario}/{arch}: no plain session was asked for")
     leaked = [v for v in SECRET_VALUES if v.hex() in flat or (v.isascii() and v.decode() in record)]
-    check(not leaked, f"{scenario}/{arch}: no secret value is on the bus in the clear" +
+    check(recorded and not leaked, f"{scenario}/{arch}: no secret value is on the bus in the clear" +
           ("" if not leaked else f": {leaked!r}"))
 
 
