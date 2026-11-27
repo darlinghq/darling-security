@@ -60,6 +60,13 @@
 #define kSecBackupKeybagUUIDKey CFSTR("keybag-uuid")
 
 /* The optional Secret Service backend handles only ordinary password items. */
+static SecItemSecretServiceClass
+SecItemSecretServiceClassOfQuery(Query *q)
+{
+    return q->q_class == genp_class() ? kSecItemSecretServiceGenericPassword :
+        kSecItemSecretServiceInternetPassword;
+}
+
 static bool
 SecItemSecretServiceSupportsQuery(Query *q)
 {
@@ -304,7 +311,7 @@ s3dl_query_add(SecDbConnectionRef dbt, Query *q, CFTypeRef *result, CFErrorRef *
     /* Only an add that returns nothing is stored in the Secret Service; one that asks for the item back stays in the database. */
     if ((result == NULL || q->q_return_type == 0) && SecItemSecretServiceSupportsQuery(q)) {
         SecItemSecretServiceResult serviceResult =
-            SecItemSecretServiceAdd(q->q_item, q->q_data, error);
+            SecItemSecretServiceAdd(SecItemSecretServiceClassOfQuery(q), q->q_item, q->q_data, error);
         if (serviceResult == kSecItemSecretServiceHandled) {
             q->q_changed = true;
             return true;
@@ -1017,7 +1024,7 @@ s3dl_copy_matching(SecDbConnectionRef dbt, Query *q, CFTypeRef *result,
     if (SecItemSecretServiceSupportsCopy(q)) {
         CFDataRef value = NULL;
         SecItemSecretServiceResult serviceResult =
-            SecItemSecretServiceCopy(q->q_item, &value, error);
+            SecItemSecretServiceCopy(SecItemSecretServiceClassOfQuery(q), q->q_item, &value, error);
         if (serviceResult == kSecItemSecretServiceHandled) {
             if (result != NULL)
                 *result = value;
@@ -1194,7 +1201,7 @@ s3dl_query_update(SecDbConnectionRef dbt, Query *q,
 
     if (SecItemSecretServiceSupportsQuery(q)) {
         SecItemSecretServiceResult serviceResult =
-            SecItemSecretServiceUpdate(q->q_item, attributesToUpdate, error);
+            SecItemSecretServiceUpdate(SecItemSecretServiceClassOfQuery(q), q->q_item, attributesToUpdate, error);
         if (serviceResult == kSecItemSecretServiceHandled) {
             q->q_changed = true;
             return true;
@@ -1287,7 +1294,7 @@ s3dl_query_delete(SecDbConnectionRef dbt, Query *q, CFArrayRef accessGroups, CFE
 
     if (SecItemSecretServiceSupportsQuery(q)) {
         SecItemSecretServiceResult serviceResult =
-            SecItemSecretServiceDelete(q->q_item, error);
+            SecItemSecretServiceDelete(SecItemSecretServiceClassOfQuery(q), q->q_item, error);
         if (serviceResult == kSecItemSecretServiceHandled) {
             q->q_changed = true;
             return true;

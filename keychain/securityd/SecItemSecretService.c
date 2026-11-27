@@ -11,7 +11,8 @@
  * (darling_dbus), as the other daemons that reach host services do, using the
  * "plain" session algorithm of the Secret Service API. The backend is off
  * unless the preference SecretServiceBackend of the domain
- * org.darlinghq.security is true; with the preference off or absent it never
+ * org.darlinghq.security (read as the daemon sees it, so the system-wide
+ * /Library/Preferences one) is true; with the preference off or absent it never
  * loads the wrapper or opens a connection, and every function reports
  * kSecItemSecretServiceUnavailable.
  */
@@ -186,24 +187,19 @@ CopyStringValue(CFTypeRef value)
 }
 
 /*
- * The attributes of a SecItem dictionary that the backend stores. The class is
- * always recorded, so that generic and internet passwords never collide.
+ * The attributes of a SecItem dictionary that the backend stores. The class, when
+ * given, is recorded as well, so that generic and internet passwords never collide.
  */
 static bool
-AttributeSetFromDictionary(struct AttributeSet *set, CFDictionaryRef dictionary, bool withClass)
+AttributeSetFromDictionary(struct AttributeSet *set, CFDictionaryRef dictionary, SecItemSecretServiceClass itemClass)
 {
     memset(set, 0, sizeof(*set));
     if (dictionary == NULL)
         return false;
-    if (withClass) {
-        CFTypeRef class = CFDictionaryGetValue(dictionary, kSecClass);
-        if (class != NULL && CFEqual(class, kSecClassGenericPassword))
-            AttributeSetPut(set, "class", strdup("generic"));
-        else if (class != NULL && CFEqual(class, kSecClassInternetPassword))
-            AttributeSetPut(set, "class", strdup("internet"));
-        else
-            return false;
-    }
+    if (itemClass == kSecItemSecretServiceGenericPassword)
+        AttributeSetPut(set, "class", strdup("generic"));
+    else if (itemClass == kSecItemSecretServiceInternetPassword)
+        AttributeSetPut(set, "class", strdup("internet"));
     for (size_t i = 0; i < sizeof(kAttributeNames) / sizeof(kAttributeNames[0]); i++) {
         CFTypeRef value = CFDictionaryGetValue(dictionary, *kAttributeNames[i].key);
         char *string = value != NULL ? CopyStringValue(value) : NULL;
@@ -670,12 +666,12 @@ ReadItemAttributesLocked(const char *itemPath, struct AttributeSet *set)
 #pragma mark - Public entry points
 
 SecItemSecretServiceResult
-SecItemSecretServiceAdd(CFDictionaryRef attributes, CFDataRef data, CFErrorRef *error)
+SecItemSecretServiceAdd(SecItemSecretServiceClass itemClass, CFDictionaryRef attributes, CFDataRef data, CFErrorRef *error)
 {
     SecItemSecretServiceResult result = kSecItemSecretServiceUnavailable;
     pthread_mutex_lock(&gLock);
     struct AttributeSet set;
-    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, attributes, true))
+    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, attributes, itemClass))
         goto out;
     if (!IsSupportedCredential(&set) || !OpenLocked()) {
         AttributeSetFree(&set);
@@ -754,12 +750,12 @@ out:
 }
 
 SecItemSecretServiceResult
-SecItemSecretServiceCopy(CFDictionaryRef query, CFDataRef *data, CFErrorRef *error)
+SecItemSecretServiceCopy(SecItemSecretServiceClass itemClass, CFDictionaryRef query, CFDataRef *data, CFErrorRef *error)
 {
     SecItemSecretServiceResult result = kSecItemSecretServiceUnavailable;
     pthread_mutex_lock(&gLock);
     struct AttributeSet set;
-    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, true))
+    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, itemClass))
         goto out;
     char itemPath[kMaxPathLength];
     if (IsSupportedCredential(&set) && OpenLocked()) {
@@ -786,12 +782,12 @@ out:
 }
 
 SecItemSecretServiceResult
-SecItemSecretServiceUpdate(CFDictionaryRef query, CFDictionaryRef attributesToUpdate, CFErrorRef *error)
+SecItemSecretServiceUpdate(SecItemSecretServiceClass itemClass, CFDictionaryRef query, CFDictionaryRef attributesToUpdate, CFErrorRef *error)
 {
     SecItemSecretServiceResult result = kSecItemSecretServiceUnavailable;
     pthread_mutex_lock(&gLock);
     struct AttributeSet set;
-    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, true))
+    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, itemClass))
         goto out;
     char itemPath[kMaxPathLength];
     if (IsSupportedCredential(&set) && OpenLocked()) {
@@ -799,7 +795,7 @@ SecItemSecretServiceUpdate(CFDictionaryRef query, CFDictionaryRef attributesToUp
         if (found == kLookupFound) {
             struct AttributeSet merged, changes;
             bool ok = ReadItemAttributesLocked(itemPath, &merged);
-            AttributeSetFromDictionary(&changes, attributesToUpdate, false);
+            AttributeSetFromDictionary(&changes, attributesToUpdate, 0);
             for (int i = 0; ok && i < changes.count; i++)
                 AttributeSetPut(&merged, changes.entries[i].name, strdup(changes.entries[i].value));
             ok = ok && SetItemAttributesLocked(itemPath, &merged);
@@ -829,12 +825,12 @@ out:
 }
 
 SecItemSecretServiceResult
-SecItemSecretServiceDelete(CFDictionaryRef query, CFErrorRef *error)
+SecItemSecretServiceDelete(SecItemSecretServiceClass itemClass, CFDictionaryRef query, CFErrorRef *error)
 {
     SecItemSecretServiceResult result = kSecItemSecretServiceUnavailable;
     pthread_mutex_lock(&gLock);
     struct AttributeSet set;
-    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, true))
+    if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, itemClass))
         goto out;
     char itemPath[kMaxPathLength];
     if (IsSupportedCredential(&set) && OpenLocked()) {

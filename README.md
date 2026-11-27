@@ -14,10 +14,10 @@ off nothing changes, and no D-Bus connection is made.
 Switch it on in the prefix with
 
 ```sh
-defaults write org.darlinghq.security SecretServiceBackend -bool YES
+sudo defaults write /Library/Preferences/org.darlinghq.security SecretServiceBackend -bool YES
 ```
 
-and restart the prefix (`darling shutdown`), so that `secd` reads it again. The
+(`secd` runs as root, so this is the system-wide setting) and restart the prefix (`darling shutdown`), so that `secd` reads it again. The
 backend talks to the host's session bus (`DBUS_SESSION_BUS_ADDRESS`, or
 `$XDG_RUNTIME_DIR/bus`) through Darling's libdbus wrapper, uses the "plain"
 Secret Service session and the collection that the service names `default`. If

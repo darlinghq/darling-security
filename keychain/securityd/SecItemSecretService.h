@@ -24,16 +24,25 @@ typedef enum {
     kSecItemSecretServiceFailed
 } SecItemSecretServiceResult;
 
-SecItemSecretServiceResult SecItemSecretServiceAdd(CFDictionaryRef attributes,
-    CFDataRef data, CFErrorRef *error);
+/*
+ * The kinds of item the backend stores. The attribute dictionaries of the
+ * database layer do not carry the class, so the caller names it.
+ */
+typedef enum {
+    kSecItemSecretServiceGenericPassword = 1,
+    kSecItemSecretServiceInternetPassword,
+} SecItemSecretServiceClass;
 
-SecItemSecretServiceResult SecItemSecretServiceCopy(CFDictionaryRef query,
-    CFDataRef *data, CFErrorRef *error);
+SecItemSecretServiceResult SecItemSecretServiceAdd(SecItemSecretServiceClass itemClass,
+    CFDictionaryRef attributes, CFDataRef data, CFErrorRef *error);
 
-SecItemSecretServiceResult SecItemSecretServiceUpdate(CFDictionaryRef query,
-    CFDictionaryRef attributesToUpdate, CFErrorRef *error);
+SecItemSecretServiceResult SecItemSecretServiceCopy(SecItemSecretServiceClass itemClass,
+    CFDictionaryRef query, CFDataRef *data, CFErrorRef *error);
 
-SecItemSecretServiceResult SecItemSecretServiceDelete(CFDictionaryRef query,
-    CFErrorRef *error);
+SecItemSecretServiceResult SecItemSecretServiceUpdate(SecItemSecretServiceClass itemClass,
+    CFDictionaryRef query, CFDictionaryRef attributesToUpdate, CFErrorRef *error);
+
+SecItemSecretServiceResult SecItemSecretServiceDelete(SecItemSecretServiceClass itemClass,
+    CFDictionaryRef query, CFErrorRef *error);
 
 #endif /* _SECITEM_SECRET_SERVICE_H_ */
