@@ -239,6 +239,72 @@ CopyValueData(CFTypeRef value)
     return NULL;
 }
 
+static int
+Base64Digit(char c)
+{
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+static CFDataRef
+CopyBase64Decoded(const char *text)
+{
+    CFMutableDataRef data = CFDataCreateMutable(kCFAllocatorDefault, 0);
+    uint32_t accumulator = 0;
+    int bits = 0;
+    for (; *text != '\0' && *text != '='; text++) {
+        int digit = Base64Digit(*text);
+        if (digit < 0)
+            continue;
+        accumulator = (accumulator << 6) | (uint32_t)digit;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            uint8_t byte = (uint8_t)(accumulator >> bits);
+            CFDataAppendBytes(data, &byte, 1);
+        }
+    }
+    return data;
+}
+
+/*
+ * The dictionary SecItemCopyMatching returns for an item: the attributes the
+ * service holds with the types the SecItem API gives them (a number for the
+ * port, creator and type, data for the generic attribute, strings otherwise).
+ */
+static CFDictionaryRef
+CopyAttributesDictionary(const struct AttributeSet *stored, SecItemSecretServiceClass itemClass)
+{
+    CFMutableDictionaryRef dictionary = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(dictionary, kSecClass, itemClass == kSecItemSecretServiceGenericPassword ?
+        kSecClassGenericPassword : kSecClassInternetPassword);
+    for (size_t i = 0; i < sizeof(kAttributeNames) / sizeof(kAttributeNames[0]); i++) {
+        const char *value = AttributeSetGet(stored, kAttributeNames[i].name);
+        if (value == NULL)
+            continue;
+        CFStringRef key = *kAttributeNames[i].key;
+        CFTypeRef converted = NULL;
+        if (CFEqual(key, kSecAttrPort) || CFEqual(key, kSecAttrCreator) || CFEqual(key, kSecAttrType)) {
+            int64_t number = strtoll(value, NULL, 10);
+            converted = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &number);
+        } else if (CFEqual(key, kSecAttrGeneric)) {
+            converted = CopyBase64Decoded(value);
+        } else {
+            converted = CFStringCreateWithCString(kCFAllocatorDefault, value, kCFStringEncodingUTF8);
+        }
+        if (converted != NULL) {
+            CFDictionarySetValue(dictionary, key, converted);
+            CFRelease(converted);
+        }
+    }
+    return dictionary;
+}
+
 #pragma mark - D-Bus helpers
 
 static void
@@ -750,9 +816,10 @@ out:
 }
 
 SecItemSecretServiceResult
-SecItemSecretServiceCopy(SecItemSecretServiceClass itemClass, CFDictionaryRef query, CFDataRef *data, CFErrorRef *error)
+SecItemSecretServiceCopy(SecItemSecretServiceClass itemClass, CFDictionaryRef query, bool wantData,
+    bool wantAttributes, CFTypeRef *result, CFErrorRef *error)
 {
-    SecItemSecretServiceResult result = kSecItemSecretServiceUnavailable;
+    SecItemSecretServiceResult outcome = kSecItemSecretServiceUnavailable;
     pthread_mutex_lock(&gLock);
     struct AttributeSet set;
     if (!PreferenceOn() || !AttributeSetFromDictionary(&set, query, itemClass))
@@ -761,24 +828,40 @@ SecItemSecretServiceCopy(SecItemSecretServiceClass itemClass, CFDictionaryRef qu
     if (IsSupportedCredential(&set) && OpenLocked()) {
         enum Lookup found = FindUnlockedItemLocked(&set, itemPath);
         if (found == kLookupFound) {
-            CFDataRef value = CopySecretLocked(itemPath);
-            if (value != NULL) {
-                *data = value;
-                result = kSecItemSecretServiceHandled;
-            } else if (!gDisabled) {
-                SecError(errSecInternalComponent, error, CFSTR("failed to read item from Secret Service"));
-                result = kSecItemSecretServiceFailed;
+            CFDataRef value = wantData ? CopySecretLocked(itemPath) : NULL;
+            struct AttributeSet stored;
+            bool ok = (!wantData || value != NULL) &&
+                (!wantAttributes || ReadItemAttributesLocked(itemPath, &stored));
+            if (ok && wantAttributes) {
+                CFMutableDictionaryRef dictionary =
+                    (CFMutableDictionaryRef)CopyAttributesDictionary(&stored, itemClass);
+                AttributeSetFree(&stored);
+                if (value != NULL) {
+                    CFDictionarySetValue(dictionary, kSecValueData, value);
+                    CFRelease(value);
+                }
+                *result = dictionary;
+                outcome = kSecItemSecretServiceHandled;
+            } else if (ok) {
+                *result = value;
+                outcome = kSecItemSecretServiceHandled;
+            } else {
+                CFReleaseNull(value);
+                if (!gDisabled) {
+                    SecError(errSecInternalComponent, error, CFSTR("failed to read item from Secret Service"));
+                    outcome = kSecItemSecretServiceFailed;
+                }
             }
         } else if (found == kLookupLocked) {
             SecError(errSecInteractionNotAllowed, error, CFSTR("the Secret Service item is locked"));
-            result = kSecItemSecretServiceFailed;
+            outcome = kSecItemSecretServiceFailed;
         }
         /* not found: the item may be one stored before the backend was switched on */
     }
     AttributeSetFree(&set);
 out:
     pthread_mutex_unlock(&gLock);
-    return result;
+    return outcome;
 }
 
 SecItemSecretServiceResult

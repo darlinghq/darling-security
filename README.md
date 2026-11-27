@@ -35,10 +35,11 @@ like any other Secret Service entry. The secret travels unencrypted over the
 local session bus ("plain" session). Keys, certificates, identities and every
 other item remain in the prefix's keychain database.
 
-Behavior: copy (data only), update, delete and add of those items go to the
+Behavior: add, copy of one item (its data, its attributes or both), update and delete of those items go to the
 service; an item that the service does not hold is looked up in the database as
 before, so items stored earlier stay reachable. Queries that ask for
-attributes, references or several results are answered from the database only.
+references, persistent references or several results are answered from the database only, and so is an add that asks for the item back. Attributes the service does not
+keep (dates, accessibility, synchronization) are not part of the copied attributes.
 The service has no access groups, entitlements or ACLs; the checks `securityd`
 makes before the backend is called are unchanged, and the backend adds none. A
 locked collection is unlocked when the service allows it without a prompt;

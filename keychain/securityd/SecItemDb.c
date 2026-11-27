@@ -79,9 +79,10 @@ SecItemSecretServiceSupportsQuery(Query *q)
 static bool
 SecItemSecretServiceSupportsCopy(Query *q)
 {
+    /* one item, returned as its data, its attributes or both */
+    const uint32_t handled = kSecReturnDataMask | kSecReturnAttributesMask;
     return SecItemSecretServiceSupportsQuery(q) && q->q_limit == 1 &&
-        (q->q_return_type & kSecReturnDataMask) != 0 &&
-        (q->q_return_type & ~(uint32_t)kSecReturnDataMask) == 0;
+        (q->q_return_type & handled) != 0 && (q->q_return_type & ~handled) == 0;
 }
 
 const SecDbAttr *SecDbAttrWithKey(const SecDbClass *c,
@@ -1022,9 +1023,11 @@ s3dl_copy_matching(SecDbConnectionRef dbt, Query *q, CFTypeRef *result,
         query_add_attribute(kSecAttrTombstone, kCFBooleanFalse, q);
 
     if (SecItemSecretServiceSupportsCopy(q)) {
-        CFDataRef value = NULL;
+        CFTypeRef value = NULL;
         SecItemSecretServiceResult serviceResult =
-            SecItemSecretServiceCopy(SecItemSecretServiceClassOfQuery(q), q->q_item, &value, error);
+            SecItemSecretServiceCopy(SecItemSecretServiceClassOfQuery(q), q->q_item,
+                (q->q_return_type & kSecReturnDataMask) != 0,
+                (q->q_return_type & kSecReturnAttributesMask) != 0, &value, error);
         if (serviceResult == kSecItemSecretServiceHandled) {
             if (result != NULL)
                 *result = value;

@@ -36,8 +36,13 @@ typedef enum {
 SecItemSecretServiceResult SecItemSecretServiceAdd(SecItemSecretServiceClass itemClass,
     CFDictionaryRef attributes, CFDataRef data, CFErrorRef *error);
 
+/*
+ * Copies one matching item. With wantAttributes false the result is the item's
+ * data (a CFData); otherwise it is a dictionary of the item's attributes, with
+ * kSecValueData added when wantData is true.
+ */
 SecItemSecretServiceResult SecItemSecretServiceCopy(SecItemSecretServiceClass itemClass,
-    CFDictionaryRef query, CFDataRef *data, CFErrorRef *error);
+    CFDictionaryRef query, bool wantData, bool wantAttributes, CFTypeRef *result, CFErrorRef *error);
 
 SecItemSecretServiceResult SecItemSecretServiceUpdate(SecItemSecretServiceClass itemClass,
     CFDictionaryRef query, CFDictionaryRef attributesToUpdate, CFErrorRef *error);
