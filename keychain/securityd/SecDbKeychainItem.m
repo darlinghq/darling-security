@@ -358,7 +358,13 @@ bool ks_encrypt_data_with_backupuuid(keybag_handle_t keybag, SecAccessControlRef
         }
         else {
             if (error) {
-                *error = (__bridge_retained CFErrorRef)localError;
+                if (localError) {
+                    *error = (__bridge_retained CFErrorRef)localError;
+                } else if (!*error) {
+                    // A failure without an error would reach the client as success (SecItemAdd reports
+                    // the error the server returns and nothing else).
+                    SecError(errSecNotAvailable, error, CFSTR("ks_encrypt_data: the item could not be encrypted"));
+                }
             }
         }
     }
