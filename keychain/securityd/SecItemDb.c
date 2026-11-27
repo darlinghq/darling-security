@@ -301,7 +301,8 @@ s3dl_query_add(SecDbConnectionRef dbt, Query *q, CFTypeRef *result, CFErrorRef *
     if (q->q_use_item_list)
         return errSecUseItemListUnsupported;
 
-    if (result == NULL && SecItemSecretServiceSupportsQuery(q)) {
+    /* Only an add that returns nothing is stored in the Secret Service; one that asks for the item back stays in the database. */
+    if ((result == NULL || q->q_return_type == 0) && SecItemSecretServiceSupportsQuery(q)) {
         SecItemSecretServiceResult serviceResult =
             SecItemSecretServiceAdd(q->q_item, q->q_data, error);
         if (serviceResult == kSecItemSecretServiceHandled) {
