@@ -19,8 +19,13 @@ sudo defaults write /Library/Preferences/org.darlinghq.security SecretServiceBac
 
 (`secd` runs as root, so this is the system-wide setting) and restart the prefix (`darling shutdown`), so that `secd` reads it again. The
 backend talks to the host's session bus (`DBUS_SESSION_BUS_ADDRESS`, or
-`$XDG_RUNTIME_DIR/bus`) through Darling's libdbus wrapper, uses the "plain"
-Secret Service session and the collection that the service names `default`. If
+`$XDG_RUNTIME_DIR/bus`) through Darling's libdbus wrapper and uses the
+collection that the service names `default`. Secrets are sent and received in an
+encrypted `dh-ietf1024-sha256-aes128-cbc-pkcs7` session (Diffie-Hellman in the
+1024-bit group of RFC 2409, HKDF-SHA256, AES-128-CBC with a new IV for every
+secret, as the Secret Service API defines it). Only if the service answers that
+it does not support that algorithm does the backend use a "plain" session, and
+`secd` logs that once. If
 the bus, the service or the default collection is missing, or a call fails to
 reach the service, the backend turns itself off until `secd` restarts and the
 keychain database is used.
@@ -31,8 +36,9 @@ its secret value and its service, account, access group, server, protocol,
 port, path, security domain, authentication type, generic, label, description,
 comment, creator and type attributes are sent to the host's Secret Service,
 where any process of the host user that can use the session bus can read them
-like any other Secret Service entry. The secret travels unencrypted over the
-local session bus ("plain" session). Keys, certificates, identities and every
+like any other Secret Service entry. On the session bus the secret is encrypted
+for the service, except with a service that only offers the "plain" session.
+Keys, certificates, identities and every
 other item remain in the prefix's keychain database.
 
 Behavior: add, copy of one item (its data, its attributes or both), update and delete of those items go to the

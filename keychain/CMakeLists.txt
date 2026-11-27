@@ -196,6 +196,7 @@ add_lib_ios_shim(libsecurityd_ios
 		securityd/SecItemDb.c
 		securityd/SecItemSchema.c
 		securityd/SecItemSecretService.c
+		securityd/SecItemSecretServiceCrypto.c
 		securityd/SecItemServer.c
 		securityd/SecKeybagSupport.c
 		securityd/SecLogSettingsServer.m

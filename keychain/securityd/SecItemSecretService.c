@@ -8,8 +8,10 @@
  *
  * The Secret Service is a service of the host's session bus, and securityd runs
  * inside the prefix, so this talks to it through Darling's libdbus wrapper
- * (darling_dbus), as the other daemons that reach host services do, using the
- * "plain" session algorithm of the Secret Service API. The backend is off
+ * (darling_dbus), as the other daemons that reach host services do. Secrets
+ * travel encrypted in a "dh-ietf1024-sha256-aes128-cbc-pkcs7" session (see
+ * SecItemSecretServiceCrypto.h); only a service that refuses that algorithm
+ * gets a "plain" session, and that is logged. The backend is off
  * unless the preference SecretServiceBackend of the domain
  * org.darlinghq.security (read as the daemon sees it, so the system-wide
  * /Library/Preferences one) is true; with the preference off or absent it never
@@ -18,6 +20,7 @@
  */
 
 #include "SecItemSecretService.h"
+#include "SecItemSecretServiceCrypto.h"
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/SecBase.h>
@@ -31,6 +34,7 @@
 #include <string.h>
 #include <utilities/SecCFError.h>
 #include <utilities/SecCFRelease.h>
+#include <utilities/debugging.h>
 
 #define kSecretServiceName "org.freedesktop.secrets"
 #define kSecretServicePath "/org/freedesktop/secrets"
@@ -41,6 +45,7 @@
 #define kCallTimeoutMs 10000
 #define kMaxAttributes 24
 #define kMaxPathLength 256
+#define kMaxParametersLength 64
 
 static const CFStringRef kPreferenceDomain = CFSTR("org.darlinghq.security");
 static const CFStringRef kPreferenceKey = CFSTR("SecretServiceBackend");
@@ -88,6 +93,9 @@ static const struct darling_dbus *gApi = NULL;
 static DBusConnection *gConnection = NULL;
 static char gSessionPath[kMaxPathLength];
 static char gCollectionPath[kMaxPathLength];
+/* With an encrypted session, the key of its transfer encryption. */
+static bool gSessionEncrypted = false;
+static uint8_t gSessionKey[kSecretServiceKeySize];
 
 #pragma mark - Attribute sets
 
@@ -311,6 +319,8 @@ static void
 DisableLocked(void)
 {
     gDisabled = true;
+    gSessionEncrypted = false;
+    SecretServiceClear(gSessionKey, sizeof(gSessionKey));
     if (gConnection != NULL) {
         gApi->connection_close(gConnection);
         gApi->connection_unref(gConnection);
@@ -407,18 +417,57 @@ AppendBytes(DBusMessageIter *iter, const uint8_t *bytes, CFIndex length)
     return gApi->message_iter_close_container(iter, &array);
 }
 
-/* The Secret struct (session, parameters, value, content type). */
+/*
+ * The Secret struct (session, parameters, value, content type). In an
+ * encrypted session the value is encrypted under a fresh IV, which is the
+ * parameters; in a plain one the parameters are empty.
+ */
 static bool
 AppendSecret(DBusMessageIter *iter, CFDataRef data)
 {
+    static const uint8_t kEmpty = 0;
+    const uint8_t *value = CFDataGetBytePtr(data);
+    size_t valueLength = (size_t)CFDataGetLength(data);
+    uint8_t iv[kSecretServiceIVSize];
+    uint8_t *encrypted = NULL;
+    size_t encryptedLength = 0;
+    if (value == NULL)
+        value = &kEmpty;
+    if (gSessionEncrypted) {
+        if (!SecretServiceEncrypt(gSessionKey, value, valueLength, iv, &encrypted, &encryptedLength))
+            return false;
+        value = encrypted;
+        valueLength = encryptedLength;
+    }
     DBusMessageIter secret;
-    if (!gApi->message_iter_open_container(iter, DBUS_TYPE_STRUCT, NULL, &secret) ||
-        !AppendPath(&secret, gSessionPath) ||
-        !AppendBytes(&secret, NULL, 0) ||
-        !AppendBytes(&secret, CFDataGetBytePtr(data), CFDataGetLength(data)) ||
-        !AppendString(&secret, "application/octet-stream"))
+    bool ok = gApi->message_iter_open_container(iter, DBUS_TYPE_STRUCT, NULL, &secret) &&
+        AppendPath(&secret, gSessionPath) &&
+        AppendBytes(&secret, iv, gSessionEncrypted ? (CFIndex)sizeof(iv) : 0) &&
+        AppendBytes(&secret, value, (CFIndex)valueLength) &&
+        AppendString(&secret, "application/octet-stream") &&
+        gApi->message_iter_close_container(iter, &secret);
+    free(encrypted);
+    return ok;
+}
+
+/* Appends the bytes of an array of bytes to data; at most limit bytes when limit is not 0. */
+static bool
+ReadBytes(DBusMessageIter *iter, CFMutableDataRef data, CFIndex limit)
+{
+    if (gApi->message_iter_get_arg_type(iter) != DBUS_TYPE_ARRAY)
         return false;
-    return gApi->message_iter_close_container(iter, &secret);
+    DBusMessageIter bytes;
+    gApi->message_iter_recurse(iter, &bytes);
+    while (gApi->message_iter_get_arg_type(&bytes) == DBUS_TYPE_BYTE) {
+        if (limit != 0 && CFDataGetLength(data) == limit)
+            return false;
+        uint8_t byte = 0;
+        gApi->message_iter_get_basic(&bytes, &byte);
+        CFDataAppendBytes(data, &byte, 1);
+        if (!gApi->message_iter_next(&bytes))
+            break;
+    }
+    return true;
 }
 
 static DBusMessage *
@@ -427,9 +476,12 @@ NewCall(const char *path, const char *interface, const char *method)
     return gApi->message_new_method_call(kSecretServiceName, path, interface, method);
 }
 
-/* Sends the call and returns the reply, or NULL. A D-Bus error is not a lost bus. */
+/*
+ * Sends the call and returns the reply, or NULL. A D-Bus error is not a lost
+ * bus. notSupported, when given, tells whether the error was NotSupported.
+ */
 static DBusMessage *
-Send(DBusMessage *message, bool *busFailure)
+SendCall(DBusMessage *message, bool *busFailure, bool *notSupported)
 {
     DBusError error;
     gApi->error_init(&error);
@@ -441,9 +493,18 @@ Send(DBusMessage *message, bool *busFailure)
         if (busFailure != NULL)
             *busFailure = !gApi->connection_get_is_connected(gConnection) || error.name == NULL ||
                 strncmp(error.name, "org.freedesktop.Secret.Error.", 29) != 0;
+        if (notSupported != NULL)
+            *notSupported = gApi->connection_get_is_connected(gConnection) && error.name != NULL &&
+                strcmp(error.name, DBUS_ERROR_NOT_SUPPORTED) == 0;
     }
     gApi->error_free(&error);
     return reply;
+}
+
+static DBusMessage *
+Send(DBusMessage *message, bool *busFailure)
+{
+    return SendCall(message, busFailure, NULL);
 }
 
 static bool
@@ -459,7 +520,83 @@ ReadPath(DBusMessageIter *iter, char *buffer)
     return true;
 }
 
-/* Opens the connection, a plain session and the default collection, once. */
+enum SessionOutcome {
+    kSessionOpened,
+    kSessionRefused,
+    kSessionFailed,
+};
+
+/*
+ * OpenSession with an algorithm and its input: the client's public key for the
+ * encrypted algorithm (whose output, the service's public key, is returned in
+ * peer), or an empty string for "plain". Refused means the service answered
+ * that it does not support the algorithm.
+ */
+static enum SessionOutcome
+OpenSessionLocked(const char *algorithm, const uint8_t *publicKey, size_t publicKeyLength,
+    CFMutableDataRef peer)
+{
+    DBusMessage *message = NewCall(kSecretServicePath, kSecretServiceInterface, "OpenSession");
+    DBusMessageIter args, variant;
+    gApi->message_iter_init_append(message, &args);
+    bool built = AppendString(&args, algorithm) &&
+        gApi->message_iter_open_container(&args, DBUS_TYPE_VARIANT, publicKey != NULL ? "ay" : "s", &variant) &&
+        (publicKey != NULL ? AppendBytes(&variant, publicKey, (CFIndex)publicKeyLength) : AppendString(&variant, "")) &&
+        gApi->message_iter_close_container(&args, &variant);
+    if (!built) {
+        gApi->message_unref(message);
+        return kSessionFailed;
+    }
+    bool notSupported = false;
+    DBusMessage *reply = SendCall(message, NULL, &notSupported);
+    if (reply == NULL)
+        return notSupported ? kSessionRefused : kSessionFailed;
+    DBusMessageIter iter, output;
+    bool ok = gApi->message_iter_init(reply, &iter) &&
+        gApi->message_iter_get_arg_type(&iter) == DBUS_TYPE_VARIANT;
+    if (ok && peer != NULL) {
+        gApi->message_iter_recurse(&iter, &output);
+        ok = ReadBytes(&output, peer, kSecretServiceDHPrimeSize) && CFDataGetLength(peer) > 0;
+    }
+    ok = ok && gApi->message_iter_next(&iter) && ReadPath(&iter, gSessionPath);
+    gApi->message_unref(reply);
+    return ok ? kSessionOpened : kSessionFailed;
+}
+
+/*
+ * Opens the encrypted session, or a plain one if the service does not support
+ * the encrypted algorithm. A failure of the key exchange on this side never
+ * falls back to plain.
+ */
+static bool
+OpenEncryptedOrPlainSessionLocked(void)
+{
+    uint8_t publicKey[kSecretServiceDHPrimeSize];
+    size_t publicKeyLength = 0;
+    SecretServiceDHRef exchange = SecretServiceDHCreate(publicKey, &publicKeyLength);
+    if (exchange == NULL)
+        return false;
+    CFMutableDataRef peer = CFDataCreateMutable(kCFAllocatorDefault, 0);
+    enum SessionOutcome outcome = OpenSessionLocked(kSecretServiceDHAlgorithm, publicKey, publicKeyLength, peer);
+    if (outcome == kSessionOpened) {
+        gSessionEncrypted = SecretServiceDHDeriveKey(exchange, CFDataGetBytePtr(peer),
+            (size_t)CFDataGetLength(peer), gSessionKey);
+        if (!gSessionEncrypted)
+            outcome = kSessionFailed;
+    }
+    /* this frees the private key */
+    SecretServiceDHRelease(exchange);
+    CFRelease(peer);
+    if (outcome == kSessionRefused) {
+        /* the session is opened once per daemon, so this is said once */
+        secwarning("SecretService: the service does not support " kSecretServiceDHAlgorithm
+            "; secrets are sent unencrypted over the session bus (\"plain\" session)");
+        outcome = OpenSessionLocked("plain", NULL, 0, NULL);
+    }
+    return outcome == kSessionOpened;
+}
+
+/* Opens the connection, a session and the default collection, once. */
 static bool
 OpenLocked(void)
 {
@@ -492,24 +629,9 @@ OpenLocked(void)
     }
     gApi->error_free(&error);
 
-    DBusMessage *message = NewCall(kSecretServicePath, kSecretServiceInterface, "OpenSession");
-    DBusMessageIter args, variant;
-    gApi->message_iter_init_append(message, &args);
-    if (!AppendString(&args, "plain") ||
-        !gApi->message_iter_open_container(&args, DBUS_TYPE_VARIANT, "s", &variant) ||
-        !AppendString(&variant, "") ||
-        !gApi->message_iter_close_container(&args, &variant)) {
-        gApi->message_unref(message);
-        DisableLocked();
-        return false;
-    }
-    DBusMessage *reply = Send(message, NULL);
-    DBusMessageIter iter;
-    bool ok = reply != NULL && gApi->message_iter_init(reply, &iter) &&
-        gApi->message_iter_next(&iter) && ReadPath(&iter, gSessionPath);
-    if (reply != NULL)
-        gApi->message_unref(reply);
-
+    DBusMessage *message, *reply;
+    DBusMessageIter args, iter;
+    bool ok = OpenEncryptedOrPlainSessionLocked();
     if (ok) {
         message = NewCall(kSecretServicePath, kSecretServiceInterface, "ReadAlias");
         gApi->message_iter_init_append(message, &args);
@@ -612,26 +734,32 @@ CopySecretLocked(const char *itemPath)
     DBusMessage *reply = Send(message, NULL);
     if (reply == NULL)
         return NULL;
-    CFMutableDataRef data = NULL;
-    DBusMessageIter iter, secret, bytes;
-    if (gApi->message_iter_init(reply, &iter) &&
-        gApi->message_iter_get_arg_type(&iter) == DBUS_TYPE_STRUCT) {
+    CFMutableDataRef parameters = CFDataCreateMutable(kCFAllocatorDefault, 0);
+    CFMutableDataRef value = CFDataCreateMutable(kCFAllocatorDefault, 0);
+    DBusMessageIter iter, secret;
+    /* the session, the parameters, then the value */
+    bool ok = gApi->message_iter_init(reply, &iter) &&
+        gApi->message_iter_get_arg_type(&iter) == DBUS_TYPE_STRUCT;
+    if (ok) {
         gApi->message_iter_recurse(&iter, &secret);
-        /* the session, the parameters, then the value */
-        if (gApi->message_iter_next(&secret) && gApi->message_iter_next(&secret) &&
-            gApi->message_iter_get_arg_type(&secret) == DBUS_TYPE_ARRAY) {
-            data = CFDataCreateMutable(kCFAllocatorDefault, 0);
-            gApi->message_iter_recurse(&secret, &bytes);
-            while (gApi->message_iter_get_arg_type(&bytes) == DBUS_TYPE_BYTE) {
-                uint8_t byte = 0;
-                gApi->message_iter_get_basic(&bytes, &byte);
-                CFDataAppendBytes(data, &byte, 1);
-                if (!gApi->message_iter_next(&bytes))
-                    break;
-            }
-        }
+        ok = gApi->message_iter_next(&secret) && ReadBytes(&secret, parameters, kMaxParametersLength) &&
+            gApi->message_iter_next(&secret) && ReadBytes(&secret, value, 0);
     }
     gApi->message_unref(reply);
+    CFDataRef data = NULL;
+    if (ok && gSessionEncrypted) {
+        uint8_t *plain = NULL;
+        size_t plainLength = 0;
+        if (SecretServiceDecrypt(gSessionKey, CFDataGetBytePtr(parameters), (size_t)CFDataGetLength(parameters),
+                CFDataGetBytePtr(value), (size_t)CFDataGetLength(value), &plain, &plainLength)) {
+            data = CFDataCreate(kCFAllocatorDefault, plain, (CFIndex)plainLength);
+            SecretServiceFreeSecret(plain, plainLength);
+        }
+    } else if (ok) {
+        data = CFRetain(value);
+    }
+    CFRelease(parameters);
+    CFRelease(value);
     return data;
 }
 
