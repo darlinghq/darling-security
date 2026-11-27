@@ -1063,10 +1063,10 @@ static inline CF_RETURNS_RETAINED CFPropertyListRef CFPropertyListReadFromFile(C
 {
     CFPropertyListRef result = NULL;
     CFErrorRef error = NULL;
-    CFBooleanRef isRegularFile;
+    CFBooleanRef isRegularFile = NULL;
     if (!CFURLCopyResourcePropertyForKey(file, kCFURLIsRegularFileKey, &isRegularFile, &error)) {
         secinfo("plist", "file %@: %@", file, error);
-    } else if (CFBooleanGetValue(isRegularFile)) {
+    } else if (isRegularFile && CFBooleanGetValue(isRegularFile)) {
         CFReadStreamRef readStream = CFReadStreamCreateWithFile(kCFAllocatorDefault, file);
         if (readStream) {
             if (CFReadStreamOpen(readStream)) {
@@ -1079,6 +1079,7 @@ static inline CF_RETURNS_RETAINED CFPropertyListRef CFPropertyListReadFromFile(C
             CFRelease(readStream);
         }
     }
+    CFReleaseNull(isRegularFile);
     CFReleaseNull(error);
     
     return result;
