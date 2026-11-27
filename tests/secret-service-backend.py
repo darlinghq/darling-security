@@ -23,12 +23,20 @@
 # SecretServiceBackend of /Library/Preferences/org.darlinghq.security with `defaults`, restarts the
 # prefix between scenarios so that securityd reads it again, and looks at the
 # keyring with secret-tool between the steps of the guest program. Needs
-# darling, dbus-daemon, gnome-keyring-daemon and secret-tool on the host.
+# darling, dbus-daemon, dbus-monitor, gnome-keyring-daemon and secret-tool on
+# the host, and for the "refused" scenario dbus-python and PyGObject.
 #
 # Scenarios:
 #   on       the preference is true: the whole add / duplicate / copy / update /
 #            delete cycle of two password items runs through the SecItem API and
-#            the keyring is checked between the steps
+#            the keyring is checked between the steps; dbus-monitor records the
+#            bus during the guest's steps, and the record must show that the
+#            session was opened with "dh-ietf1024-sha256-aes128-cbc-pkcs7" (never
+#            "plain") and must not hold any of the secret values
+#   refused  the same cycle against secret-service-mock.py on a second private
+#            bus, a service that refuses every algorithm but "plain": the backend
+#            asks for the encrypted algorithm first, then falls back to "plain",
+#            and the cycle works
 #   off      the preference is absent: an add leaves nothing in the keyring
 #   nobus    the preference is true but the session bus cannot be reached: an
 #            add leaves nothing in the keyring and the call is answered by the
@@ -37,6 +45,7 @@
 # answers (that is not what is tested here); they check that nothing is sent to
 # the host and that the calls return.
 
+import json
 import os
 import shutil
 import subprocess
@@ -50,7 +59,7 @@ if len(sys.argv) < 2:
 bindir = os.path.abspath(sys.argv[1])
 archs = sys.argv[2:] or ["x86_64", "i386"]
 
-for tool in ("darling", "dbus-daemon", "gnome-keyring-daemon", "secret-tool", "busctl"):
+for tool in ("darling", "dbus-daemon", "dbus-monitor", "gnome-keyring-daemon", "secret-tool", "busctl"):
     if shutil.which(tool) is None:
         print(f"SKIP: {tool} is not installed")
         sys.exit(0)
@@ -75,6 +84,11 @@ host_env = dict(os.environ, DBUS_SESSION_BUS_ADDRESS=address, HOME=os.path.join(
 procs = []
 
 SERVICE = "org.darlinghq.test.secretservice"
+DH_ALGORITHM = "dh-ietf1024-sha256-aes128-cbc-pkcs7"
+# every secret value that the guest program stores
+SECRET_VALUES = (b"s3cr3t-text-value", b"updated-text-value", bytes([0x62, 0x69, 0x6e, 0x00, 0xff, 0x7f, 0x7a]))
+mock_address = f"unix:path={work}/mock-bus"
+mock_state = os.path.join(work, "mock-state.json")
 
 
 def secret_tool(*args):
@@ -93,13 +107,24 @@ def keyring_secret(*kv):
     return r.stdout if r.returncode == 0 else None
 
 
-def start_host_services():
-    bus = subprocess.Popen(["dbus-daemon", "--session", f"--address={address}", "--nofork", "--nopidfile"],
+def start_bus(bus_address):
+    path = bus_address[len("unix:path="):]
+    bus = subprocess.Popen(["dbus-daemon", "--session", f"--address={bus_address}", "--nofork", "--nopidfile"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     procs.append(bus)
     end = time.time() + 10
-    while not os.path.exists(bus_path) and time.time() < end:
+    while not os.path.exists(path) and time.time() < end:
         time.sleep(0.1)
+
+
+def owns_secrets(bus_address):
+    names = subprocess.run(["busctl", f"--address={bus_address}", "list", "--no-legend"],
+                           capture_output=True, text=True).stdout
+    return "org.freedesktop.secrets" in names
+
+
+def start_host_services():
+    start_bus(address)
     keyring = subprocess.Popen(["gnome-keyring-daemon", "--foreground", "--components=secrets", "--unlock"],
                                env=host_env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL)
@@ -108,12 +133,67 @@ def start_host_services():
     keyring.stdin.close()
     end = time.time() + 20
     while time.time() < end:
-        names = subprocess.run(["busctl", f"--address={address}", "list", "--no-legend"],
-                               capture_output=True, text=True).stdout
-        if "org.freedesktop.secrets" in names:
+        if owns_secrets(address):
             return True
         time.sleep(0.3)
     return False
+
+
+def start_mock_service():
+    try:
+        import dbus  # noqa: F401
+        from gi.repository import GLib  # noqa: F401
+    except ImportError:
+        return None
+    start_bus(mock_address)
+    mock = subprocess.Popen([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                          "secret-service-mock.py"), mock_address, mock_state],
+                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    procs.append(mock)
+    end = time.time() + 20
+    while time.time() < end:
+        if owns_secrets(mock_address):
+            return True
+        time.sleep(0.3)
+    return False
+
+
+def mock_items():
+    with open(mock_state) as f:
+        return json.load(f)
+
+
+def mock_secret(*kv):
+    wanted = dict(zip(kv[0::2], kv[1::2]))
+    for item in mock_items()["items"]:
+        if all(item["attributes"].get(k) == v for k, v in wanted.items()):
+            return bytes.fromhex(item["secret"])
+    return None
+
+
+def mock_items_text():
+    return "\n".join(f"attribute.{k} = {v}" for item in mock_items()["items"] for k, v in item["attributes"].items())
+
+
+class Monitor:
+    """dbus-monitor on one of the private buses while a guest step runs."""
+
+    def __init__(self, bus_address, path):
+        self.file = open(path, "w")
+        self.path = path
+        self.proc = subprocess.Popen(["dbus-monitor", f"--address={bus_address}"], stdin=subprocess.DEVNULL,
+                                     stdout=self.file, stderr=subprocess.STDOUT)
+        procs.append(self.proc)
+        time.sleep(1)
+
+    def stop(self):
+        time.sleep(0.5)
+        self.proc.terminate()
+        self.proc.wait(timeout=10)
+        procs.remove(self.proc)
+        self.file.close()
+        with open(self.path) as f:
+            return f.read()
 
 
 def darling(*args, env=None, timeout=180, out=None):
@@ -142,10 +222,13 @@ def set_preference(on):
         darling("sudo", "defaults", "delete", "/Library/Preferences/org.darlinghq.security", "SecretServiceBackend")
 
 
-def step(arch, name, scenario):
+def step(arch, name, scenario, monitor_address=None, record=None):
     exe = os.path.join(bindir, f"secret-service-backend.{arch}")
     out = os.path.join(work, f"{scenario}-{arch}-{name}.out")
+    monitor = Monitor(monitor_address, os.path.join(work, f"{scenario}-{arch}-{name}.bus")) if monitor_address else None
     darling("/Volumes/SystemRoot" + exe, name, out=out)
+    if monitor is not None:
+        record.append(monitor.stop())
     text = open(out).read()
     if "returned -34018" in text:
         print("SKIP: the guest program has no keychain entitlements, see the header of this script")
@@ -155,25 +238,41 @@ def step(arch, name, scenario):
     return text
 
 
-def cycle(arch, scenario):
+def cycle(arch, scenario, monitor_address=None, secret_of=keyring_secret, items_of=keyring_items):
     generic = ("class", "generic", "service", SERVICE, "account", "alice")
     internet = ("class", "internet", "server", "secretservice.example.test", "account", "bob")
-    step(arch, "add", scenario)
-    check(keyring_secret(*generic) == b"s3cr3t-text-value", f"{scenario}/{arch}: the generic password is in the keyring")
-    check(keyring_secret(*internet) is not None, f"{scenario}/{arch}: the internet password is in the keyring")
-    items = keyring_items()
+    record = []
+    step(arch, "add", scenario, monitor_address, record)
+    check(secret_of(*generic) == b"s3cr3t-text-value", f"{scenario}/{arch}: the generic password is in the keyring")
+    check(secret_of(*internet) == SECRET_VALUES[2], f"{scenario}/{arch}: the internet password is in the keyring")
+    items = items_of()
     check("attribute.service = " + SERVICE in items and "attribute.comment = first" in items,
           f"{scenario}/{arch}: the keyring item carries the SecItem attributes")
-    step(arch, "add-again", scenario)
-    step(arch, "copy", scenario)
-    step(arch, "update", scenario)
-    step(arch, "copy-updated", scenario)
-    check(keyring_secret(*generic) == b"updated-text-value", f"{scenario}/{arch}: the update reached the keyring")
-    check("attribute.comment = second" in keyring_items(), f"{scenario}/{arch}: the attribute update reached the keyring")
-    step(arch, "delete", scenario)
-    step(arch, "gone", scenario)
-    check(keyring_secret(*generic) is None and keyring_secret(*internet) is None,
+    step(arch, "add-again", scenario, monitor_address, record)
+    step(arch, "copy", scenario, monitor_address, record)
+    step(arch, "update", scenario, monitor_address, record)
+    step(arch, "copy-updated", scenario, monitor_address, record)
+    check(secret_of(*generic) == b"updated-text-value", f"{scenario}/{arch}: the update reached the keyring")
+    check("attribute.comment = second" in items_of(), f"{scenario}/{arch}: the attribute update reached the keyring")
+    step(arch, "delete", scenario, monitor_address, record)
+    step(arch, "gone", scenario, monitor_address, record)
+    check(secret_of(*generic) is None and secret_of(*internet) is None,
           f"{scenario}/{arch}: no item is left in the keyring")
+    return "".join(record)
+
+
+def wire_checks(arch, scenario, record):
+    # dbus-monitor prints a byte array as a quoted string when it is text and
+    # as hex bytes otherwise; look for every value in both forms
+    flat = "".join(record.split()).lower()
+    check("member=CreateItem" in record and "member=GetSecret" in record and "member=SetSecret" in record,
+          f"{scenario}/{arch}: the bus record holds the CreateItem, GetSecret and SetSecret calls")
+    check("member=OpenSession" in record and f'string "{DH_ALGORITHM}"' in record,
+          f"{scenario}/{arch}: the session was opened with {DH_ALGORITHM}")
+    check('string "plain"' not in record, f"{scenario}/{arch}: no plain session was asked for")
+    leaked = [v for v in SECRET_VALUES if v.hex() in flat or (v.isascii() and v.decode() in record)]
+    check(not leaked, f"{scenario}/{arch}: no secret value is on the bus in the clear" +
+          ("" if not leaked else f": {leaked!r}"))
 
 
 def nothing_sent(arch, scenario):
@@ -191,6 +290,11 @@ def nothing_sent(arch, scenario):
 
 try:
     check(start_host_services(), "the private keyring owns org.freedesktop.secrets")
+    mock_ready = start_mock_service()
+    if mock_ready is None:
+        print("SKIP: refused: dbus-python or PyGObject is not installed")
+    else:
+        check(mock_ready, "the mock service owns org.freedesktop.secrets on the second bus")
     for arch in archs:
         print(f"--- {arch} ---")
         set_preference(False)
@@ -199,7 +303,15 @@ try:
 
         set_preference(True)
         restart_prefix(address)
-        cycle(arch, "on")
+        wire_checks(arch, "on", cycle(arch, "on", monitor_address=address))
+
+        if mock_ready:
+            asked_before = len(mock_items()["algorithms"])
+            restart_prefix(mock_address)
+            cycle(arch, "refused", secret_of=mock_secret, items_of=mock_items_text)
+            algorithms = mock_items()["algorithms"][asked_before:]
+            check(algorithms == [DH_ALGORITHM, "plain"],
+                  f"refused/{arch}: the backend asked for {DH_ALGORITHM}, then fell back to plain: {algorithms!r}")
 
         set_preference(True)
         restart_prefix(f"unix:path={work}/no-such-bus")
