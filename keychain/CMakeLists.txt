@@ -1,5 +1,9 @@
 project(libsecurityd_ios)
 
+# The optional Secret Service backend reaches the host through Darling's libdbus wrapper.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PC_DBUS REQUIRED dbus-1)
+
 include_directories(
 	ckks
 	securityd/SecDbBackupManager-protobufs/generated_source
@@ -191,6 +195,8 @@ add_lib_ios_shim(libsecurityd_ios
 		securityd/SecItemDataSource.c
 		securityd/SecItemDb.c
 		securityd/SecItemSchema.c
+		securityd/SecItemSecretService.c
+		securityd/SecItemSecretServiceCrypto.c
 		securityd/SecItemServer.c
 		securityd/SecKeybagSupport.c
 		securityd/SecLogSettingsServer.m
@@ -198,6 +204,16 @@ add_lib_ios_shim(libsecurityd_ios
 		securityd/SFKeychainControlManager.m
 		securityd/SFKeychainServer.m
 		#TrustedPeersHelper/TrustedPeersHelperProtocol.m
+	INCLUDES
+		${CMAKE_SOURCE_DIR}/src/libdarlingdbus/include
+		${PC_DBUS_INCLUDE_DIRS}
 	DEFINITIONS
 		USE_KEYSTORE=1
+	LIBRARIES
+		darling_dbus_loader
 )
+
+# The Secret Service transfer encryption is a client of the macOS Security
+# framework CSSM API (the Apple CSP), whose declarations SecBase.h hides when
+# SEC_IOS_ON_OSX is set as for the rest of securityd.
+set_source_files_properties(securityd/SecItemSecretServiceCrypto.c PROPERTIES COMPILE_OPTIONS "-USEC_IOS_ON_OSX")
