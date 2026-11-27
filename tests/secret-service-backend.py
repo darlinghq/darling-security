@@ -22,7 +22,11 @@
 # (use a throw-away one): the driver sets and removes the preference
 # SecretServiceBackend of /Library/Preferences/org.darlinghq.security with `defaults`, restarts the
 # prefix between scenarios so that securityd reads it again, and looks at the
-# keyring with secret-tool between the steps of the guest program. Needs
+# keyring with secret-tool between the steps of the guest program. Every bus
+# address the driver uses, and the session bus and runtime directory that the
+# guest inherits, are checked to lie in its own temporary directory; the driver
+# stops if one does not. The private buses have no service directories, so
+# nothing is activated on them. Needs
 # darling, dbus-daemon, dbus-monitor, gnome-keyring-daemon and secret-tool on
 # the host, and for the "refused" scenario dbus-python and PyGObject.
 #
@@ -81,7 +85,19 @@ for d in ("home", "run", "data"):
     os.mkdir(os.path.join(work, d), 0o700)
 host_env = dict(os.environ, DBUS_SESSION_BUS_ADDRESS=address, HOME=os.path.join(work, "home"),
                 XDG_RUNTIME_DIR=os.path.join(work, "run"), XDG_DATA_HOME=os.path.join(work, "data"))
+# the guest and every darling command get the private bus and runtime directory, never the user's
+os.environ["DBUS_SESSION_BUS_ADDRESS"] = address
+os.environ["XDG_RUNTIME_DIR"] = host_env["XDG_RUNTIME_DIR"]
+for name in ("DBUS_SYSTEM_BUS_ADDRESS", "PULSE_SERVER"):
+    os.environ.pop(name, None)
 procs = []
+
+
+def require_private(bus_address):
+    # stop before anything could reach a bus that this driver did not start
+    if not bus_address.startswith(f"unix:path={work}/") or ";" in bus_address:
+        print(f"ABORT: {bus_address!r} is not a private bus of this test")
+        sys.exit(2)
 
 SERVICE = "org.darlinghq.test.secretservice"
 DH_ALGORITHM = "dh-ietf1024-sha256-aes128-cbc-pkcs7"
@@ -108,9 +124,19 @@ def keyring_secret(*kv):
 
 
 def start_bus(bus_address):
+    require_private(bus_address)
     path = bus_address[len("unix:path="):]
-    bus = subprocess.Popen(["dbus-daemon", "--session", f"--address={bus_address}", "--nofork", "--nopidfile"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # a session bus without service directories, so that no service is activated on it
+    config = path + ".conf"
+    with open(config, "w") as f:
+        f.write('<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"\n'
+                ' "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">\n'
+                "<busconfig><type>session</type><auth>EXTERNAL</auth>"
+                f"<listen>{bus_address}</listen>"
+                '<policy context="default"><allow send_destination="*" eavesdrop="true"/>'
+                '<allow eavesdrop="true"/><allow own="*"/></policy></busconfig>\n')
+    bus = subprocess.Popen(["dbus-daemon", f"--config-file={config}", "--nofork", "--nopidfile"],
+                           env=host_env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     procs.append(bus)
     end = time.time() + 10
     while not os.path.exists(path) and time.time() < end:
@@ -179,6 +205,7 @@ class Monitor:
     """dbus-monitor on one of the private buses while a guest step runs."""
 
     def __init__(self, bus_address, path):
+        require_private(bus_address)
         self.file = open(path, "w")
         self.path = path
         self.proc = subprocess.Popen(["dbus-monitor", f"--address={bus_address}"], stdin=subprocess.DEVNULL,
@@ -197,16 +224,22 @@ class Monitor:
 
 
 def darling(*args, env=None, timeout=180, out=None):
+    env = env or os.environ
+    require_private(env.get("DBUS_SESSION_BUS_ADDRESS", ""))
+    if not env.get("XDG_RUNTIME_DIR", "").startswith(work + "/"):
+        print("ABORT: the guest would get the user's runtime directory")
+        sys.exit(2)
     f = open(out, "w") if out else subprocess.DEVNULL
     try:
         return subprocess.run(["timeout", "-s", "KILL", str(timeout), "darling", "shell", *args],
-                              env=env or os.environ, stdin=subprocess.DEVNULL, stdout=f, stderr=subprocess.STDOUT)
+                              env=env, stdin=subprocess.DEVNULL, stdout=f, stderr=subprocess.STDOUT)
     finally:
         if out:
             f.close()
 
 
 def restart_prefix(bus_address):
+    require_private(bus_address)
     subprocess.run(["darling", "shutdown"], env=os.environ, stdin=subprocess.DEVNULL,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
     time.sleep(3)

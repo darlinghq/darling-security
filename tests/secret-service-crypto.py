@@ -79,6 +79,28 @@ check(hkdf_sha256(bytes([0x0b] * 22), b"", b"", 42).hex() ==
       "host HKDF-SHA256 matches RFC 5869 A.3")
 check(pow(G, P - 1, P) == 1 and P.bit_length() == 1024, "host group 2 prime is a 1024-bit probable prime")
 
+
+def pi_times_power_of_two(bits):
+    # floor(pi * 2^bits) by Machin's formula pi = 16 atan(1/5) - 4 atan(1/239), with guard bits
+    guard = 64
+    one = 1 << (bits + guard)
+
+    def atan_inverse(x):
+        total = term = one // x
+        n, sign = 1, 1
+        while term:
+            term //= x * x
+            n += 2
+            sign = -sign
+            total += sign * (term // n)
+        return total
+    return (16 * atan_inverse(5) - 4 * atan_inverse(239)) >> guard
+
+
+# RFC 2409 section 6.2 defines the prime as 2^1024 - 2^960 - 1 + 2^64 * { [2^894 pi] + 129093 }
+check(P == 2 ** 1024 - 2 ** 960 - 1 + 2 ** 64 * (pi_times_power_of_two(894) + 129093),
+      "host group 2 prime equals the formula of RFC 2409 section 6.2")
+
 for arch in archs:
     print(f"--- {arch} ---")
     text = run(arch, "vectors")
