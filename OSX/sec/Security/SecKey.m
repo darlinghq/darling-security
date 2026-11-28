@@ -528,49 +528,79 @@ out:
     return NULL;
 }
 
-static SecKeyRef SecKeyCreateRSAPublicKeyFromSPKI(CFAllocatorRef allocator, CFDataRef keyData)
+/*
+ * Extracts the PKCS#1 RSAPublicKey (RFC 8017 appendix A.1.1) from a
+ * SubjectPublicKeyInfo (RFC 5280 section 4.1) that names rsaEncryption
+ * with NULL parameters (RFC 3279 section 2.3.1).  The SEQUENCE must span the
+ * whole input and the BIT STRING must have no unused bits.  Returns false
+ * for anything else; the result points into keyData.
+ */
+static bool SecKeyRSAPKCS1FromSPKI(CFDataRef keyData, DERItem *pkcs1)
 {
-    if (keyData == NULL) {
-        return NULL;
-    }
-
     DERItem der = {
         .data = (DERByte *)CFDataGetBytePtr(keyData),
         .length = (DERSize)CFDataGetLength(keyData),
     };
     DERDecodedInfo top;
-    if (DERDecodeItem(&der, &top) != DR_Success || top.tag != ASN1_CONSTR_SEQUENCE) {
-        return NULL;
+    if (der.data == NULL || DERDecodeItem(&der, &top) != DR_Success || top.tag != ASN1_CONSTR_SEQUENCE) {
+        return false;
     }
     if ((size_t)(top.content.data - der.data) + top.content.length != der.length) {
-        return NULL;
+        return false;
     }
 
     DERSubjPubKeyInfo spki;
     if (DERParseSequenceContent(&top.content, DERNumSubjPubKeyInfoItemSpecs,
                                 DERSubjPubKeyInfoItemSpecs, &spki, sizeof(spki)) != DR_Success) {
-        return NULL;
+        return false;
     }
 
     DERAlgorithmId algId;
     if (DERParseSequenceContent(&spki.algId, DERNumAlgorithmIdItemSpecs,
                                 DERAlgorithmIdItemSpecs, &algId, sizeof(algId)) != DR_Success) {
-        return NULL;
+        return false;
     }
 
     const SecAsn1Oid oid = { .Data = algId.oid.data, .Length = algId.oid.length };
     if (!SecAsn1OidCompare(&oid, &CSSMOID_RSA)) {
-        return NULL;
+        return false;
+    }
+    static const DERByte asn1Null[] = { ASN1_NULL, 0x00 };
+    if (algId.params.length != sizeof(asn1Null) || memcmp(algId.params.data, asn1Null, sizeof(asn1Null)) != 0) {
+        return false;
     }
 
-    DERItem pubKeyBytes;
     DERByte unusedBits = 0;
-    if (DERParseBitString(&spki.pubKey, &pubKeyBytes, &unusedBits) != DR_Success ||
-        unusedBits != 0 || pubKeyBytes.length == 0) {
-        return NULL;
+    if (DERParseBitString(&spki.pubKey, pkcs1, &unusedBits) != DR_Success ||
+        unusedBits != 0 || pkcs1->length == 0) {
+        return false;
     }
+    return true;
+}
 
-    return SecKeyCreateRSAPublicKey_ios(allocator, pubKeyBytes.data, pubKeyBytes.length, kSecKeyEncodingPkcs1);
+/*
+ * Checks that the modulus of a PKCS#1 RSAPublicKey is a positive, minimally
+ * encoded, odd INTEGER (X.690 section 8.3; an RSA modulus is a product of two
+ * odd primes, RFC 8017 section 3.1).  Only the leading SEQUENCE and the first
+ * INTEGER are inspected; the rest is left to the key import.
+ */
+static bool SecKeyRSAPKCS1ModulusIsValid(const uint8_t *bytes, size_t length)
+{
+    DERItem der = { .data = (DERByte *)bytes, .length = length };
+    DERDecodedInfo seq, mod;
+    if (bytes == NULL || DERDecodeItem(&der, &seq) != DR_Success || seq.tag != ASN1_CONSTR_SEQUENCE ||
+        DERDecodeItem(&seq.content, &mod) != DR_Success || mod.tag != ASN1_INTEGER ||
+        mod.content.length == 0) {
+        return false;
+    }
+    const DERByte *n = mod.content.data;
+    if (n[0] & 0x80) {
+        return false;                       /* negative */
+    }
+    if (mod.content.length > 1 && n[0] == 0x00 && !(n[1] & 0x80)) {
+        return false;                       /* redundant leading zero octet */
+    }
+    return (n[mod.content.length - 1] & 1) != 0;   /* odd, which also excludes zero */
 }
 
 static const DERByte oidRSA[] = {
@@ -1404,11 +1434,16 @@ SecKeyRef SecKeyCreateWithData(CFDataRef keyData, CFDictionaryRef parameters, CF
         case 0: // kSecAttrKeyClassPublic
             switch (algorithm) {
                 case 42: // kSecAlgorithmRSA
-                    key = SecKeyCreateRSAPublicKeyFromSPKI(allocator, keyData);
-                    if (key == NULL) {
-                        key = SecKeyCreateRSAPublicKey(allocator,
-                                                       CFDataGetBytePtr(keyData), CFDataGetLength(keyData),
-                                                       kSecKeyEncodingBytes);
+                    {
+                        /* The data is a PKCS#1 RSAPublicKey, or a SubjectPublicKeyInfo wrapping one. */
+                        DERItem pkcs1 = { .data = (DERByte *)CFDataGetBytePtr(keyData), .length = (DERSize)CFDataGetLength(keyData) };
+                        DERItem inner;
+                        if (SecKeyRSAPKCS1FromSPKI(keyData, &inner)) {
+                            pkcs1 = inner;
+                        }
+                        if (SecKeyRSAPKCS1ModulusIsValid(pkcs1.data, pkcs1.length)) {
+                            key = SecKeyCreateRSAPublicKey(allocator, pkcs1.data, pkcs1.length, kSecKeyEncodingBytes);
+                        }
                     }
                     if (key == NULL) {
                         SecError(errSecParam, error, CFSTR("RSA public key creation from data failed"));
