@@ -68,14 +68,16 @@ int main(void) {
     CFRelease(err);
     CFRelease(badUnusedData);
 
-    /* Trailing byte after outer SPKI SEQUENCE must fail. */
+    /* A trailing byte after the outer SPKI SEQUENCE is ignored, as on macOS (see the QUIRK in SecKey.m and
+     * tests/seckey-rsa-public-import.c): the leading key is imported. */
     uint8_t trailing[sizeof(kRsa512Spki) + 1];
     for (size_t i = 0; i < sizeof(kRsa512Spki); i++) trailing[i] = kRsa512Spki[i];
     trailing[sizeof(kRsa512Spki)] = 0x00;
     CFDataRef trailingData = CFDataCreate(NULL, trailing, sizeof(trailing));
     err = NULL;
-    CHECK(SecKeyCreateWithData(trailingData, rsaAttrs, &err) == NULL && err != NULL);
-    CFRelease(err);
+    SecKeyRef trailingKey = SecKeyCreateWithData(trailingData, rsaAttrs, &err);
+    CHECK(trailingKey != NULL && err == NULL);
+    if (trailingKey) CFRelease(trailingKey);
     CFRelease(trailingData);
 
     /* EC SPKI under kSecAttrKeyTypeRSA must fail. */

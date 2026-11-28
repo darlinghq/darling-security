@@ -531,10 +531,40 @@ out:
 /*
  * Extracts the PKCS#1 RSAPublicKey (RFC 8017 appendix A.1.1) from a
  * SubjectPublicKeyInfo (RFC 5280 section 4.1) that names rsaEncryption
- * with NULL parameters (RFC 3279 section 2.3.1).  The SEQUENCE must span the
- * whole input and the BIT STRING must have no unused bits.  Returns false
- * for anything else; the result points into keyData.
+ * with NULL parameters (RFC 3279 section 2.3.1).  The input must start with
+ * the SEQUENCE (bytes after it are ignored, see SecKeyRSASPKIDropTrailingBytes)
+ * and the BIT STRING must have no unused bits.  Returns false for anything
+ * else; the result points into keyData.
  */
+/*
+ * QUIRK: SecKeyCreateWithData accepts any bytes after the SubjectPublicKeyInfo
+ * of an RSA public key and imports the key described by the leading SEQUENCE
+ * (the same key, same external representation, same signature verification
+ * results as without the extra bytes).  The extra bytes may be zero bytes,
+ * random bytes, a truncated or complete further DER item, or another SPKI,
+ * of any length tried (1 to 300 bytes).  The SPKI itself is still fully
+ * validated, and bytes before it or a truncated SPKI are still rejected.
+ * Not documented.  Evidence: black-box observation on macOS 26.7.3 (tier 2).
+ * A bare PKCS#1 RSAPublicKey followed by extra bytes is also accepted there;
+ * only the SPKI form is covered here.  This is a security-sensitive quirk
+ * (key import parsing); the maintainer approved it explicitly on 2026-11-28.
+ * Test: tests/seckey-rsa-public-import.c, vectors quirk_spki_trailing_*
+ * (test_quirk_spki_trailing_bytes_accepted).
+ *
+ * Shortens der to the leading DER item so that the SPKI checks below see
+ * exactly the SPKI.  Returns false if the data does not start with a
+ * well-formed DER item.
+ */
+static bool SecKeyRSASPKIDropTrailingBytes(DERItem *der)
+{
+    DERDecodedInfo top;
+    if (der->data == NULL || DERDecodeItem(der, &top) != DR_Success) {
+        return false;
+    }
+    der->length = (DERSize)((size_t)(top.content.data - der->data) + top.content.length);
+    return true;
+}
+
 static bool SecKeyRSAPKCS1FromSPKI(CFDataRef keyData, DERItem *pkcs1)
 {
     DERItem der = {
@@ -542,7 +572,10 @@ static bool SecKeyRSAPKCS1FromSPKI(CFDataRef keyData, DERItem *pkcs1)
         .length = (DERSize)CFDataGetLength(keyData),
     };
     DERDecodedInfo top;
-    if (der.data == NULL || DERDecodeItem(&der, &top) != DR_Success || top.tag != ASN1_CONSTR_SEQUENCE) {
+    if (!SecKeyRSASPKIDropTrailingBytes(&der)) {
+        return false;
+    }
+    if (DERDecodeItem(&der, &top) != DR_Success || top.tag != ASN1_CONSTR_SEQUENCE) {
         return false;
     }
     if ((size_t)(top.content.data - der.data) + top.content.length != der.length) {
