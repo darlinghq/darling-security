@@ -14,6 +14,10 @@
  * wrong algorithm, bad INTEGERs).  Expected results for the "must" cases
  * were confirmed by black-box runs on macOS 26.7.3; vectors marked
  * implementation-defined are only checked not to crash.
+ *
+ * test_quirk_spki_trailing_bytes_accepted: macOS 26.7.3 imports an RSA SPKI
+ * followed by extra bytes as the leading key (QUIRK in SecKey.m); the
+ * quirk_spki_trailing_tests below pin that and the negatives next to it.
  */
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
@@ -72,8 +76,8 @@ static const struct vec { const char *name; const uint8_t *d; size_t n; int expe
     {"spki_wycheproof_2048_c", v_spki_wycheproof_2048_c, 292, 1},
     {"pkcs1_2048", v_pkcs1_2048, 270, 1},
     {"pkcs1_3072", v_pkcs1_3072, 398, 1},
-    {"spki_trailing1", v_spki_trailing1, 295, 2},
-    {"spki_trailing_junk", v_spki_trailing_junk, 296, 2},
+    {"spki_trailing1", v_spki_trailing1, 295, 1},
+    {"spki_trailing_junk", v_spki_trailing_junk, 296, 1},
     {"pkcs1_trailing1", v_pkcs1_trailing1, 271, 2},
     {"spki_trunc1", v_spki_trunc1, 293, 0},
     {"spki_trunc_half", v_spki_trunc_half, 147, 0},
@@ -129,6 +133,86 @@ static SecKeyRef import(const uint8_t *d, size_t n, CFErrorRef *err) {
     return key;
 }
 
+/* test_quirk_spki_trailing_bytes_accepted: bytes after the SPKI are ignored, the leading key is imported. */
+static void check_quirk_leading(const char *name, const uint8_t *d, size_t n, int must_accept) {
+    CFErrorRef err = NULL;
+    SecKeyRef key = import(d, n, &err);
+    if (!must_accept) {
+        if (key || !err || CFErrorGetCode(err) != errSecParam) {
+            fprintf(stderr, "FAIL: %s must be rejected with errSecParam\n", name);
+            failures++;
+        }
+    } else if (!key) {
+        fprintf(stderr, "FAIL: quirk_spki_trailing %s must be accepted\n", name);
+        failures++;
+    } else {
+        CFDataRef ext = SecKeyCopyExternalRepresentation(key, NULL);
+        if (!ext || CFDataGetLength(ext) != (CFIndex)sizeof(kPkcs1_2048) ||
+            memcmp(CFDataGetBytePtr(ext), kPkcs1_2048, sizeof(kPkcs1_2048)) != 0 || SecKeyGetBlockSize(key) != 256) {
+            fprintf(stderr, "FAIL: quirk_spki_trailing %s did not import the leading key\n", name);
+            failures++;
+        }
+        if (ext) CFRelease(ext);
+    }
+    if (key) CFRelease(key);
+    if (err) CFRelease(err);
+}
+
+static void quirk_spki_trailing_tests(void) {
+    uint8_t buf[294 + 422 + 8];
+    const size_t spki = sizeof(v_spki_wycheproof_2048);
+    uint8_t tail[300];
+    unsigned x = 12345;
+    for (size_t i = 0; i < sizeof tail; i++) { x = x * 1103515245u + 12345u; tail[i] = (uint8_t)(x >> 16); }
+
+    static const size_t lens[] = {1, 2, 16, 256, 300};
+    for (size_t li = 0; li < sizeof lens / sizeof lens[0]; li++) {
+        char name[64];
+        memcpy(buf, v_spki_wycheproof_2048, spki);
+        memset(buf + spki, 0, lens[li]);
+        snprintf(name, sizeof name, "zero_%zu", lens[li]);
+        check_quirk_leading(name, buf, spki + lens[li], 1);
+        memcpy(buf + spki, tail, lens[li]);
+        snprintf(name, sizeof name, "random_%zu", lens[li]);
+        check_quirk_leading(name, buf, spki + lens[li], 1);
+    }
+    static const uint8_t truncated_item[] = {0x30, 0x84, 0xff, 0xff, 0xff, 0xff};
+    memcpy(buf, v_spki_wycheproof_2048, spki);
+    memcpy(buf + spki, truncated_item, sizeof truncated_item);
+    check_quirk_leading("truncated_der_item", buf, spki + sizeof truncated_item, 1);
+
+    /* A second SPKI after the first (here a different 3072-bit key) does not replace the leading key. */
+    memcpy(buf, v_spki_wycheproof_2048, spki);
+    memcpy(buf + spki, v_spki_wycheproof_3072, sizeof(v_spki_wycheproof_3072));
+    check_quirk_leading("followed_by_other_spki", buf, spki + sizeof(v_spki_wycheproof_3072), 1);
+
+    /* Negatives: the SPKI is still checked in full, and nothing may precede it. */
+    buf[0] = 0x00;
+    memcpy(buf + 1, v_spki_wycheproof_2048, spki);
+    check_quirk_leading("garbage_before", buf, spki + 1, 0);
+
+    memset(buf, 0, sizeof buf);
+    /* the SPKI is cut short (its header still announces 294 bytes), then bytes follow */
+    memcpy(buf, v_spki_wycheproof_2048, spki / 2);
+    check_quirk_leading("truncated_spki_plus_bytes", buf, spki / 2 + 20, 0);
+
+    memset(buf, 0, sizeof buf);
+    memcpy(buf, v_spki_unused1, sizeof(v_spki_unused1));
+    check_quirk_leading("unused_bits_plus_trailing", buf, sizeof(v_spki_unused1) + 8, 0);
+
+    memset(buf, 0, sizeof buf);
+    memcpy(buf, v_spki_alg_no_params, sizeof(v_spki_alg_no_params));
+    check_quirk_leading("alg_without_null_plus_trailing", buf, sizeof(v_spki_alg_no_params) + 8, 0);
+
+    memset(buf, 0, sizeof buf);
+    memcpy(buf, v_spki_ec_p256, sizeof(v_spki_ec_p256));
+    check_quirk_leading("ec_spki_plus_trailing", buf, sizeof(v_spki_ec_p256) + 8, 0);
+
+    memset(buf, 0, sizeof buf);
+    buf[0] = 0x30; buf[1] = 0x82; buf[2] = 0x01; buf[3] = 0x22;
+    check_quirk_leading("header_only_plus_trailing", buf, 8, 0);
+}
+
 int main(void) {
     for (size_t i = 0; i < sizeof(vecs) / sizeof(vecs[0]); i++) {
         CFErrorRef err = NULL;
@@ -176,6 +260,8 @@ int main(void) {
         if (a) CFRelease(a);
         if (b) CFRelease(b);
     }
+
+    quirk_spki_trailing_tests();
 
     /* A NULL error pointer is allowed. */
     CHECK(import(v_empty, 0, NULL) == NULL);
